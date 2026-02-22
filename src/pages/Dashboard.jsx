@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -22,22 +22,24 @@ export default function Dashboard() {
   const [ultimaData, setUltimaData] = useState(null);
 
   useEffect(() => {
-    // Estatísticas em tempo real
     const unsub = onSnapshot(collection(db, 'atividades'), (snap) => {
       const docs = snap.docs.map(doc => doc.data());
+      
+      // Estatísticas
       setStats({
         pendentes: docs.filter(d => d.status === 'pendente').length,
         aprovados: docs.filter(d => d.status === 'aprovado').length
       });
-    });
 
-    // Data da última atualização baseada na criação de documentos
-    const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
-    const unsubUltima = onSnapshot(qUltima, (snap) => {
-      if (!snap.empty) {
-        const data = snap.docs[0].data().dataCriacao?.toDate();
-        if (data) {
-          setUltimaData(data.toLocaleDateString('pt-BR', { 
+      // Busca a data mais recente manualmente
+      if (docs.length > 0) {
+        const datas = docs
+          .map(d => d.dataCriacao?.toDate())
+          .filter(Boolean)
+          .sort((a, b) => b - a);
+        
+        if (datas[0]) {
+          setUltimaData(datas[0].toLocaleDateString('pt-BR', { 
             day: '2-digit', month: '2-digit', year: 'numeric', 
             hour: '2-digit', minute: '2-digit' 
           }));
@@ -45,7 +47,7 @@ export default function Dashboard() {
       }
     });
 
-    return () => { unsub(); unsubUltima(); };
+    return () => unsub();
   }, []);
 
   async function handleLogout() {
@@ -67,7 +69,6 @@ export default function Dashboard() {
       </div>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {/* Cards de Resumo - Agora totalmente clicáveis */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <Link to="/lista/pendente" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
             <div>
@@ -92,7 +93,6 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* Menu de Ações Rápidas */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <Link to="/nova-atividade" className="bg-blue-600 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 text-center active:scale-95 transition-transform">
             <PlusCircle size={28} />
