@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ArrowLeft, Clock, CheckCircle, ChevronRight } from 'lucide-react';
 
@@ -10,15 +10,22 @@ export default function ListaAtividades() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Busca as atividades filtradas pelo status (pendente ou aprovado)
+    // Busca simples sem orderBy para evitar erro de índice no Firebase
     const q = query(
       collection(db, 'atividades'),
-      where('status', '==', status),
-      orderBy('dataCriacao', 'desc')
+      where('status', '==', status)
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      setAtividades(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Ordenamos manualmente aqui no código para ser mais rápido
+      lista.sort((a, b) => b.dataCriacao?.seconds - a.dataCriacao?.seconds);
+      
+      setAtividades(lista);
+      setLoading(false);
+    }, (error) => {
+      console.error("Erro ao buscar:", error);
       setLoading(false);
     });
 
@@ -38,7 +45,10 @@ export default function ListaAtividades() {
         </div>
 
         {loading ? (
-          <div className="text-center py-10 text-gray-500 font-medium">Buscando informações...</div>
+          <div className="flex flex-col items-center justify-center py-20 text-gray-500 font-medium">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+            Buscando informações...
+          </div>
         ) : atividades.length === 0 ? (
           <div className="bg-white p-10 rounded-2xl text-center border-2 border-dashed border-gray-200 text-gray-500">
             Nenhuma atividade {status === 'pendente' ? 'pendente' : 'aprovada'} encontrada.
@@ -57,5 +67,19 @@ export default function ListaAtividades() {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900">{atv.aluno}</h3>
-                    <p className="text-sm text-gray-500 font-medium">{atv.modulo}
-                      
+                    <p className="text-sm text-gray-500 font-medium">{atv.modulo} • {atv.tarefa}</p>
+                  </div>
+                </div>
+                {status === 'pendente' && (
+                  <div className="bg-blue-50 text-blue-600 p-2 rounded-lg">
+                    <ChevronRight size={20} />
+                  </div>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
