@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw } from 'lucide-react';
 
 export default function RevisarAtividade() {
   const { id } = useParams();
@@ -40,12 +40,12 @@ export default function RevisarAtividade() {
         postado: false,
         dataAprovacao: new Date()
       });
-      navigate('/lista/falta-postar');
+      navigate('/lista/falta-postar'); 
     } catch (error) { alert("Erro ao salvar."); setSalvando(false); }
   }
 
   async function handleExcluir() {
-    if (window.confirm("Excluir esta atividade para sempre?")) {
+    if (window.confirm("Atenção: Tem certeza que deseja excluir esta atividade para sempre?")) {
       setExcluindo(true);
       try { await deleteDoc(doc(db, 'atividades', id)); navigate(-1); } 
       catch (error) { alert("Erro ao excluir."); setExcluindo(false); }
@@ -62,8 +62,28 @@ export default function RevisarAtividade() {
     setMarcandoPostado(true);
     try {
       await updateDoc(doc(db, 'atividades', id), { postado: true });
-      navigate('/lista/finalizados');
+      navigate('/lista/finalizados'); 
     } catch (error) { alert("Erro ao marcar."); setMarcandoPostado(false); }
+  }
+
+  // NOVA FUNÇÃO 1: Tira da caixa verde e volta pra caixa azul
+  async function handleReverterPostagem() {
+    if (window.confirm("Desfazer postagem? A atividade voltará para a lista de 'Falta Postar'.")) {
+      try {
+        await updateDoc(doc(db, 'atividades', id), { postado: false });
+        navigate('/lista/falta-postar');
+      } catch (error) { alert("Erro ao reverter."); }
+    }
+  }
+
+  // NOVA FUNÇÃO 2: Tira das caixas azul/verde e devolve pra Patrícia (amarela)
+  async function handleReverterRevisao() {
+    if (window.confirm("Devolver para Revisão? A atividade voltará para a caixa de 'Aguardando Revisão'.")) {
+      try {
+        await updateDoc(doc(db, 'atividades', id), { status: 'pendente', postado: false });
+        navigate('/lista/pendente');
+      } catch (error) { alert("Erro ao reverter."); }
+    }
   }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div></div>;
@@ -95,33 +115,32 @@ export default function RevisarAtividade() {
                 </div>
               </div>
 
-              {/* whitespace-pre-wrap adicionado abaixo */}
               <div className="mt-4">
                 <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">1. Enunciado</h4>
-                {atividade.enunciado && <p className="text-gray-700 bg-gray-50 p-4 rounded-xl text-sm border border-gray-100 whitespace-pre-wrap">{atividade.enunciado}</p>}
-                {atividade.urlEnunciado && <a href={atividade.urlEnunciado} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-blue-100 border border-blue-200"><FileText size={20} /> Ver Arquivo do Enunciado <ExternalLink size={16} /></a>}
+                {atividade.enunciado && <p className="text-gray-700 bg-gray-50 p-4 rounded-xl text-sm border border-gray-100">{atividade.enunciado}</p>}
+                {atividade.urlEnunciado && <a href={atividade.urlEnunciado} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-blue-100 border border-blue-200"><FileText size={20} /> Ver Arquivo <ExternalLink size={16} /></a>}
               </div>
 
-              {/* whitespace-pre-wrap adicionado abaixo */}
               <div className="mt-6 border-t border-gray-100 pt-6">
                 <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">2. Resposta do Aluno</h4>
-                {atividade.resposta && <p className="text-gray-800 bg-green-50 p-4 rounded-xl text-sm border border-green-100 font-medium whitespace-pre-wrap">{atividade.resposta}</p>}
-                {atividade.urlResposta && <a href={atividade.urlResposta} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-green-100 border border-green-200"><FileText size={20} /> Ver Arquivo da Resposta <ExternalLink size={16} /></a>}
+                {atividade.resposta && <p className="text-gray-800 bg-green-50 p-4 rounded-xl text-sm border border-green-100 font-medium">{atividade.resposta}</p>}
+                {atividade.urlResposta && <a href={atividade.urlResposta} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-green-100 border border-green-200"><FileText size={20} /> Ver Arquivo <ExternalLink size={16} /></a>}
               </div>
             </div>
           </div>
 
           <div className="lg:col-span-1 space-y-4">
+            
+            {/* Bloco de Ação Principal */}
             {atividade.status === 'pendente' ? (
-              <div className="bg-blue-600 p-6 rounded-2xl shadow-md text-white sticky top-6">
+              <div className="bg-blue-600 p-6 rounded-2xl shadow-md text-white">
                 <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-blue-500 pb-2"><CheckCircle size={20} />3. Aprovar Feedback</h3>
                 <textarea rows="8" className="w-full p-4 rounded-xl text-gray-800 font-medium mb-4 shadow-inner" value={feedbackEditado} onChange={(e) => setFeedbackEditado(e.target.value)}></textarea>
                 <button onClick={handleAprovar} disabled={salvando} className="w-full bg-white text-blue-700 font-black text-lg py-4 rounded-xl hover:bg-gray-100 active:scale-95 transition-all shadow-lg">{salvando ? 'Aprovando...' : 'Aprovar e Salvar'}</button>
               </div>
             ) : (
-              <div className="bg-gray-800 p-6 rounded-2xl shadow-md text-white sticky top-6">
+              <div className="bg-gray-800 p-6 rounded-2xl shadow-md text-white">
                 <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-gray-600 pb-2"><CheckCircle size={20} />Feedback Aprovado</h3>
-                {/* whitespace-pre-wrap já estava aqui, garantindo a formatação final */}
                 <div className="bg-white text-gray-800 p-4 rounded-xl text-sm mb-4 min-h-[150px] whitespace-pre-wrap font-medium shadow-inner">
                   {atividade.feedbackFinal || atividade.feedbackSugerido}
                 </div>
@@ -142,9 +161,30 @@ export default function RevisarAtividade() {
               </div>
             )}
 
-            <button onClick={handleExcluir} disabled={excluindo} className="w-full flex items-center justify-center gap-2 text-red-500 hover:bg-red-50 py-4 rounded-xl font-bold transition-colors mt-2">
-              <Trash2 size={20} /> Excluir Atividade
-            </button>
+            {/* ZONA DE GERENCIAMENTO (Correção e Exclusão) */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 text-center border-b border-gray-100 pb-2">Gerenciamento</h4>
+              
+              {/* Botão de Desfazer Postagem (Só aparece se já foi postado) */}
+              {atividade.postado && (
+                <button onClick={handleReverterPostagem} className="w-full flex items-center justify-center gap-2 text-orange-600 hover:bg-orange-50 py-3 rounded-xl font-bold transition-colors text-sm">
+                  <RotateCcw size={18} /> Desfazer Postagem
+                </button>
+              )}
+              
+              {/* Botão de Devolver pra Patrícia (Aparece em Aguardando Postar ou Finalizado) */}
+              {atividade.status !== 'pendente' && (
+                <button onClick={handleReverterRevisao} className="w-full flex items-center justify-center gap-2 text-yellow-600 hover:bg-yellow-50 py-3 rounded-xl font-bold transition-colors text-sm">
+                  <RotateCcw size={18} /> Devolver p/ Revisão
+                </button>
+              )}
+
+              {/* Botão de Excluir */}
+              <button onClick={handleExcluir} disabled={excluindo} className="w-full flex items-center justify-center gap-2 text-red-500 hover:bg-red-50 py-3 rounded-xl font-bold transition-colors text-sm">
+                <Trash2 size={18} /> Excluir Atividade
+              </button>
+            </div>
+
           </div>
         </div>
       </div>
