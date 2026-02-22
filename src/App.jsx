@@ -6,7 +6,8 @@ import NovaAtividade from './pages/NovaAtividade';
 import RevisarAtividade from './pages/RevisarAtividade';
 import Alunos from './pages/Alunos';
 import Configuracoes from './pages/Configuracoes';
-import MapaEntregas from './pages/MapaEntregas'; // A porta para o novo arquivo
+import MapaEntregas from './pages/MapaEntregas';
+import ListaAtividades from './pages/ListaAtividades'; // Importando a nova página
 
 // Proteção de rotas
 function PrivateRoute({ children }) {
@@ -28,6 +29,7 @@ function App() {
           <Route path="/alunos" element={<PrivateRoute><Alunos /></PrivateRoute>} />
           <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
+          <Route path="/lista/:status" element={<PrivateRoute><ListaAtividades /></PrivateRoute>} />
           
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
