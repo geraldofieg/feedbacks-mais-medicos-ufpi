@@ -65,7 +65,7 @@ export default function RevisarAtividade() {
           {/* COLUNA ESQUERDA: O Contexto (Apenas Leitura) */}
           <div className="space-y-4">
             <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-sm font-bold text-gray-500 uppercase mb-1">Aluno e Tarefa</h3>
+              <h3 className="text-sm font-bold text-gray-500 uppercase mb-1">ALUNO</h3>
               <p className="font-medium text-gray-900 text-lg">{atividade.aluno}</p>
               <p className="text-sm text-gray-600">{atividade.modulo}</p>
             </div>
