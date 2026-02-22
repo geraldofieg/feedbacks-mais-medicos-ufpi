@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, getDocs, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
-import { ArrowLeft, Save, UploadCloud } from 'lucide-react';
+import { ArrowLeft, Save, UploadCloud, CheckCircle } from 'lucide-react';
 
 export default function NovaAtividade() {
   const navigate = useNavigate();
@@ -26,7 +26,12 @@ export default function NovaAtividade() {
   // Arquivos
   const [arquivoEnunciado, setArquivoEnunciado] = useState(null);
   const [arquivoResposta, setArquivoResposta] = useState(null);
+  
+  // Controle de Autofill
+  const [urlEnunciadoExistente, setUrlEnunciadoExistente] = useState(null);
+  const [autofillAviso, setAutofillAviso] = useState(false);
 
+  // Busca as listas iniciais
   useEffect(() => {
     const unsubAlunos = onSnapshot(query(collection(db, 'alunos'), orderBy('nome', 'asc')), (snap) => setAlunosList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
     const unsubModulos = onSnapshot(query(collection(db, 'modulos'), orderBy('nome', 'asc')), (snap) => setModulosList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
@@ -34,7 +39,32 @@ export default function NovaAtividade() {
     return () => { unsubAlunos(); unsubModulos(); unsubTarefas(); };
   }, []);
 
-  // Função mágica que sobe o arquivo para o Firebase e devolve o link
+  // MÁGICA DO AUTOFILL: Fica "vigiando" o Módulo e a Tarefa
+  useEffect(() => {
+    async function buscarEnunciadoAnterior() {
+      if (modulo && tarefa) {
+        const q = query(collection(db, 'atividades'), where('modulo', '==', modulo), where('tarefa', '==', tarefa), limit(1));
+        const snap = await getDocs(q);
+        
+        if (!snap.empty) {
+          const dadosAnteriores = snap.docs[0].data();
+          if (dadosAnteriores.enunciado) setEnunciado(dadosAnteriores.enunciado);
+          if (dadosAnteriores.urlEnunciado) setUrlEnunciadoExistente(dadosAnteriores.urlEnunciado);
+          
+          if (dadosAnteriores.enunciado || dadosAnteriores.urlEnunciado) {
+            setAutofillAviso(true);
+            setTimeout(() => setAutofillAviso(false), 5000); // O aviso some após 5 segundos
+          }
+        } else {
+          // Se for uma tarefa nova, limpa o campo
+          setEnunciado('');
+          setUrlEnunciadoExistente(null);
+        }
+      }
+    }
+    buscarEnunciadoAnterior();
+  }, [modulo, tarefa]);
+
   const uploadArquivo = async (arquivo, pasta) => {
     if (!arquivo) return null;
     const arquivoRef = ref(storage, `${pasta}/${Date.now()}_${arquivo.name}`);
@@ -45,28 +75,28 @@ export default function NovaAtividade() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!alunoSelecionado || !modulo || !tarefa) { 
-      setMensagem('Preencha o módulo, a tarefa e o aluno.'); 
-      return; 
-    }
+    if (!alunoSelecionado || !modulo || !tarefa) { setMensagem('Preencha o módulo, a tarefa e o aluno.'); return; }
     
     setLoading(true); 
-    setMensagem('Fazendo upload e salvando (isso pode levar alguns segundos)...');
+    setMensagem('Salvando atividade (isso pode levar alguns segundos)...');
     
     try {
-      // 1. Sobe os arquivos (se existirem)
-      const urlEnunciado = await uploadArquivo(arquivoEnunciado, 'enunciados');
+      // Se o usuário subiu um arquivo NOVO, usa ele. Se não, usa o existente do Autofill.
+      let urlEnunciadoFinal = urlEnunciadoExistente;
+      if (arquivoEnunciado) {
+        urlEnunciadoFinal = await uploadArquivo(arquivoEnunciado, 'enunciados');
+      }
+
       const urlResposta = await uploadArquivo(arquivoResposta, 'respostas');
 
-      // 2. Salva tudo no banco de dados
       await addDoc(collection(db, 'atividades'), { 
         modulo, 
         tarefa, 
         aluno: alunoSelecionado, 
-        enunciado: enunciado || '', // Se for só imagem, o texto pode ir vazio
-        urlEnunciado, // Salva o link do PDF/Imagem do enunciado
+        enunciado: enunciado || '', 
+        urlEnunciado: urlEnunciadoFinal || null, 
         resposta: resposta || '', 
-        urlResposta,  // Salva o link do PDF/Imagem da resposta
+        urlResposta: urlResposta || null,  
         feedbackSugerido: feedback, 
         status: 'pendente', 
         dataCriacao: serverTimestamp() 
@@ -76,7 +106,7 @@ export default function NovaAtividade() {
       setTimeout(() => navigate('/'), 2000);
     } catch (error) { 
       console.error(error);
-      setMensagem('Erro ao salvar atividade. Verifique os arquivos.'); 
+      setMensagem('Erro ao salvar atividade. Verifique a conexão.'); 
       setLoading(false);
     } 
   }
@@ -90,14 +120,13 @@ export default function NovaAtividade() {
         </div>
         
         {mensagem && (
-          <div className={`p-4 rounded-lg mb-6 text-center font-bold ${mensagem.includes('sucesso') ? 'bg-green-100 text-green-800' : mensagem.includes('upload') ? 'bg-blue-100 text-blue-800 animate-pulse' : 'bg-red-100 text-red-800'}`}>
+          <div className={`p-4 rounded-lg mb-6 text-center font-bold ${mensagem.includes('sucesso') ? 'bg-green-100 text-green-800' : mensagem.includes('Salvando') ? 'bg-blue-100 text-blue-800 animate-pulse' : 'bg-red-100 text-red-800'}`}>
             {mensagem}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200 space-y-8">
           
-          {/* Filtros Superiores */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-5 rounded-xl border border-gray-100">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Módulo *</label>
@@ -122,53 +151,58 @@ export default function NovaAtividade() {
             </div>
           </div>
 
-          {/* Seção do Enunciado */}
           <div className="space-y-4">
-            <h3 className="text-lg font-bold text-gray-800 border-b pb-2">1. Enunciado da Atividade</h3>
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-lg font-bold text-gray-800">1. Enunciado da Atividade</h3>
+              {autofillAviso && (
+                <span className="text-xs font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
+                  <CheckCircle size={14} /> Recuperado automaticamente!
+                </span>
+              )}
+            </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Texto do Enunciado (Opcional se enviar arquivo)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Texto do Enunciado</label>
               <textarea rows="3" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" value={enunciado} onChange={e => setEnunciado(e.target.value)} placeholder="Digite o enunciado aqui..."></textarea>
             </div>
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex flex-col sm:flex-row items-center gap-4">
-              <UploadCloud className="text-blue-500" size={32} />
+
+            <div className={`p-4 rounded-lg border flex flex-col sm:flex-row items-center gap-4 ${urlEnunciadoExistente && !arquivoEnunciado ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-100'}`}>
+              <UploadCloud className={urlEnunciadoExistente && !arquivoEnunciado ? 'text-green-500' : 'text-blue-500'} size={32} />
               <div className="flex-1 w-full">
-                <label className="block text-sm font-bold text-blue-900 mb-1">Anexar Arquivo (PDF ou Imagem)</label>
+                <label className={`block text-sm font-bold mb-1 ${urlEnunciadoExistente && !arquivoEnunciado ? 'text-green-900' : 'text-blue-900'}`}>
+                  {urlEnunciadoExistente && !arquivoEnunciado ? '✅ Arquivo já vinculado (Você não precisa anexar novamente)' : 'Anexar Arquivo do Enunciado'}
+                </label>
                 <input type="file" accept=".pdf, image/*" onChange={e => setArquivoEnunciado(e.target.files[0])} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
               </div>
             </div>
           </div>
 
-          {/* Seção da Resposta do Aluno */}
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-gray-800 border-b pb-2">2. Resposta do Aluno</h3>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Texto da Resposta (Opcional se enviar arquivo)</label>
               <textarea rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" value={resposta} onChange={e => setResposta(e.target.value)} placeholder="Cole o que o aluno escreveu..."></textarea>
             </div>
-            <div className="bg-green-50 p-4 rounded-lg border border-green-100 flex flex-col sm:flex-row items-center gap-4">
-              <UploadCloud className="text-green-500" size={32} />
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row items-center gap-4">
+              <UploadCloud className="text-gray-500" size={32} />
               <div className="flex-1 w-full">
-                <label className="block text-sm font-bold text-green-900 mb-1">Anexar Arquivo do Aluno (PDF ou Imagem)</label>
-                <input type="file" accept=".pdf, image/*" onChange={e => setArquivoResposta(e.target.files[0])} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-green-600 file:text-white hover:file:bg-green-700" />
+                <label className="block text-sm font-bold text-gray-700 mb-1">Anexar Arquivo do Aluno (Se houver)</label>
+                <input type="file" accept=".pdf, image/*" onChange={e => setArquivoResposta(e.target.files[0])} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-gray-600 file:text-white hover:file:bg-gray-700" />
               </div>
             </div>
           </div>
 
-          {/* Feedback Sugerido */}
           <div>
             <h3 className="text-lg font-bold text-gray-800 border-b pb-2 mb-4">3. Feedback Base</h3>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Sua sugestão de feedback para aprovação *</label>
             <textarea required rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Escreva o feedback sugerido..."></textarea>
           </div>
 
-          {/* Botão Salvar */}
           <div className="pt-6 border-t border-gray-100 flex justify-end">
             <button type="submit" disabled={loading} className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 text-lg">
-              <Save size={24} /> {loading ? 'Enviando arquivos e salvando...' : 'Salvar Atividade Completa'}
+              <Save size={24} /> {loading ? 'Salvando...' : 'Salvar Atividade'}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
-}
+                  }
