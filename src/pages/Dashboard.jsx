@@ -83,9 +83,10 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <button className="text-blue-600 font-medium hover:text-blue-800 text-sm whitespace-nowrap">
-                    Revisar Feedback
-                  </button>
+                  <Link to={`/revisar/${atividade.id}`} className="text-blue-600 font-medium hover:text-blue-800 text-sm whitespace-nowrap">
+  Revisar Feedback
+</Link>
+
                 </div>
               ))}
             </div>
