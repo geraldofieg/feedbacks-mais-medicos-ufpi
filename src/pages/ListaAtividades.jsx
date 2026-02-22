@@ -10,7 +10,6 @@ export default function ListaAtividades() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Busca simples sem orderBy para evitar erro de índice no Firebase
     const q = query(
       collection(db, 'atividades'),
       where('status', '==', status)
@@ -18,14 +17,11 @@ export default function ListaAtividades() {
 
     const unsub = onSnapshot(q, (snap) => {
       const lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Ordenamos manualmente aqui no código para ser mais rápido
-      lista.sort((a, b) => b.dataCriacao?.seconds - a.dataCriacao?.seconds);
-      
+      lista.sort((a, b) => (b.dataCriacao?.seconds || 0) - (a.dataCriacao?.seconds || 0));
       setAtividades(lista);
       setLoading(false);
     }, (error) => {
-      console.error("Erro ao buscar:", error);
+      console.error(error);
       setLoading(false);
     });
 
@@ -45,8 +41,7 @@ export default function ListaAtividades() {
         </div>
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-500 font-medium">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+          <div className="flex flex-col items-center justify-center py-20 text-blue-600 font-medium">
             Buscando informações...
           </div>
         ) : atividades.length === 0 ? (
@@ -58,8 +53,8 @@ export default function ListaAtividades() {
             {atividades.map((atv) => (
               <Link 
                 key={atv.id} 
-                to={status === 'pendente' ? `/revisar/${atv.id}` : '#'} 
-                className={`bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-all ${status === 'aprovado' ? 'cursor-default' : 'hover:border-blue-300'}`}
+                to={`/revisar/${atv.id}`} 
+                className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-all hover:border-blue-300 group"
               >
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-xl ${status === 'pendente' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>
@@ -70,11 +65,9 @@ export default function ListaAtividades() {
                     <p className="text-sm text-gray-500 font-medium">{atv.modulo} • {atv.tarefa}</p>
                   </div>
                 </div>
-                {status === 'pendente' && (
-                  <div className="bg-blue-50 text-blue-600 p-2 rounded-lg">
-                    <ChevronRight size={20} />
-                  </div>
-                )}
+                <div className={`p-2 rounded-lg ${status === 'pendente' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'}`}>
+                  <ChevronRight size={20} />
+                </div>
               </Link>
             ))}
           </div>
