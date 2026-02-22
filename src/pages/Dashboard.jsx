@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, PlusCircle, FileText, Clock, CheckCircle, Users } from 'lucide-react';
+import { LogOut, PlusCircle, Users, LayoutDashboard, Clock, CheckCircle, ChevronRight, ClipboardList } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -26,79 +26,116 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
+  // Filtra apenas o que a Patrícia precisa ver com urgência
+  const atividadesPendentes = atividades.filter(a => a.status === 'pendente');
+
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
+    <div className="min-h-screen bg-gray-50">
+      {/* Cabeçalho */}
+      <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center border-b border-gray-200">
         <div>
           <h1 className="text-xl font-bold text-blue-800">Mais Médicos UFPI</h1>
-          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full mt-1 inline-block">
-            {userRole === 'admin' ? 'Administrador' : 'Aprovador'}
+          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full mt-1 inline-block font-medium">
+            {userRole === 'admin' ? 'Administrador' : 'Aprovadora'}
           </span>
         </div>
         
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600 hidden md:block">
+          <span className="text-sm text-gray-600 hidden md:block font-medium">
             {currentUser?.email}
           </span>
-          <button onClick={() => logout()} className="flex items-center gap-2 text-red-500 hover:text-red-700 font-medium transition-colors">
+          <button onClick={() => logout()} className="flex items-center gap-2 text-red-500 hover:text-red-700 font-bold transition-colors">
             <LogOut size={20} />
             Sair
           </button>
         </div>
       </nav>
 
-      <main className="p-6 max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">Visão Geral</h2>
+      <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
+        
+        {/* Seção 1: Menu de Acesso Rápido (Central de Comando) */}
+        <section>
+          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <LayoutDashboard className="text-blue-600" />
+            Painel de Controle
+          </h2>
           
-          <div className="flex items-center gap-3">
-            {/* Botão de Alunos corrigido para aparecer no celular! */}
-            <Link to="/alunos" className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition-colors w-full md:w-auto justify-center">
-              <Users size={20} />
-              <span>Alunos</span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Botão Nova Atividade */}
+            <Link to="/nova-atividade" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
+              <div className="bg-blue-50 p-4 rounded-full group-hover:bg-blue-100 transition-colors">
+                <PlusCircle size={32} className="text-blue-600" />
+              </div>
+              <span className="font-bold text-gray-700">Cadastrar Atividade</span>
             </Link>
 
-            <Link to="/nova-atividade" className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors w-full md:w-auto justify-center">
-              <PlusCircle size={20} />
-              <span>Nova Atividade</span>
-            </Link>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {loading ? (
-            <div className="p-6 text-center text-gray-500">Carregando atividades...</div>
-          ) : atividades.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">
-              Nenhuma atividade cadastrada ainda.
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {atividades.map((atividade) => (
-                <div key={atividade.id} className="p-6 hover:bg-gray-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className="bg-blue-100 p-3 rounded-lg text-blue-600 hidden md:block">
-                      <FileText size={24} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-800">{atividade.aluno}</h3>
-                      <p className="text-sm text-gray-500">{atividade.modulo}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${atividade.status === 'pendente' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                          {atividade.status === 'pendente' ? <Clock size={12} /> : <CheckCircle size={12} />}
-                          {atividade.status === 'pendente' ? 'Aguardando Revisão' : 'Aprovado'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <Link to={`/revisar/${atividade.id}`} className="text-blue-600 font-medium hover:text-blue-800 text-sm whitespace-nowrap">
-                    Revisar Feedback
-                  </Link>
+            {/* Botão Alunos */}
+            {userRole === 'admin' && (
+              <Link to="/alunos" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
+                <div className="bg-blue-50 p-4 rounded-full group-hover:bg-blue-100 transition-colors">
+                  <Users size={32} className="text-blue-600" />
                 </div>
-              ))}
+                <span className="font-bold text-gray-700">Gerenciar Turma</span>
+              </Link>
+            )}
+
+            {/* Botão Controle de Entregas (Nossa próxima funcionalidade!) */}
+            <div className="bg-gray-50 p-6 rounded-xl border border-dashed border-gray-300 flex flex-col items-center justify-center gap-3 opacity-70">
+              <div className="bg-gray-200 p-4 rounded-full">
+                <ClipboardList size={32} className="text-gray-500" />
+              </div>
+              <span className="font-bold text-gray-500">Mapa de Entregas (Em breve)</span>
             </div>
-          )}
-        </div>
+          </div>
+        </section>
+
+        {/* Seção 2: Mesa de Trabalho da Patrícia (Foco no que importa) */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <Clock className="text-orange-500" />
+              Aguardando Revisão
+              <span className="bg-orange-100 text-orange-800 text-xs py-1 px-2 rounded-full">
+                {atividadesPendentes.length}
+              </span>
+            </h2>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {loading ? (
+              <div className="p-8 text-center text-gray-500">Buscando atividades...</div>
+            ) : atividadesPendentes.length === 0 ? (
+              <div className="p-10 text-center flex flex-col items-center justify-center gap-3">
+                <div className="bg-green-50 p-4 rounded-full">
+                  <CheckCircle size={40} className="text-green-500" />
+                </div>
+                <p className="text-lg font-bold text-gray-700">Tudo em dia!</p>
+                <p className="text-gray-500 text-center">Não há nenhuma atividade pendente de revisão no momento.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {atividadesPendentes.map((atividade) => (
+                  <div key={atividade.id} className="p-4 md:p-6 hover:bg-gray-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-lg">{atividade.aluno}</h3>
+                      <p className="text-sm text-gray-600 font-medium mt-1">{atividade.modulo}</p>
+                    </div>
+                    
+                    {/* Botão de ação direta para revisar com 1 clique */}
+                    <Link 
+                      to={`/revisar/${atividade.id}`} 
+                      className="flex items-center justify-center gap-2 bg-blue-50 text-blue-700 px-5 py-3 rounded-lg font-bold hover:bg-blue-600 hover:text-white transition-all w-full md:w-auto"
+                    >
+                      Revisar Agora
+                      <ChevronRight size={18} />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
       </main>
     </div>
   );
