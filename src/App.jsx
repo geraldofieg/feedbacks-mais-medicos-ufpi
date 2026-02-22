@@ -3,7 +3,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login'; 
 import Dashboard from './pages/Dashboard'; 
 import NovaAtividade from './pages/NovaAtividade'; 
-import RevisarAtividade from './pages/RevisarAtividade'; // <-- Arquivo Novo!
+import RevisarAtividade from './pages/RevisarAtividade';
+import Alunos from './pages/Alunos'; // <-- Importando a página nova
 
 function RotaPrivada({ children }) {
   const { currentUser } = useAuth();
@@ -19,9 +20,10 @@ function App() {
           
           <Route path="/" element={<RotaPrivada><Dashboard /></RotaPrivada>} />
           <Route path="/nova-atividade" element={<RotaPrivada><NovaAtividade /></RotaPrivada>} />
-          
-          {/* A rota nova precisa ter esse /:id para o site saber QUAL atividade abrir */}
           <Route path="/revisar/:id" element={<RotaPrivada><RevisarAtividade /></RotaPrivada>} />
+          
+          {/* A rota dos alunos */}
+          <Route path="/alunos" element={<RotaPrivada><Alunos /></RotaPrivada>} />
           
         </Routes>
       </BrowserRouter>
