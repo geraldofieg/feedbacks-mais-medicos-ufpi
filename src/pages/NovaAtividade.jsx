@@ -18,20 +18,16 @@ export default function NovaAtividade() {
   const [tarefa, setTarefa] = useState('');
   const [alunoSelecionado, setAlunoSelecionado] = useState('');
   
-  // Textos
   const [enunciado, setEnunciado] = useState('');
   const [resposta, setResposta] = useState('');
   const [feedback, setFeedback] = useState('');
 
-  // Arquivos
   const [arquivoEnunciado, setArquivoEnunciado] = useState(null);
   const [arquivoResposta, setArquivoResposta] = useState(null);
   
-  // Controle de Autofill
   const [urlEnunciadoExistente, setUrlEnunciadoExistente] = useState(null);
   const [autofillAviso, setAutofillAviso] = useState(false);
 
-  // Busca as listas iniciais
   useEffect(() => {
     const unsubAlunos = onSnapshot(query(collection(db, 'alunos'), orderBy('nome', 'asc')), (snap) => setAlunosList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
     const unsubModulos = onSnapshot(query(collection(db, 'modulos'), orderBy('nome', 'asc')), (snap) => setModulosList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
@@ -39,7 +35,6 @@ export default function NovaAtividade() {
     return () => { unsubAlunos(); unsubModulos(); unsubTarefas(); };
   }, []);
 
-  // MÁGICA DO AUTOFILL: Fica "vigiando" o Módulo e a Tarefa
   useEffect(() => {
     async function buscarEnunciadoAnterior() {
       if (modulo && tarefa) {
@@ -53,10 +48,9 @@ export default function NovaAtividade() {
           
           if (dadosAnteriores.enunciado || dadosAnteriores.urlEnunciado) {
             setAutofillAviso(true);
-            setTimeout(() => setAutofillAviso(false), 5000); // O aviso some após 5 segundos
+            setTimeout(() => setAutofillAviso(false), 5000);
           }
         } else {
-          // Se for uma tarefa nova, limpa o campo
           setEnunciado('');
           setUrlEnunciadoExistente(null);
         }
@@ -78,10 +72,9 @@ export default function NovaAtividade() {
     if (!alunoSelecionado || !modulo || !tarefa) { setMensagem('Preencha o módulo, a tarefa e o aluno.'); return; }
     
     setLoading(true); 
-    setMensagem('Salvando atividade (isso pode levar alguns segundos)...');
+    setMensagem('Salvando atividade...');
     
     try {
-      // Se o usuário subiu um arquivo NOVO, usa ele. Se não, usa o existente do Autofill.
       let urlEnunciadoFinal = urlEnunciadoExistente;
       if (arquivoEnunciado) {
         urlEnunciadoFinal = await uploadArquivo(arquivoEnunciado, 'enunciados');
@@ -106,7 +99,7 @@ export default function NovaAtividade() {
       setTimeout(() => navigate('/'), 2000);
     } catch (error) { 
       console.error(error);
-      setMensagem('Erro ao salvar atividade. Verifique a conexão.'); 
+      setMensagem('Erro ao salvar atividade.'); 
       setLoading(false);
     } 
   }
@@ -115,12 +108,12 @@ export default function NovaAtividade() {
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
-          <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors"><ArrowLeft size={24} /></Link>
+          <Link to="/" className="text-gray-500 hover:text-blue-600"><ArrowLeft size={24} /></Link>
           <h2 className="text-2xl font-bold text-gray-800">Cadastrar Nova Atividade</h2>
         </div>
         
         {mensagem && (
-          <div className={`p-4 rounded-lg mb-6 text-center font-bold ${mensagem.includes('sucesso') ? 'bg-green-100 text-green-800' : mensagem.includes('Salvando') ? 'bg-blue-100 text-blue-800 animate-pulse' : 'bg-red-100 text-red-800'}`}>
+          <div className={`p-4 rounded-lg mb-6 text-center font-bold ${mensagem.includes('sucesso') ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800 animate-pulse'}`}>
             {mensagem}
           </div>
         )}
@@ -163,14 +156,14 @@ export default function NovaAtividade() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Texto do Enunciado</label>
-              <textarea rows="3" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" value={enunciado} onChange={e => setEnunciado(e.target.value)} placeholder="Digite o enunciado aqui..."></textarea>
+              <textarea rows="6" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 whitespace-pre-wrap" value={enunciado} onChange={e => setEnunciado(e.target.value)} placeholder="Digite o enunciado aqui..."></textarea>
             </div>
 
             <div className={`p-4 rounded-lg border flex flex-col sm:flex-row items-center gap-4 ${urlEnunciadoExistente && !arquivoEnunciado ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-100'}`}>
               <UploadCloud className={urlEnunciadoExistente && !arquivoEnunciado ? 'text-green-500' : 'text-blue-500'} size={32} />
               <div className="flex-1 w-full">
                 <label className={`block text-sm font-bold mb-1 ${urlEnunciadoExistente && !arquivoEnunciado ? 'text-green-900' : 'text-blue-900'}`}>
-                  {urlEnunciadoExistente && !arquivoEnunciado ? '✅ Arquivo já vinculado (Você não precisa anexar novamente)' : 'Anexar Arquivo do Enunciado'}
+                  {urlEnunciadoExistente && !arquivoEnunciado ? '✅ Arquivo já vinculado' : 'Anexar Arquivo do Enunciado'}
                 </label>
                 <input type="file" accept=".pdf, image/*" onChange={e => setArquivoEnunciado(e.target.files[0])} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
               </div>
@@ -180,7 +173,7 @@ export default function NovaAtividade() {
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-gray-800 border-b pb-2">2. Resposta do Aluno</h3>
             <div>
-              <textarea rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" value={resposta} onChange={e => setResposta(e.target.value)} placeholder="Cole o que o aluno escreveu..."></textarea>
+              <textarea rows="6" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 whitespace-pre-wrap" value={resposta} onChange={e => setResposta(e.target.value)} placeholder="Cole o que o aluno escreveu..."></textarea>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row items-center gap-4">
               <UploadCloud className="text-gray-500" size={32} />
@@ -193,7 +186,7 @@ export default function NovaAtividade() {
 
           <div>
             <h3 className="text-lg font-bold text-gray-800 border-b pb-2 mb-4">3. Feedback Base</h3>
-            <textarea required rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Escreva o feedback sugerido..."></textarea>
+            <textarea required rows="6" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 whitespace-pre-wrap" value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Escreva o feedback sugerido..."></textarea>
           </div>
 
           <div className="pt-6 border-t border-gray-100 flex justify-end">
@@ -205,4 +198,4 @@ export default function NovaAtividade() {
       </div>
     </div>
   );
-                  }
+}
