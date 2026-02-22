@@ -1,15 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Clock, CheckCircle, ChevronRight, CheckCheck, Send } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle, ChevronRight, CheckCheck, Send, Filter, XCircle } from 'lucide-react';
 
 export default function ListaAtividades() {
-  const { status } = useParams(); // Pode vir: 'pendente', 'falta-postar' ou 'finalizados'
+  const { status } = useParams();
   const [atividades, setAtividades] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Estados para as listas de filtros
+  const [modulosList, setModulosList] = useState([]);
+  const [tarefasList, setTarefasList] = useState([]);
+  
+  // Estados para os valores selecionados nos filtros
+  const [filtroModulo, setFiltroModulo] = useState('');
+  const [filtroTarefa, setFiltroTarefa] = useState('');
 
-  // Títulos dinâmicos dependendo da página
   const titulos = {
     'pendente': 'Aguardando Revisão',
     'falta-postar': 'Falta Postar no Site',
@@ -17,50 +24,106 @@ export default function ListaAtividades() {
   };
 
   useEffect(() => {
-    // O banco só conhece dois status principais: 'pendente' e 'aprovado'
+    // Busca módulos e tarefas para carregar os menus de filtro
+    const unsubModulos = onSnapshot(query(collection(db, 'modulos'), orderBy('nome', 'asc')), (snap) => {
+      setModulosList(snap.docs.map(doc => doc.data().nome));
+    });
+    const unsubTarefas = onSnapshot(query(collection(db, 'tarefas'), orderBy('nome', 'asc')), (snap) => {
+      setTarefasList(snap.docs.map(doc => doc.data().nome));
+    });
+
     const statusBanco = status === 'pendente' ? 'pendente' : 'aprovado';
     const q = query(collection(db, 'atividades'), where('status', '==', statusBanco));
 
-    const unsub = onSnapshot(q, (snap) => {
+    const unsubAtividades = onSnapshot(q, (snap) => {
       let lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
-      // Filtra na memória para dividir a caixa dos Aprovados em duas telas diferentes
       if (status === 'falta-postar') {
-        lista = lista.filter(atv => !atv.postado); // Mostra só o que falta o Geraldo colar
+        lista = lista.filter(atv => !atv.postado);
       } else if (status === 'finalizados') {
-        lista = lista.filter(atv => atv.postado === true); // Mostra só o 100% pronto
+        lista = lista.filter(atv => atv.postado === true);
       }
       
-      // Ordena pelas mais recentes
       lista.sort((a, b) => (b.dataCriacao?.seconds || 0) - (a.dataCriacao?.seconds || 0));
-      
       setAtividades(lista);
       setLoading(false);
     }, (error) => { console.error(error); setLoading(false); });
 
-    return () => unsub();
+    return () => { unsubModulos(); unsubTarefas(); unsubAtividades(); };
   }, [status]);
+
+  // Lógica de Filtragem em Tempo Real
+  const atividadesFiltradas = atividades.filter(atv => {
+    const bateModulo = filtroModulo === '' || atv.modulo === filtroModulo;
+    const bateTarefa = filtroTarefa === '' || atv.tarefa === filtroTarefa;
+    return bateModulo && bateTarefa;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
+        
+        {/* Cabeçalho */}
+        <div className="flex items-center gap-4 mb-6">
           <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors"><ArrowLeft size={24} /></Link>
-          <h2 className="text-2xl font-bold text-gray-800 capitalize">
-            {titulos[status]}
-          </h2>
+          <h2 className="text-2xl font-bold text-gray-800 capitalize">{titulos[status]}</h2>
         </div>
 
+        {/* BARRA DE FILTROS (NOVA) */}
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 mb-6 space-y-4">
+          <div className="flex items-center gap-2 text-blue-600 font-bold text-sm mb-2">
+            <Filter size={18} /> <span>Filtrar Busca</span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Filtro de Módulo */}
+            <div>
+              <label className="block text-xs font-black text-gray-400 uppercase mb-1">Por Módulo:</label>
+              <select 
+                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                value={filtroModulo}
+                onChange={(e) => setFiltroModulo(e.target.value)}
+              >
+                <option value="">Todos os Módulos</option>
+                {modulosList.map((m, i) => <option key={i} value={m}>{m}</option>)}
+              </select>
+            </div>
+
+            {/* Filtro de Tarefa */}
+            <div>
+              <label className="block text-xs font-black text-gray-400 uppercase mb-1">Por Tarefa:</label>
+              <select 
+                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                value={filtroTarefa}
+                onChange={(e) => setFiltroTarefa(e.target.value)}
+              >
+                <option value="">Todas as Tarefas</option>
+                {tarefasList.map((t, i) => <option key={i} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Botão para limpar filtros (só aparece se houver filtro ativo) */}
+          {(filtroModulo || filtroTarefa) && (
+            <button 
+              onClick={() => { setFiltroModulo(''); setFiltroTarefa(''); }}
+              className="flex items-center gap-1 text-xs font-bold text-red-500 hover:text-red-700 transition-colors mt-2"
+            >
+              <XCircle size={14} /> Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        {/* Listagem */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 text-blue-600 font-medium">Buscando informações...</div>
-        ) : atividades.length === 0 ? (
+        ) : atividadesFiltradas.length === 0 ? (
           <div className="bg-white p-10 rounded-2xl text-center border-2 border-dashed border-gray-200 text-gray-500">
-            Nenhuma atividade nesta etapa do funil.
+            {atividades.length > 0 ? 'Nenhum resultado para os filtros selecionados.' : 'Nenhuma atividade nesta etapa.'}
           </div>
         ) : (
           <div className="grid gap-4">
-            {atividades.map((atv) => {
-              // Estilo das caixinhas de acordo com a etapa
+            {atividadesFiltradas.map((atv) => {
               let corBorda = status === 'pendente' ? 'border-yellow-200' : status === 'falta-postar' ? 'border-blue-300 shadow-md' : 'border-gray-200 opacity-80';
               let corIcone = status === 'pendente' ? 'bg-yellow-50 text-yellow-600' : status === 'falta-postar' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600';
               let icone = status === 'pendente' ? <Clock size={24} /> : status === 'falta-postar' ? <Send size={24} /> : <CheckCheck size={24} />;
