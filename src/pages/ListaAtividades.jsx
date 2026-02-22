@@ -5,11 +5,12 @@ import { db } from '../services/firebase';
 import { ArrowLeft, Clock, CheckCircle, ChevronRight } from 'lucide-react';
 
 export default function ListaAtividades() {
-  const { status } = useParams(); // Pega 'pendente' ou 'aprovado' da URL
+  const { status } = useParams();
   const [atividades, setAtividades] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Busca as atividades filtradas pelo status (pendente ou aprovado)
     const q = query(
       collection(db, 'atividades'),
       where('status', '==', status),
@@ -32,15 +33,15 @@ export default function ListaAtividades() {
             <ArrowLeft size={24} />
           </Link>
           <h2 className="text-2xl font-bold text-gray-800 capitalize">
-            Atividades {status === 'pendente' ? 'Aguardando Revisão' : 'Aprovadas'}
+            {status === 'pendente' ? 'Aguardando Revisão' : 'Histórico de Aprovados'}
           </h2>
         </div>
 
         {loading ? (
-          <div className="text-center py-10 text-gray-500">Carregando...</div>
+          <div className="text-center py-10 text-gray-500 font-medium">Buscando informações...</div>
         ) : atividades.length === 0 ? (
-          <div className="bg-white p-10 rounded-xl text-center border border-dashed border-gray-300 text-gray-500">
-            Nenhuma atividade encontrada neste status.
+          <div className="bg-white p-10 rounded-2xl text-center border-2 border-dashed border-gray-200 text-gray-500">
+            Nenhuma atividade {status === 'pendente' ? 'pendente' : 'aprovada'} encontrada.
           </div>
         ) : (
           <div className="grid gap-4">
@@ -48,25 +49,13 @@ export default function ListaAtividades() {
               <Link 
                 key={atv.id} 
                 to={status === 'pendente' ? `/revisar/${atv.id}` : '#'} 
-                className={`bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center hover:shadow-md transition-shadow ${status === 'aprovado' ? 'cursor-default' : ''}`}
+                className={`bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-all ${status === 'aprovado' ? 'cursor-default' : 'hover:border-blue-300'}`}
               >
                 <div className="flex items-center gap-4">
-                  {status === 'pendente' ? <Clock className="text-yellow-500" /> : <CheckCircle className="text-green-500" />}
+                  <div className={`p-3 rounded-xl ${status === 'pendente' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>
+                    {status === 'pendente' ? <Clock size={24} /> : <CheckCircle size={24} />}
+                  </div>
                   <div>
-                    <h3 className="font-bold text-gray-800">{atv.aluno}</h3>
-                    <p className="text-sm text-gray-500">{atv.modulo} • {atv.tarefa}</p>
-                  </div>
-                </div>
-                {status === 'pendente' && (
-                  <div className="flex items-center gap-2 text-blue-600 font-bold text-sm">
-                    Revisar <ChevronRight size={18} />
-                  </div>
-                )}
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+                    <h3 className="font-bold text-gray-900">{atv.aluno}</h3>
+                    <p className="text-sm text-gray-500 font-medium">{atv.modulo}
+                      
