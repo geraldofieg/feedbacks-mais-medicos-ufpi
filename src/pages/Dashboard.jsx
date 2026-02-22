@@ -1,117 +1,134 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { LogOut, PlusCircle, Users, LayoutDashboard, Clock, CheckCircle, ChevronRight, ClipboardList, Settings } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { Link, useNavigate } from 'react-router-dom';
+import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useAuth } from '../contexts/AuthContext';
+import { 
+  PlusCircle, 
+  ClipboardList, 
+  Users, 
+  Settings, 
+  LogOut, 
+  CheckCircle, 
+  Clock,
+  Calendar
+} from 'lucide-react';
 
 export default function Dashboard() {
-  const { logout, currentUser, userRole } = useAuth();
-  const [atividades, setAtividades] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [stats, setStats] = useState({ pendentes: 0, aprovados: 0 });
+  const [ultimaData, setUltimaData] = useState(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const listaAtividades = [];
-      snapshot.forEach((doc) => {
-        listaAtividades.push({ id: doc.id, ...doc.data() });
+    // Busca estatísticas
+    const q = query(collection(db, 'atividades'));
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs.map(doc => doc.data());
+      setStats({
+        pendentes: docs.filter(d => d.status === 'pendente').length,
+        aprovados: docs.filter(d => d.status === 'aprovado').length
       });
-      setAtividades(listaAtividades);
-      setLoading(false);
     });
-    return () => unsubscribe();
+
+    // Busca a data da ÚLTIMA atividade cadastrada (em qualquer status)
+    const qUltima = query(
+      collection(db, 'atividades'), 
+      orderBy('dataCriacao', 'desc'), 
+      limit(1)
+    );
+    
+    const unsubUltima = onSnapshot(qUltima, (snap) => {
+      if (!snap.empty) {
+        const data = snap.docs[0].data().dataCriacao?.toDate();
+        if (data) {
+          const formatada = data.toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          setUltimaData(formatada);
+        }
+      }
+    });
+
+    return () => { unsub(); unsubUltima(); };
   }, []);
 
-  const atividadesPendentes = atividades.filter(a => a.status === 'pendente');
+  async function handleLogout() {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center border-b border-gray-200">
-        <div>
-          <h1 className="text-xl font-bold text-blue-800">Mais Médicos UFPI</h1>
-          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full mt-1 inline-block font-medium">
-            {userRole === 'admin' ? 'Administrador' : 'Aprovadora'}
-          </span>
+      {/* Header com Barra de Atualização */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+          <h1 className="text-xl font-bold text-gray-800">Painel de Controle</h1>
+          
+          {ultimaData && (
+            <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-sm font-medium border border-blue-100">
+              <Calendar size={16} />
+              <span>Última atualização: {ultimaData}</span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600 hidden md:block font-medium">{currentUser?.email}</span>
-          <button onClick={() => logout()} className="flex items-center gap-2 text-red-500 hover:text-red-700 font-bold transition-colors">
-            <LogOut size={20} /> Sair
+      </div>
+
+      <main className="max-w-7xl mx-auto p-4 md:p-8">
+        {/* Cards de Resumo */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500 font-bold uppercase tracking-wider">Aguardando Revisão</p>
+              <h3 className="text-3xl font-black text-yellow-600">{stats.pendentes}</h3>
+            </div>
+            <div className="bg-yellow-100 p-3 rounded-xl text-yellow-600"><Clock size={32} /></div>
+          </div>
+          
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500 font-bold uppercase tracking-wider">Feedbacks Aprovados</p>
+              <h3 className="text-3xl font-black text-green-600">{stats.aprovados}</h3>
+            </div>
+            <div className="bg-green-100 p-3 rounded-xl text-green-600"><CheckCircle size={32} /></div>
+          </div>
+        </div>
+
+        {/* Menu Principal */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <Link to="/nova-atividade" className="bg-blue-600 text-white p-6 rounded-2xl shadow-md hover:bg-blue-700 transition-all flex flex-col items-center gap-3 text-center">
+            <PlusCircle size={32} />
+            <span className="font-bold">Nova Atividade</span>
+          </Link>
+
+          <Link to="/mapa" className="bg-white text-gray-700 p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-blue-500 transition-all flex flex-col items-center gap-3 text-center">
+            <ClipboardList size={32} className="text-blue-600" />
+            <span className="font-bold">Mapa de Entregas</span>
+          </Link>
+
+          <Link to="/alunos" className="bg-white text-gray-700 p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-blue-500 transition-all flex flex-col items-center gap-3 text-center">
+            <Users size={32} className="text-blue-600" />
+            <span className="font-bold">Alunos</span>
+          </Link>
+
+          <Link to="/configuracoes" className="bg-white text-gray-700 p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-blue-500 transition-all flex flex-col items-center gap-3 text-center">
+            <Settings size={32} className="text-gray-500" />
+            <span className="font-bold">Configurações</span>
+          </Link>
+
+          <button onClick={handleLogout} className="bg-red-50 text-red-600 p-6 rounded-2xl shadow-sm border border-red-100 hover:bg-red-100 transition-all flex flex-col items-center gap-3 text-center">
+            <LogOut size={32} />
+            <span className="font-bold">Sair</span>
           </button>
         </div>
-      </nav>
-
-      <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <Clock className="text-orange-500" />
-              Aguardando Revisão
-              <span className="bg-orange-100 text-orange-800 text-xs py-1 px-2 rounded-full">{atividadesPendentes.length}</span>
-            </h2>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            {loading ? (
-              <div className="p-8 text-center text-gray-500">Buscando atividades...</div>
-            ) : atividadesPendentes.length === 0 ? (
-              <div className="p-10 text-center flex flex-col items-center justify-center gap-3">
-                <div className="bg-green-50 p-4 rounded-full"><CheckCircle size={40} className="text-green-500" /></div>
-                <p className="text-lg font-bold text-gray-700">Tudo em dia!</p>
-                <p className="text-gray-500 text-center">Não há nenhuma atividade pendente de revisão no momento.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {atividadesPendentes.map((atividade) => (
-                  <div key={atividade.id} className="p-4 md:p-6 hover:bg-gray-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="font-bold text-gray-900 text-lg">{atividade.aluno}</h3>
-                      <p className="text-sm text-gray-600 font-medium mt-1">
-                        {atividade.modulo} {atividade.tarefa ? `- ${atividade.tarefa}` : ''}
-                      </p>
-                    </div>
-                    <Link to={`/revisar/${atividade.id}`} className="flex items-center justify-center gap-2 bg-blue-50 text-blue-700 px-5 py-3 rounded-lg font-bold hover:bg-blue-600 hover:text-white transition-all w-full md:w-auto">
-                      Revisar Agora <ChevronRight size={18} />
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section>
-          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 mt-8">
-            <LayoutDashboard className="text-blue-600" />
-            Ferramentas do Sistema
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            <Link to="/nova-atividade" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
-              <div className="bg-blue-50 p-4 rounded-full group-hover:bg-blue-100 transition-colors"><PlusCircle size={32} className="text-blue-600" /></div>
-              <span className="font-bold text-gray-700 text-center">Cadastrar Atividade</span>
-            </Link>
-
-            {/* BOTÃO DO MAPA DE ENTREGAS AGORA FUNCIONA! */}
-            <Link to="/mapa" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
-              <div className="bg-indigo-50 p-4 rounded-full group-hover:bg-indigo-100 transition-colors"><ClipboardList size={32} className="text-indigo-600" /></div>
-              <span className="font-bold text-gray-700 text-center">Mapa de Entregas</span>
-            </Link>
-
-            <Link to="/alunos" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
-              <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors"><Users size={32} className="text-gray-600" /></div>
-              <span className="font-bold text-gray-700 text-center">Gerenciar Turma</span>
-            </Link>
-
-            <Link to="/configuracoes" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
-              <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors"><Settings size={32} className="text-gray-600" /></div>
-              <span className="font-bold text-gray-700 text-center">Configurações</span>
-            </Link>
-
-          </div>
-        </section>
-
       </main>
     </div>
   );
