@@ -4,7 +4,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard'; 
 import NovaAtividade from './pages/NovaAtividade'; 
 import RevisarAtividade from './pages/RevisarAtividade';
-import Alunos from './pages/Alunos'; // <-- Importando a página nova
+import Alunos from './pages/Alunos'; 
+import Configuracoes from './pages/Configuracoes'; // <-- A tela que acabamos de criar
 
 function RotaPrivada({ children }) {
   const { currentUser } = useAuth();
@@ -21,9 +22,8 @@ function App() {
           <Route path="/" element={<RotaPrivada><Dashboard /></RotaPrivada>} />
           <Route path="/nova-atividade" element={<RotaPrivada><NovaAtividade /></RotaPrivada>} />
           <Route path="/revisar/:id" element={<RotaPrivada><RevisarAtividade /></RotaPrivada>} />
-          
-          {/* A rota dos alunos */}
           <Route path="/alunos" element={<RotaPrivada><Alunos /></RotaPrivada>} />
+          <Route path="/configuracoes" element={<RotaPrivada><Configuracoes /></RotaPrivada>} />
           
         </Routes>
       </BrowserRouter>
