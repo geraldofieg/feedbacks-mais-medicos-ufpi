@@ -52,7 +52,6 @@ export default function Dashboard() {
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
         
-        {/* PRIORIDADE 1: Mesa de Trabalho da Patrícia (O que precisa ser feito AGORA) */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -81,7 +80,10 @@ export default function Dashboard() {
                   <div key={atividade.id} className="p-4 md:p-6 hover:bg-gray-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <h3 className="font-bold text-gray-900 text-lg">{atividade.aluno}</h3>
-                      <p className="text-sm text-gray-600 font-medium mt-1">{atividade.modulo}</p>
+                      {/* AQUI ESTÁ A MÁGICA: Mostra o Módulo e a Tarefa juntos */}
+                      <p className="text-sm text-gray-600 font-medium mt-1">
+                        {atividade.modulo} {atividade.tarefa ? `- ${atividade.tarefa}` : ''}
+                      </p>
                     </div>
                     
                     <Link 
@@ -98,7 +100,6 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* PRIORIDADE 2: Menu de Acesso Rápido (Ferramentas e Cadastros) */}
         <section>
           <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 mt-8">
             <LayoutDashboard className="text-blue-600" />
@@ -107,7 +108,6 @@ export default function Dashboard() {
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             
-            {/* Botão Nova Atividade */}
             <Link to="/nova-atividade" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
               <div className="bg-blue-50 p-4 rounded-full group-hover:bg-blue-100 transition-colors">
                 <PlusCircle size={32} className="text-blue-600" />
@@ -115,7 +115,6 @@ export default function Dashboard() {
               <span className="font-bold text-gray-700">Cadastrar Atividade</span>
             </Link>
 
-            {/* Botão Mapa de Entregas (Nossa próxima meta) */}
             <div className="bg-gray-50 p-6 rounded-xl border border-dashed border-gray-300 flex flex-col items-center justify-center gap-3 opacity-70 cursor-not-allowed">
               <div className="bg-gray-200 p-4 rounded-full">
                 <ClipboardList size={32} className="text-gray-500" />
@@ -123,7 +122,6 @@ export default function Dashboard() {
               <span className="font-bold text-gray-500 text-center">Mapa de Entregas<br/><span className="text-xs font-normal">(Em desenvolvimento)</span></span>
             </div>
 
-            {/* Botão Gerenciar Turma (Baixa prioridade, deixado por último) */}
             <Link to="/alunos" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
               <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors">
                 <Users size={32} className="text-gray-600" />
