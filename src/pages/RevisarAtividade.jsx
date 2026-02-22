@@ -40,7 +40,7 @@ export default function RevisarAtividade() {
         postado: false,
         dataAprovacao: new Date()
       });
-      navigate('/lista/falta-postar'); // Após a Patrícia aprovar, vai direto para a fila do Geraldo
+      navigate('/lista/falta-postar');
     } catch (error) { alert("Erro ao salvar."); setSalvando(false); }
   }
 
@@ -62,14 +62,13 @@ export default function RevisarAtividade() {
     setMarcandoPostado(true);
     try {
       await updateDoc(doc(db, 'atividades', id), { postado: true });
-      navigate('/lista/finalizados'); // Ao marcar como postado, vai para a lista verde!
+      navigate('/lista/finalizados');
     } catch (error) { alert("Erro ao marcar."); setMarcandoPostado(false); }
   }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div></div>;
   if (!atividade) return <div className="text-center p-10 font-bold">Atividade não encontrada.</div>;
 
-  // Lógica para o botão Voltar
   const linkVoltar = atividade.status === 'pendente' ? '/lista/pendente' : !atividade.postado ? '/lista/falta-postar' : '/lista/finalizados';
 
   return (
@@ -96,15 +95,17 @@ export default function RevisarAtividade() {
                 </div>
               </div>
 
+              {/* whitespace-pre-wrap adicionado abaixo */}
               <div className="mt-4">
                 <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">1. Enunciado</h4>
-                {atividade.enunciado && <p className="text-gray-700 bg-gray-50 p-4 rounded-xl text-sm border border-gray-100">{atividade.enunciado}</p>}
+                {atividade.enunciado && <p className="text-gray-700 bg-gray-50 p-4 rounded-xl text-sm border border-gray-100 whitespace-pre-wrap">{atividade.enunciado}</p>}
                 {atividade.urlEnunciado && <a href={atividade.urlEnunciado} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-blue-100 border border-blue-200"><FileText size={20} /> Ver Arquivo do Enunciado <ExternalLink size={16} /></a>}
               </div>
 
+              {/* whitespace-pre-wrap adicionado abaixo */}
               <div className="mt-6 border-t border-gray-100 pt-6">
                 <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">2. Resposta do Aluno</h4>
-                {atividade.resposta && <p className="text-gray-800 bg-green-50 p-4 rounded-xl text-sm border border-green-100 font-medium">{atividade.resposta}</p>}
+                {atividade.resposta && <p className="text-gray-800 bg-green-50 p-4 rounded-xl text-sm border border-green-100 font-medium whitespace-pre-wrap">{atividade.resposta}</p>}
                 {atividade.urlResposta && <a href={atividade.urlResposta} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-green-100 border border-green-200"><FileText size={20} /> Ver Arquivo da Resposta <ExternalLink size={16} /></a>}
               </div>
             </div>
@@ -120,6 +121,7 @@ export default function RevisarAtividade() {
             ) : (
               <div className="bg-gray-800 p-6 rounded-2xl shadow-md text-white sticky top-6">
                 <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-gray-600 pb-2"><CheckCircle size={20} />Feedback Aprovado</h3>
+                {/* whitespace-pre-wrap já estava aqui, garantindo a formatação final */}
                 <div className="bg-white text-gray-800 p-4 rounded-xl text-sm mb-4 min-h-[150px] whitespace-pre-wrap font-medium shadow-inner">
                   {atividade.feedbackFinal || atividade.feedbackSugerido}
                 </div>
@@ -148,5 +150,4 @@ export default function RevisarAtividade() {
       </div>
     </div>
   );
-                    }
-              
+}
