@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -12,7 +12,8 @@ import {
   CheckCircle, 
   Clock,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -24,22 +25,18 @@ export default function Dashboard() {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'atividades'), (snap) => {
       const docs = snap.docs.map(doc => doc.data());
-      
-      // Estatísticas
       setStats({
         pendentes: docs.filter(d => d.status === 'pendente').length,
         aprovados: docs.filter(d => d.status === 'aprovado').length
       });
+    });
 
-      // Busca a data mais recente manualmente
-      if (docs.length > 0) {
-        const datas = docs
-          .map(d => d.dataCriacao?.toDate())
-          .filter(Boolean)
-          .sort((a, b) => b - a);
-        
-        if (datas[0]) {
-          setUltimaData(datas[0].toLocaleDateString('pt-BR', { 
+    const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
+    const unsubUltima = onSnapshot(qUltima, (snap) => {
+      if (!snap.empty) {
+        const data = snap.docs[0].data().dataCriacao?.toDate();
+        if (data) {
+          setUltimaData(data.toLocaleDateString('pt-BR', { 
             day: '2-digit', month: '2-digit', year: 'numeric', 
             hour: '2-digit', minute: '2-digit' 
           }));
@@ -47,7 +44,7 @@ export default function Dashboard() {
       }
     });
 
-    return () => unsub();
+    return () => { unsub(); unsubUltima(); };
   }, []);
 
   async function handleLogout() {
@@ -93,10 +90,16 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {/* Menu de Ações Rápidas - Agora com 6 botões */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Link to="/nova-atividade" className="bg-blue-600 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 text-center active:scale-95 transition-transform">
             <PlusCircle size={28} />
             <span className="font-bold text-sm">Nova Atividade</span>
+          </Link>
+
+          <Link to="/pendencias" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform">
+            <AlertTriangle size={28} className="text-orange-500" />
+            <span className="font-bold text-sm">Pendências</span>
           </Link>
 
           <Link to="/mapa" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform">
