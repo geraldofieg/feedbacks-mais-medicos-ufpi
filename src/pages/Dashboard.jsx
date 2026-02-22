@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, PlusCircle, Users, LayoutDashboard, Clock, CheckCircle, ChevronRight, ClipboardList } from 'lucide-react';
+import { LogOut, PlusCircle, Users, LayoutDashboard, Clock, CheckCircle, ChevronRight, ClipboardList, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -80,7 +80,6 @@ export default function Dashboard() {
                   <div key={atividade.id} className="p-4 md:p-6 hover:bg-gray-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <h3 className="font-bold text-gray-900 text-lg">{atividade.aluno}</h3>
-                      {/* AQUI ESTÁ A MÁGICA: Mostra o Módulo e a Tarefa juntos */}
                       <p className="text-sm text-gray-600 font-medium mt-1">
                         {atividade.modulo} {atividade.tarefa ? `- ${atividade.tarefa}` : ''}
                       </p>
@@ -106,13 +105,13 @@ export default function Dashboard() {
             Ferramentas do Sistema
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             
             <Link to="/nova-atividade" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
               <div className="bg-blue-50 p-4 rounded-full group-hover:bg-blue-100 transition-colors">
                 <PlusCircle size={32} className="text-blue-600" />
               </div>
-              <span className="font-bold text-gray-700">Cadastrar Atividade</span>
+              <span className="font-bold text-gray-700 text-center">Cadastrar Atividade</span>
             </Link>
 
             <div className="bg-gray-50 p-6 rounded-xl border border-dashed border-gray-300 flex flex-col items-center justify-center gap-3 opacity-70 cursor-not-allowed">
@@ -126,7 +125,15 @@ export default function Dashboard() {
               <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors">
                 <Users size={32} className="text-gray-600" />
               </div>
-              <span className="font-bold text-gray-700">Gerenciar Turma</span>
+              <span className="font-bold text-gray-700 text-center">Gerenciar Turma</span>
+            </Link>
+
+            {/* BOTÃO NOVO: Configurações */}
+            <Link to="/configuracoes" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
+              <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors">
+                <Settings size={32} className="text-gray-600" />
+              </div>
+              <span className="font-bold text-gray-700 text-center">Configurações</span>
             </Link>
 
           </div>
