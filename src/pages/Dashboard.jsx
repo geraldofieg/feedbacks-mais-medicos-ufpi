@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, PlusCircle, FileText, Clock, CheckCircle } from 'lucide-react';
+import { LogOut, PlusCircle, FileText, Clock, CheckCircle, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -48,51 +48,17 @@ export default function Dashboard() {
       </nav>
 
       <main className="p-6 max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Visão Geral</h2>
           
-          <Link to="/nova-atividade" className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors">
-            <PlusCircle size={20} />
-            Nova Atividade
-          </Link>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {loading ? (
-            <div className="p-6 text-center text-gray-500">Carregando atividades...</div>
-          ) : atividades.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">
-              Nenhuma atividade cadastrada ainda.
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {atividades.map((atividade) => (
-                <div key={atividade.id} className="p-6 hover:bg-gray-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className="bg-blue-100 p-3 rounded-lg text-blue-600 hidden md:block">
-                      <FileText size={24} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-800">{atividade.aluno}</h3>
-                      <p className="text-sm text-gray-500">{atividade.modulo}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${atividade.status === 'pendente' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                          {atividade.status === 'pendente' ? <Clock size={12} /> : <CheckCircle size={12} />}
-                          {atividade.status === 'pendente' ? 'Aguardando Revisão' : 'Aprovado'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <Link to={`/revisar/${atividade.id}`} className="text-blue-600 font-medium hover:text-blue-800 text-sm whitespace-nowrap">
-  Revisar Feedback
-</Link>
+          <div className="flex items-center gap-3">
+            {/* Novo Botão de Alunos (Só aparece para o Admin) */}
+            {userRole === 'admin' && (
+              <Link to="/alunos" className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+                <Users size={20} />
+                <span className="hidden md:inline">Alunos</span>
+              </Link>
+            )}
 
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
+            <Link to="/nova-atividade" className="flex items-center gap-2 bg-blue-600 text-white px-4 py
+            
