@@ -3,12 +3,11 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-
 const firebaseConfig = {
   apiKey: "AIzaSyB29PzKLW5YG_8qIib-swms4veFI4Ev-F4",
   authDomain: "feedbacks-mais-medicos-novo.firebaseapp.com",
   projectId: "feedbacks-mais-medicos-novo",
-  storageBucket: "feedbacks-mais-medicos-novo.firebasestorage.app",
+  storageBucket: "feedbacks-mais-medicos-novo.appspot.com",
   messagingSenderId: "390908095939",
   appId: "1:390908095939:web:f8cd055c90c8d26e666176"
 };
