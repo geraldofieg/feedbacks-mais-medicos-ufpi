@@ -5,7 +5,7 @@ import { db } from '../services/firebase';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
 
 export default function RevisarAtividade() {
-  const { id } = useParams(); // Pega o código da atividade na URL
+  const { id } = useParams();
   const navigate = useNavigate();
   
   const [atividade, setAtividade] = useState(null);
@@ -13,7 +13,6 @@ export default function RevisarAtividade() {
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
-  // Busca os dados desta atividade específica no banco
   useEffect(() => {
     async function carregarAtividade() {
       const docRef = doc(db, 'atividades', id);
@@ -21,7 +20,6 @@ export default function RevisarAtividade() {
       
       if (docSnap.exists()) {
         setAtividade(docSnap.data());
-        // Já preenche o campo de edição com o rascunho sugerido
         setFeedbackFinal(docSnap.data().feedbackSugerido || '');
       }
       setLoading(false);
@@ -29,7 +27,6 @@ export default function RevisarAtividade() {
     carregarAtividade();
   }, [id]);
 
-  // Função para salvar a edição e mudar o status para Aprovado
   async function handleAprovar() {
     setSalvando(true);
     try {
@@ -38,7 +35,7 @@ export default function RevisarAtividade() {
         feedbackFinal: feedbackFinal,
         status: 'aprovado'
       });
-      navigate('/'); // Volta pro painel
+      navigate('/'); 
     } catch (error) {
       console.error("Erro ao aprovar:", error);
       setSalvando(false);
@@ -52,7 +49,6 @@ export default function RevisarAtividade() {
     <div className="min-h-screen bg-gray-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         
-        {/* Cabeçalho */}
         <div className="flex items-center gap-4 mb-6">
           <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors">
             <ArrowLeft size={24} />
@@ -62,12 +58,14 @@ export default function RevisarAtividade() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* COLUNA ESQUERDA: O Contexto (Apenas Leitura) */}
           <div className="space-y-4">
             <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-sm font-bold text-gray-500 uppercase mb-1">ALUNO</h3>
+              <h3 className="text-sm font-bold text-gray-500 uppercase mb-1">Dados do Aluno</h3>
               <p className="font-medium text-gray-900 text-lg">{atividade.aluno}</p>
-              <p className="text-sm text-gray-600">{atividade.modulo}</p>
+              {/* Mostrando o Módulo e a Tarefa juntos */}
+              <p className="text-sm text-gray-600">
+                {atividade.modulo} {atividade.tarefa ? `- ${atividade.tarefa}` : ''}
+              </p>
             </div>
 
             <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
@@ -81,7 +79,6 @@ export default function RevisarAtividade() {
             </div>
           </div>
 
-          {/* COLUNA DIREITA: A Edição da Patrícia */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full">
             <h3 className="text-sm font-bold text-blue-600 uppercase mb-1">Feedback Final</h3>
             <p className="text-xs text-gray-500 mb-4">Revise, edite se necessário e aprove.</p>
