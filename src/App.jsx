@@ -7,9 +7,9 @@ import RevisarAtividade from './pages/RevisarAtividade';
 import Alunos from './pages/Alunos';
 import Configuracoes from './pages/Configuracoes';
 import MapaEntregas from './pages/MapaEntregas';
-import ListaAtividades from './pages/ListaAtividades'; // Importando a nova página
+import ListaAtividades from './pages/ListaAtividades';
+import Pendencias from './pages/Pendencias';
 
-// Proteção de rotas
 function PrivateRoute({ children }) {
   const { currentUser, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
@@ -30,6 +30,7 @@ function App() {
           <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
           <Route path="/lista/:status" element={<PrivateRoute><ListaAtividades /></PrivateRoute>} />
+          <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
           
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
