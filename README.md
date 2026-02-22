@@ -1,6 +1,6 @@
 ​🩺 Sistema de Gerenciamento de Feedbacks - Mais Médicos UFPI
 ​1. Visão Geral do Sistema
-​Aplicativo web desenvolvido para otimizar o fluxo de recebimento, revisão e aprovação de feedbacks das atividades dos alunos (médicos residentes) do programa Mais Médicos pela UFPI. O sistema permite o cadastro de atividades com anexos, aprovação com edição de texto e painel de controle gerencial.
+​Aplicativo web desenvolvido para otimizar o fluxo de recebimento, revisão e aprovação de feedbacks das atividades dos alunos (médicos residentes) do programa Mais Médicos pela UFPI. O sistema funciona como um funil de produção inteligente (Workflow em 3 Fases), separando as tarefas da professora avaliadora e do gestor que faz a postagem no sistema oficial do governo.
 ​2. Tecnologias Utilizadas (Stack)
 ​Front-end: React (com Vite)
 ​Roteamento: React Router Dom
@@ -17,45 +17,36 @@
 ​modulos: Guarda os módulos do curso. (Campos: nome)
 ​tarefas: Guarda as tarefas/atividades de cada módulo. (Campos: nome)
 ​atividades: O coração do sistema. Guarda as submissões.
-​Campos: aluno, modulo, tarefa, enunciado (texto), urlEnunciado (link do arquivo), resposta (texto), urlResposta (link do arquivo), feedbackSugerido, feedbackFinal, status ('pendente' ou 'aprovado'), dataCriacao, dataAprovacao.
+​Campos: aluno, modulo, tarefa, enunciado (texto), urlEnunciado (link do arquivo), resposta (texto), urlResposta (link do arquivo), feedbackSugerido, feedbackFinal, status ('pendente' ou 'aprovado'), postado (Booleano: true/false), dataCriacao, dataAprovacao.
 ​B. Armazenamento de Arquivos (Storage)
 ​Configurado no plano Blaze (pago por uso, mas contendo os limites da camada gratuita).
-​Regras de Segurança: Acesso de leitura e escrita liberado (autenticação controlada via front-end).
-​Automação (Ciclo de Vida): Configurada via Google Cloud (console.cloud.google.com). Os arquivos são excluídos automaticamente após 40 dias da criação, garantindo que o armazenamento nunca ultrapasse a cota gratuita de 5GB.
+​Automação (Ciclo de Vida): Configurada via Google Cloud. Os arquivos (PDFs/Imagens) são excluídos automaticamente após 40 dias da criação, garantindo que o armazenamento nunca ultrapasse a cota gratuita de 5GB.
 ​4. Estrutura de Arquivos e Código
 ​O sistema está organizado dentro da pasta src/, com a seguinte hierarquia:
-​📁 src/services/
-​firebase.js: Contém as chaves da API do Google e a inicialização dos serviços (Auth, Firestore e Storage). É a ponte entre o site e o banco.
-​📁 src/contexts/
-​AuthContext.jsx: Gerencia a "sessão" do usuário. Verifica se há alguém logado, protege as páginas para que não sejam acessadas por links diretos e gerencia a função de Logout.
 ​📁 src/pages/ (Telas do Sistema)
 ​Login.jsx: Tela de entrada com e-mail e senha.
-​Dashboard.jsx: Painel inicial. Mostra a data da última sincronização, contadores em tempo real (Pendentes/Aprovados) e botões de navegação.
-​Configuracoes.jsx: Tela para cadastrar, listar e excluir Módulos e Tarefas.
-​Alunos.jsx: Tela para cadastrar, listar e excluir os Alunos.
-​NovaAtividade.jsx: Formulário de submissão. Permite envio de textos e upload de arquivos (PDF/Imagens) diretamente para o Firebase Storage.
-​ListaAtividades.jsx: Renderiza a lista de cards de atividades, filtrando dinamicamente por "Pendentes" ou "Aprovados" baseado na URL.
-​RevisarAtividade.jsx: Tela de ação.
-​Se pendente: Permite baixar arquivos anexos, editar o feedback sugerido e aprovar.
-​Se aprovada: Mostra o texto finalizado, permite copiar para a área de transferência com 1 clique e permite exclusão do registro.
-​MapaEntregas.jsx: Matriz de acompanhamento. O usuário seleciona Módulo + Tarefa e o sistema cruza com a lista de alunos, mostrando quem já entregou (Aprovado/Pendente) e quem está devendo (Não Entregue).
-​📄 src/App.jsx
-​O arquivo mestre de roteamento. Define todas as URLs do sistema (/, /login, /nova-atividade, etc.) e envelopa as rotas sensíveis com o componente <PrivateRoute>, garantindo total segurança.
-​5. Fluxo de Trabalho (Workflow da Rotina)
-​Configuração Inicial: O Administrador cadastra Módulos, Tarefas e Alunos nas configurações.
-​Alimentação: O Administrador entra em Nova Atividade, seleciona os filtros, cola os textos ou anexa os arquivos vindos do site do Governo, digita um feedback base e salva.
-​Revisão: A Professora (Patrícia) faz login, clica no card amarelo (Aguardando Revisão), lê os textos ou clica para ver os PDFs no celular.
-​Aprovação: A Professora edita o feedback (se necessário) e clica em Aprovar.
-​Finalização: O Administrador entra nos Aprovados, clica em Copiar Feedback e leva a nota definitiva para o sistema do Governo. O arquivo anexo se autodestrói 40 dias depois para poupar espaço do servidor.
-​Auditoria: A qualquer momento, acessa-se o Mapa de Entregas para ver pendências da turma.
+​Dashboard.jsx: Painel inicial atuando como Funil de 3 Etapas (Aguardando Revisão, Aguardando Postar e Histórico Finalizado). Possui contadores em tempo real.
+​NovaAtividade.jsx: Formulário de submissão. Permite envio de textos e upload de arquivos. Possui função de Autofill: se o módulo e tarefa já tiverem sido cadastrados para outro aluno, o sistema preenche o enunciado e o anexo automaticamente.
+​ListaAtividades.jsx: Renderiza a lista de cards de atividades, filtrando dinamicamente a URL para mostrar qual caixa do funil o usuário acessou.
+​RevisarAtividade.jsx: Tela de ação com comportamento dinâmico:
+​Pendente: Permite avaliar, editar e aprovar.
+​Aprovada (Falta Postar): Permite copiar o feedback e possui o botão "Marcar como Postado".
+​Finalizada: Visualização de arquivo morto com selo de conclusão.
+​(Permite baixar arquivos e excluir atividades em qualquer etapa).
+​Pendencias.jsx: Relatório inteligente que cruza as tarefas cadastradas com a base de alunos e dedura imediatamente quem ainda não entregou a atividade.
+​MapaEntregas.jsx: Matriz de acompanhamento individual por tarefa.
+​Configuracoes.jsx e Alunos.jsx: Telas de gestão de cadastros básicos.
+​5. Fluxo de Trabalho Diário (O Funil Perfeito)
+​Alimentação (Gestor): O Gestor entra em Nova Atividade e insere a resposta do aluno junto com a proposta de feedback gerada por IA.
+​Fase 1 - Revisão (Professora Patrícia): A professora clica na caixa amarela (Aguardando Revisão), lê a atividade, ajusta o feedback se necessário e clica em Aprovar. O card sai da caixa amarela e vai para a azul.
+​Fase 2 - Postagem (Gestor Geraldo): O gestor clica na caixa azul (Aguardando Postar). Ele entra no aluno, clica em Copiar Feedback e cola o texto no site oficial do Mais Médicos.
+​Fase 3 - Finalização: O gestor clica no botão Marcar como Postado no Site. O sistema encerra o ciclo, jogando o aluno para a caixa verde (Histórico Finalizado).
+​Cobrança: O gestor acessa o botão Pendências para ver a lista vermelha de alunos que ainda precisam enviar suas tarefas, agrupada por módulo.
 ​6. Como restaurar o projeto do Zero (Backup Guide)
-​Caso precise recriar este projeto do zero no futuro, siga esta ordem de comandos no terminal:
+​Caso precise recriar este projeto do zero no futuro, siga esta ordem:
 ​Instale o React com Vite: npm create vite@latest feedbacks -- --template react
-​Entre na pasta: cd feedbacks
-​Instale as dependências essenciais: npm install firebase react-router-dom lucide-react
-​Configure o Tailwind CSS (siga a documentação do Tailwind para Vite).
-​Crie a mesma estrutura de pastas detalhada acima.
+​Instale as dependências: npm install firebase react-router-dom lucide-react
+​Configure o Tailwind CSS (siga a documentação oficial para Vite).
+​Crie a mesma estrutura de pastas (/services, /contexts, /pages).
 ​Cole o conteúdo salvo de cada arquivo .jsx.
-​Rode npm run dev para testar localmente.
-​Envie para o GitHub e importe no painel da Vercel para colocar no ar.
-​(Fim da cópia)
+​Rode npm run dev para testar e faça o deploy (ex: Vercel).
