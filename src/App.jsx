@@ -1,0 +1,39 @@
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import NovaAtividade from './pages/NovaAtividade';
+import RevisarAtividade from './pages/RevisarAtividade';
+import Alunos from './pages/Alunos';
+import Configuracoes from './pages/Configuracoes';
+import MapaEntregas from './pages/MapaEntregas'; // A porta para o novo arquivo
+
+// Proteção de rotas
+function PrivateRoute({ children }) {
+  const { currentUser, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+  return currentUser ? children : <Navigate to="/login" />;
+}
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/nova-atividade" element={<PrivateRoute><NovaAtividade /></PrivateRoute>} />
+          <Route path="/revisar/:id" element={<PrivateRoute><RevisarAtividade /></PrivateRoute>} />
+          <Route path="/alunos" element={<PrivateRoute><Alunos /></PrivateRoute>} />
+          <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
+          <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
+          
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </AuthProvider>
+    </Router>
+  );
+}
+
+export default App;
