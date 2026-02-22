@@ -10,7 +10,6 @@ export default function Configuracoes() {
   const [novoModulo, setNovoModulo] = useState('');
   const [novaTarefa, setNovaTarefa] = useState('');
 
-  // Busca Módulos e Tarefas do banco de dados em tempo real
   useEffect(() => {
     const qModulos = query(collection(db, 'modulos'), orderBy('nome', 'asc'));
     const unsubModulos = onSnapshot(qModulos, (snap) => {
@@ -59,7 +58,6 @@ export default function Configuracoes() {
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
         
-        {/* Cabeçalho */}
         <div className="flex items-center gap-4 mb-8">
           <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors">
             <ArrowLeft size={24} />
@@ -72,7 +70,6 @@ export default function Configuracoes() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           
-          {/* COLUNA 1: Módulos */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Gerenciar Módulos</h3>
             
@@ -94,7 +91,6 @@ export default function Configuracoes() {
             </ul>
           </div>
 
-          {/* COLUNA 2: Tarefas */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Gerenciar Tarefas</h3>
             
@@ -121,3 +117,4 @@ export default function Configuracoes() {
     </div>
   );
 }
+
