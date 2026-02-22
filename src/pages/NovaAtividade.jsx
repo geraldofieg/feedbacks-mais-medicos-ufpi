@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ArrowLeft, Save } from 'lucide-react';
 
@@ -8,37 +8,58 @@ export default function NovaAtividade() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState('');
+  
+  // Aqui o sistema vai guardar a lista de alunos que ele puxar do banco
+  const [alunosList, setAlunosList] = useState([]);
 
   // Campos do formulário
   const [modulo, setModulo] = useState('');
-  const [aluno, setAluno] = useState('');
+  const [alunoSelecionado, setAlunoSelecionado] = useState('');
   const [enunciado, setEnunciado] = useState('');
   const [resposta, setResposta] = useState('');
   const [feedback, setFeedback] = useState('');
 
+  // Toda vez que a tela abrir, ele busca os alunos cadastrados no banco em ordem alfabética
+  useEffect(() => {
+    const q = query(collection(db, 'alunos'), orderBy('nome', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const lista = [];
+      snapshot.forEach((doc) => {
+        lista.push({ id: doc.id, nome: doc.data().nome });
+      });
+      setAlunosList(lista);
+    });
+    return () => unsubscribe();
+  }, []);
+
   async function handleSubmit(e) {
     e.preventDefault();
+    
+    // Pequena trava de segurança para não deixar salvar sem aluno
+    if (!alunoSelecionado) {
+      setMensagem('Por favor, selecione um aluno.');
+      return;
+    }
+
     setLoading(true);
     setMensagem('');
 
     try {
-      // Aqui é onde a mágica acontece: salvando no Firebase!
       await addDoc(collection(db, 'atividades'), {
         modulo,
-        aluno,
+        aluno: alunoSelecionado, // Agora salva o nome escolhido na lista
         enunciado,
         resposta,
         feedbackSugerido: feedback,
-        status: 'pendente', // Fica pendente para a Patrícia aprovar depois
+        status: 'pendente',
         dataCriacao: serverTimestamp()
       });
 
       setMensagem('Atividade cadastrada com sucesso!');
       
-      // Limpa o formulário para a próxima
-      setModulo(''); setAluno(''); setEnunciado(''); setResposta(''); setFeedback('');
+      // Limpa os campos para o próximo cadastro
+      setModulo(''); setAlunoSelecionado(''); setEnunciado(''); setResposta(''); setFeedback('');
       
-      // Espera 2 segundos e volta pro painel
       setTimeout(() => navigate('/'), 2000);
       
     } catch (error) {
@@ -52,7 +73,6 @@ export default function NovaAtividade() {
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-8">
       <div className="max-w-3xl mx-auto">
-        {/* Cabeçalho da página */}
         <div className="flex items-center gap-4 mb-6">
           <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors">
             <ArrowLeft size={24} />
@@ -66,17 +86,27 @@ export default function NovaAtividade() {
           </div>
         )}
 
-        {/* Formulário */}
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Módulo / Tarefa</label>
-              <input required type="text" placeholder="Ex: Módulo 1 - Caso Clínico" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={modulo} onChange={e => setModulo(e.target.value)} />
+              <input required type="text" placeholder="Ex: Módulo 6 - Fórum" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={modulo} onChange={e => setModulo(e.target.value)} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Aluno</label>
-              <input required type="text" placeholder="Nome completo" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={aluno} onChange={e => setAluno(e.target.value)} />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Selecione o Aluno</label>
+              {/* Aqui o campo de digitar vira uma caixa de seleção com os alunos do banco */}
+              <select 
+                required 
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
+                value={alunoSelecionado} 
+                onChange={e => setAlunoSelecionado(e.target.value)}
+              >
+                <option value="">-- Escolha um aluno --</option>
+                {alunosList.map(a => (
+                  <option key={a.id} value={a.nome}>{a.nome}</option>
+                ))}
+              </select>
             </div>
           </div>
 
