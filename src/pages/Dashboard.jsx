@@ -12,7 +12,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     const q = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'));
-    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const listaAtividades = [];
       snapshot.forEach((doc) => {
@@ -21,7 +20,6 @@ export default function Dashboard() {
       setAtividades(listaAtividades);
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -29,8 +27,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      
-      {/* Cabeçalho */}
       <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center border-b border-gray-200">
         <div>
           <h1 className="text-xl font-bold text-blue-800">Mais Médicos UFPI</h1>
@@ -38,14 +34,10 @@ export default function Dashboard() {
             {userRole === 'admin' ? 'Administrador' : 'Aprovadora'}
           </span>
         </div>
-        
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600 hidden md:block font-medium">
-            {currentUser?.email}
-          </span>
+          <span className="text-sm text-gray-600 hidden md:block font-medium">{currentUser?.email}</span>
           <button onClick={() => logout()} className="flex items-center gap-2 text-red-500 hover:text-red-700 font-bold transition-colors">
-            <LogOut size={20} />
-            Sair
+            <LogOut size={20} /> Sair
           </button>
         </div>
       </nav>
@@ -57,20 +49,15 @@ export default function Dashboard() {
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <Clock className="text-orange-500" />
               Aguardando Revisão
-              <span className="bg-orange-100 text-orange-800 text-xs py-1 px-2 rounded-full">
-                {atividadesPendentes.length}
-              </span>
+              <span className="bg-orange-100 text-orange-800 text-xs py-1 px-2 rounded-full">{atividadesPendentes.length}</span>
             </h2>
           </div>
-
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             {loading ? (
               <div className="p-8 text-center text-gray-500">Buscando atividades...</div>
             ) : atividadesPendentes.length === 0 ? (
               <div className="p-10 text-center flex flex-col items-center justify-center gap-3">
-                <div className="bg-green-50 p-4 rounded-full">
-                  <CheckCircle size={40} className="text-green-500" />
-                </div>
+                <div className="bg-green-50 p-4 rounded-full"><CheckCircle size={40} className="text-green-500" /></div>
                 <p className="text-lg font-bold text-gray-700">Tudo em dia!</p>
                 <p className="text-gray-500 text-center">Não há nenhuma atividade pendente de revisão no momento.</p>
               </div>
@@ -84,13 +71,8 @@ export default function Dashboard() {
                         {atividade.modulo} {atividade.tarefa ? `- ${atividade.tarefa}` : ''}
                       </p>
                     </div>
-                    
-                    <Link 
-                      to={`/revisar/${atividade.id}`} 
-                      className="flex items-center justify-center gap-2 bg-blue-50 text-blue-700 px-5 py-3 rounded-lg font-bold hover:bg-blue-600 hover:text-white transition-all w-full md:w-auto"
-                    >
-                      Revisar Agora
-                      <ChevronRight size={18} />
+                    <Link to={`/revisar/${atividade.id}`} className="flex items-center justify-center gap-2 bg-blue-50 text-blue-700 px-5 py-3 rounded-lg font-bold hover:bg-blue-600 hover:text-white transition-all w-full md:w-auto">
+                      Revisar Agora <ChevronRight size={18} />
                     </Link>
                   </div>
                 ))}
@@ -104,35 +86,26 @@ export default function Dashboard() {
             <LayoutDashboard className="text-blue-600" />
             Ferramentas do Sistema
           </h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             
             <Link to="/nova-atividade" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
-              <div className="bg-blue-50 p-4 rounded-full group-hover:bg-blue-100 transition-colors">
-                <PlusCircle size={32} className="text-blue-600" />
-              </div>
+              <div className="bg-blue-50 p-4 rounded-full group-hover:bg-blue-100 transition-colors"><PlusCircle size={32} className="text-blue-600" /></div>
               <span className="font-bold text-gray-700 text-center">Cadastrar Atividade</span>
             </Link>
 
-            <div className="bg-gray-50 p-6 rounded-xl border border-dashed border-gray-300 flex flex-col items-center justify-center gap-3 opacity-70 cursor-not-allowed">
-              <div className="bg-gray-200 p-4 rounded-full">
-                <ClipboardList size={32} className="text-gray-500" />
-              </div>
-              <span className="font-bold text-gray-500 text-center">Mapa de Entregas<br/><span className="text-xs font-normal">(Em desenvolvimento)</span></span>
-            </div>
+            {/* BOTÃO DO MAPA DE ENTREGAS AGORA FUNCIONA! */}
+            <Link to="/mapa" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
+              <div className="bg-indigo-50 p-4 rounded-full group-hover:bg-indigo-100 transition-colors"><ClipboardList size={32} className="text-indigo-600" /></div>
+              <span className="font-bold text-gray-700 text-center">Mapa de Entregas</span>
+            </Link>
 
             <Link to="/alunos" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
-              <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors">
-                <Users size={32} className="text-gray-600" />
-              </div>
+              <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors"><Users size={32} className="text-gray-600" /></div>
               <span className="font-bold text-gray-700 text-center">Gerenciar Turma</span>
             </Link>
 
-            {/* BOTÃO NOVO: Configurações */}
             <Link to="/configuracoes" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex flex-col items-center justify-center gap-3 group">
-              <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors">
-                <Settings size={32} className="text-gray-600" />
-              </div>
+              <div className="bg-gray-50 p-4 rounded-full group-hover:bg-gray-200 transition-colors"><Settings size={32} className="text-gray-600" /></div>
               <span className="font-bold text-gray-700 text-center">Configurações</span>
             </Link>
 
