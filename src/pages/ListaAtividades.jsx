@@ -44,7 +44,14 @@ export default function ListaAtividades() {
         lista = lista.filter(atv => atv.postado === true);
       }
       
-      lista.sort((a, b) => (b.dataCriacao?.seconds || 0) - (a.dataCriacao?.seconds || 0));
+      lista.sort((a, b) => {
+        if (status === 'finalizados' || status === 'falta-postar') {
+            const dateA = a.dataAprovacao?.seconds || 0;
+            const dateB = b.dataAprovacao?.seconds || 0;
+            return dateB - dateA;
+        }
+        return (b.dataCriacao?.seconds || 0) - (a.dataCriacao?.seconds || 0);
+      });
       setAtividades(lista);
       setLoading(false);
     }, (error) => { console.error(error); setLoading(false); });
@@ -135,6 +142,10 @@ export default function ListaAtividades() {
                     <div>
                       <h3 className={`font-bold ${status === 'finalizados' ? 'text-gray-500' : 'text-gray-900'}`}>{atv.aluno}</h3>
                       <p className="text-sm text-gray-500 font-medium">{atv.modulo} • {atv.tarefa}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {status === 'pendente' ? 'Criado em: ' : 'Aprovado em: '}
+                        {new Date(((status === 'pendente' ? atv.dataCriacao?.seconds : atv.dataAprovacao?.seconds) || 0) * 1000).toLocaleString()}
+                      </p>
                     </div>
                   </div>
                   <div className="p-2 rounded-lg text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-500"><ChevronRight size={20} /></div>
