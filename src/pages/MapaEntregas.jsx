@@ -1,107 +1,108 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, ClipboardList, CheckCircle, Clock, XCircle, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Check, X, ClipboardList } from 'lucide-react';
+
+const isModuloValido = (nome) => {
+  if (!nome) return false;
+  const lower = nome.toLowerCase();
+  if (lower.includes('recupera')) return false;
+  const match = lower.match(/\d+/);
+  if (match && parseInt(match[0], 10) < 7) return false;
+  return true; 
+};
 
 export default function MapaEntregas() {
   const [alunos, setAlunos] = useState([]);
-  const [atividades, setAtividades] = useState([]);
-  const [modulosList, setModulosList] = useState([]);
-  const [tarefasList, setTarefasList] = useState([]);
+  const [tarefasMapeadas, setTarefasMapeadas] = useState([]);
+  const [entregas, setEntregas] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
-  const [moduloFiltro, setModuloFiltro] = useState('');
-  const [tarefaFiltro, setTarefaFiltro] = useState('');
-
   useEffect(() => {
-    // Busca Alunos em ordem alfabética
-    const unsubAlunos = onSnapshot(query(collection(db, 'alunos'), orderBy('nome', 'asc')), (snap) => {
-      setAlunos(snap.docs.map(doc => doc.data().nome));
+    const unsubAlunos = onSnapshot(collection(db, 'alunos'), (snap) => {
+      setAlunos(snap.docs.map(doc => doc.data().nome).sort());
     });
 
-    // Busca todas as atividades para cruzar os dados
     const unsubAtividades = onSnapshot(collection(db, 'atividades'), (snap) => {
-      setAtividades(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+      const ativs = snap.docs.map(doc => doc.data()).filter(a => isModuloValido(a.modulo));
+      
+      const setEntregasTemp = new Set();
+      const modulosMap = {};
 
-    // Busca os Módulos que você cadastrou nas Configurações
-    const unsubModulos = onSnapshot(query(collection(db, 'modulos'), orderBy('nome', 'asc')), (snap) => {
-      setModulosList(snap.docs.map(doc => doc.data().nome));
-    });
+      ativs.forEach(a => {
+        setEntregasTemp.add(`${a.aluno}-${a.modulo}-${a.tarefa}`);
+        if (!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
+        if (a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
+        modulosMap[a.modulo].tarefas.add(a.tarefa);
+      });
 
-    // Busca as Tarefas (como a "Atividade 01") do seu Firebase
-    const unsubTarefas = onSnapshot(query(collection(db, 'tarefas'), orderBy('nome', 'asc')), (snap) => {
-      setTarefasList(snap.docs.map(doc => doc.data().nome));
+      // Ordena módulos do mais recente pro mais antigo
+      const listaMod = Object.values(modulosMap).sort((a, b) => b.data - a.data);
+      
+      const colunas = [];
+      listaMod.forEach(mod => {
+        Array.from(mod.tarefas).sort().forEach(tar => {
+          colunas.push({ modulo: mod.nome, tarefa: tar });
+        });
+      });
+
+      setTarefasMapeadas(colunas);
+      setEntregas(setEntregasTemp);
       setLoading(false);
     });
 
-    return () => { unsubAlunos(); unsubAtividades(); unsubModulos(); unsubTarefas(); };
+    return () => { unsubAlunos(); unsubAtividades(); };
   }, []);
-
-  const verificarStatus = (nomeAluno) => {
-    if (!moduloFiltro || !tarefaFiltro) return null;
-    
-    const atividade = atividades.find(a => 
-      a.aluno === nomeAluno && 
-      a.modulo === moduloFiltro && 
-      a.tarefa === tarefaFiltro
-    );
-
-    if (!atividade) return { status: 'falta', texto: 'Não Entregue', corBG: 'bg-red-50', corTexto: 'text-red-700', icone: <XCircle size={18} className="text-red-500" /> };
-    if (atividade.status === 'pendente') return { status: 'pendente', texto: 'Aguardando Revisão', corBG: 'bg-yellow-50', corTexto: 'text-yellow-800', icone: <Clock size={18} className="text-yellow-500" />, id: atividade.id };
-    return { status: 'aprovado', texto: 'Aprovado', corBG: 'bg-green-50', corTexto: 'text-green-800', icone: <CheckCircle size={18} className="text-green-500" />, id: atividade.id };
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center gap-4 mb-8">
           <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors"><ArrowLeft size={24} /></Link>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><ClipboardList className="text-blue-600" /> Mapa de Entregas</h2>
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <ClipboardList className="text-blue-600" /> Mapa de Entregas Recentes
+          </h2>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
-          <h3 className="text-sm font-bold text-gray-500 uppercase mb-4">Selecione a Tarefa para ver a turma</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <select className="w-full p-3 border border-gray-300 rounded-lg bg-white" value={moduloFiltro} onChange={e => setModuloFiltro(e.target.value)}>
-              <option value="">-- Escolha o Módulo --</option>
-              {modulosList.map((m, i) => <option key={i} value={m}>{m}</option>)}
-            </select>
-            <select className="w-full p-3 border border-gray-300 rounded-lg bg-white" value={tarefaFiltro} onChange={e => setTarefaFiltro(e.target.value)}>
-              <option value="">-- Escolha a Tarefa --</option>
-              {tarefasList.map((t, i) => <option key={i} value={t}>{t}</option>)}
-            </select>
+        {loading ? (
+          <div className="text-center py-20 text-blue-600 font-bold">Gerando mapa...</div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-100 text-gray-600 uppercase font-bold text-xs">
+                <tr>
+                  <th className="px-6 py-4 rounded-tl-2xl">Aluno</th>
+                  {tarefasMapeadas.map((t, i) => (
+                    <th key={i} className="px-4 py-4 text-center border-l border-gray-200 whitespace-nowrap">
+                      <div className="text-[10px] text-gray-400">{t.modulo}</div>
+                      <div>{t.tarefa}</div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {alunos.map((aluno, i) => (
+                  <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-6 py-4 font-bold text-gray-800 whitespace-nowrap">{aluno}</td>
+                    {tarefasMapeadas.map((t, j) => {
+                      const entregou = entregas.has(`${aluno}-${t.modulo}-${t.tarefa}`);
+                      return (
+                        <td key={j} className="px-4 py-4 text-center border-l border-gray-100">
+                          {entregou ? (
+                            <div className="inline-flex bg-green-100 text-green-600 p-1.5 rounded-full"><Check size={16}/></div>
+                          ) : (
+                            <div className="inline-flex bg-red-100 text-red-400 p-1.5 rounded-full"><X size={16}/></div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-gray-500">Carregando dados...</div>
-          ) : !moduloFiltro || !tarefaFiltro ? (
-            <div className="p-10 text-center text-gray-500">Selecione o Módulo e a Tarefa acima para visualizar o status.</div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {alunos.map((nome, i) => {
-                const info = verificarStatus(nome);
-                return (
-                  <div key={i} className={`p-4 flex justify-between items-center transition-colors ${info.corBG}`}>
-                    <div className="flex items-center gap-3">
-                      {info.icone}
-                      <div>
-                        <h3 className="font-bold text-gray-800">{nome}</h3>
-                        <span className={`text-xs font-bold uppercase ${info.corTexto}`}>{info.texto}</span>
-                      </div>
-                    </div>
-                    {info.status === 'pendente' && (
-                      <Link to={`/revisar/${info.id}`} className="text-blue-600 font-bold text-sm bg-white border border-blue-200 px-3 py-2 rounded-lg shadow-sm hover:bg-blue-50">Revisar</Link>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
