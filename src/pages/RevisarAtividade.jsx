@@ -3,12 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3 } from 'lucide-react';
 
 export default function RevisarAtividade() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { currentUser } = useAuth(); // Pegamos o usuário logado
+  const { currentUser } = useAuth();
   const [atividade, setAtividade] = useState(null);
   const [loading, setLoading] = useState(true);
   
@@ -18,9 +18,7 @@ export default function RevisarAtividade() {
   const [copiado, setCopiado] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
-  // === CRACHÁ DE IDENTIFICAÇÃO ===
-  // Substitua pelo SEU e-mail exato de login mantendo as aspas!
-  const isAdmin = currentUser?.email === 'geraldofieg@gmail.com'; 
+  const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
   useEffect(() => {
     async function buscarAtividade() {
@@ -44,9 +42,8 @@ export default function RevisarAtividade() {
         feedbackFinal: feedbackEditado,
         status: 'aprovado',
         postado: false,
-        dataAprovacao: new Date() // Grava a data e hora do clique dela
+        dataAprovacao: new Date()
       });
-      // Se for a professora, manda pro Histórico, se for o gestor, vai pra fila de postar
       navigate(isAdmin ? '/lista/falta-postar' : '/lista/finalizados'); 
     } catch (error) { alert("Erro ao salvar."); setSalvando(false); }
   }
@@ -91,6 +88,9 @@ export default function RevisarAtividade() {
   if (!atividade) return <div className="text-center p-10 font-bold">Atividade não encontrada.</div>;
 
   const linkVoltar = atividade.status === 'pendente' ? '/lista/pendente' : !atividade.postado ? (isAdmin ? '/lista/falta-postar' : '/lista/finalizados') : '/lista/finalizados';
+
+  // NOVO: A lógica que dedura se o texto foi editado
+  const foiEditado = atividade.feedbackFinal?.trim() !== atividade.feedbackSugerido?.trim();
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
@@ -140,17 +140,25 @@ export default function RevisarAtividade() {
               </div>
             ) : (
               <div className="bg-gray-800 p-6 rounded-2xl shadow-md text-white">
-                <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-gray-600 pb-2"><CheckCircle size={20} />Feedback Aprovado</h3>
+                
+                {/* NOVO: Título com o Selo de IA */}
+                <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-gray-600 pb-2">
+                  <CheckCircle size={20} />Aprovado
+                  {foiEditado ? (
+                    <span className="ml-auto text-[10px] font-black uppercase tracking-wider bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full flex items-center gap-1"><Edit3 size={12}/> Editado</span>
+                  ) : (
+                    <span className="ml-auto text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full flex items-center gap-1"><Sparkles size={12}/> 100% IA</span>
+                  )}
+                </h3>
+
                 <div className="bg-white text-gray-800 p-4 rounded-xl text-sm mb-4 min-h-[150px] whitespace-pre-wrap font-medium shadow-inner">
                   {atividade.feedbackFinal || atividade.feedbackSugerido}
                 </div>
                 
-                {/* O botão de Copiar fica visível para ambos, pode ser útil pra ela revisar */}
                 <button onClick={handleCopiar} className="w-full bg-white text-gray-800 font-black text-lg py-4 rounded-xl hover:bg-gray-100 active:scale-95 transition-all shadow-lg flex justify-center items-center gap-2 mb-4">
                   <Copy size={24} /> {copiado ? 'Texto Copiado!' : 'Copiar Feedback'}
                 </button>
 
-                {/* BOTÃO PERIGOSO: SÓ O GERALDO VÊ */}
                 {isAdmin && !atividade.postado && (
                   <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-blue-600 text-white font-black text-md py-4 rounded-xl hover:bg-blue-700 transition-all border border-blue-500 flex justify-center items-center gap-2">
                     {marcandoPostado ? 'Salvando...' : <><Send size={20}/> Marcar como Postado</>}
@@ -165,7 +173,6 @@ export default function RevisarAtividade() {
               </div>
             )}
 
-            {/* ZONA DE GERENCIAMENTO: SÓ O GERALDO VÊ */}
             {isAdmin && (
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 text-center border-b border-gray-100 pb-2">Gerenciamento Gestor</h4>
@@ -187,7 +194,6 @@ export default function RevisarAtividade() {
                 </button>
               </div>
             )}
-
           </div>
         </div>
       </div>
