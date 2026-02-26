@@ -5,17 +5,16 @@ import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   PlusCircle, ClipboardList, Users, Settings, LogOut, 
-  CheckCircle, Clock, Calendar, ChevronRight, AlertTriangle, Send, CheckCheck, Sparkles
+  CheckCircle, Clock, Calendar, ChevronRight, AlertTriangle, Send, CheckCheck, Sparkles, User
 } from 'lucide-react';
 
-// === A REGRA DE OURO DA FILTRAGEM ===
 export const isModuloValido = (nome) => {
   if (!nome) return false;
   const lower = nome.toLowerCase();
-  if (lower.includes('recupera')) return false; // Elimina módulos de recuperação
+  if (lower.includes('recupera')) return false;
   const match = lower.match(/\d+/);
-  if (match && parseInt(match[0], 10) < 7) return false; // Elimina Módulo 1 ao 6
-  return true; // Aceita Módulo 7+, ou qualquer outro nome sem número que surja no futuro
+  if (match && parseInt(match[0], 10) < 7) return false;
+  return true;
 };
 
 export default function Dashboard() {
@@ -25,14 +24,12 @@ export default function Dashboard() {
   const [iaStats, setIaStats] = useState({ total: 0, originais: 0, taxa: 0 });
   const [ultimaData, setUltimaData] = useState(null);
   
-  // Estados para calcular Pendências da Patrícia
   const [alunosAtivos, setAlunosAtivos] = useState([]);
   const [pendenciasPat, setPendenciasPat] = useState([]);
 
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
   useEffect(() => {
-    // Busca os alunos (Necessário para a Patrícia cruzar dados de pendências)
     const unsubAlunos = onSnapshot(collection(db, 'alunos'), (snap) => {
       setAlunosAtivos(snap.docs.map(d => d.data().nome));
     });
@@ -51,12 +48,10 @@ export default function Dashboard() {
       const taxa = aprovados.length > 0 ? Math.round((originais / aprovados.length) * 100) : 0;
       setIaStats({ total: aprovados.length, originais, taxa });
 
-      // === CÁLCULO DE PENDÊNCIAS PARA GESTÃO À VISTA (PATRÍCIA) ===
       if (!isAdmin && alunosAtivos.length > 0) {
         const validAtiv = docs.filter(a => isModuloValido(a.modulo));
         const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
         
-        // Agrupa por módulo para descobrir a data mais recente
         const modulosMap = {};
         validAtiv.forEach(a => {
           if(!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
@@ -64,7 +59,6 @@ export default function Dashboard() {
           modulosMap[a.modulo].tarefas.add(a.tarefa);
         });
 
-        // Ordena módulos do mais recente pro mais antigo
         const listaMod = Object.values(modulosMap).sort((a,b) => b.data - a.data);
         
         const resultado = [];
@@ -82,4 +76,117 @@ export default function Dashboard() {
     const unsubUltima = onSnapshot(qUltima, (snap) => {
       if (!snap.empty) {
         const data = snap.docs[0].data().dataCriacao?.toDate();
-        if (data) setUltimaData(data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit',
+        if (data) setUltimaData(data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
+      }
+    });
+
+    return () => { unsubAlunos(); unsubAtividades(); unsubUltima(); };
+  }, [alunosAtivos, isAdmin]);
+
+  async function handleLogout() { try { await logout(); navigate('/login'); } catch (e) { console.error(e); } }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+          <h1 className="text-xl font-bold text-gray-800">
+            Mais Médicos UFPI <span className="text-xs text-blue-500 ml-2">{isAdmin ? '(Perfil Gestor)' : '(Perfil Professora)'}</span>
+          </h1>
+          {ultimaData && (
+            <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-sm font-bold border border-blue-100 self-start">
+              <Calendar size={16} /><span>Sincronizado: {ultimaData}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <main className="max-w-7xl mx-auto p-4 md:p-8">
+        <div className="mb-6 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl"><Sparkles size={28} /></div>
+            <div>
+              <h3 className="font-bold text-lg">Termômetro da IA</h3>
+              <p className="text-purple-100 text-sm hidden md:block">Porcentagem de feedbacks aprovados sem NENHUMA alteração.</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-4xl font-black">{iaStats.taxa}%</span>
+            <p className="text-xs text-purple-200 font-medium">{iaStats.originais} de {iaStats.total} originais</p>
+          </div>
+        </div>
+
+        <div className={`grid grid-cols-1 gap-4 mb-8 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+          <Link to="/lista/pendente" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+            <div>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Revisão</p>
+              <h3 className="text-4xl font-black text-yellow-500">{stats.revisao}</h3>
+              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Ver lista <ChevronRight size={16} /></div>
+            </div>
+            <div className="bg-yellow-50 p-4 rounded-2xl text-yellow-600 border border-yellow-100"><Clock size={32} /></div>
+          </Link>
+
+          {isAdmin && (
+            <Link to="/lista/falta-postar" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+              <div>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Postar</p>
+                <h3 className="text-4xl font-black text-blue-600">{stats.postar}</h3>
+                <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Copiar p/ Site <ChevronRight size={16} /></div>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-2xl text-blue-600 border border-blue-100"><Send size={32} /></div>
+            </Link>
+          )}
+          
+          <Link to="/lista/finalizados" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+            <div>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Histórico Finalizado</p>
+              <h3 className="text-4xl font-black text-green-600">{stats.finalizados}</h3>
+              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Ver histórico <ChevronRight size={16} /></div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-2xl text-green-600 border border-green-100"><CheckCheck size={32} /></div>
+          </Link>
+        </div>
+
+        {/* GESTÃO À VISTA DA PATRÍCIA (Só aparece pra ela) */}
+        {!isAdmin && pendenciasPat.length > 0 && (
+          <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
+            <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-3">
+              <AlertTriangle className="text-orange-500" /> Gestão à Vista: Alunos Pendentes
+            </h3>
+            <div className="space-y-4">
+              {pendenciasPat.map((item, idx) => (
+                <div key={idx} className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-orange-900">{item.modulo}</span>
+                    <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">{item.devedores.length} pendências</span>
+                  </div>
+                  <p className="text-sm font-medium text-orange-800 mb-3">{item.tarefa}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {item.devedores.map((aluno, i) => (
+                      <span key={i} className="text-xs font-bold text-gray-600 bg-white px-2 py-1 rounded border border-gray-200 flex items-center gap-1">
+                        <User size={12}/> {aluno}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {isAdmin && (
+            <>
+              <Link to="/nova-atividade" className="bg-blue-600 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><PlusCircle size={28} /><span className="font-bold text-sm">Nova Atividade</span></Link>
+              <Link to="/alunos" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><Users size={28} className="text-blue-600" /><span className="font-bold text-sm">Alunos</span></Link>
+              <Link to="/configuracoes" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><Settings size={28} className="text-gray-500" /><span className="font-bold text-sm">Config</span></Link>
+            </>
+          )}
+
+          <Link to="/pendencias" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><AlertTriangle size={28} className="text-orange-500" /><span className="font-bold text-sm">Pendências</span></Link>
+          <Link to="/mapa" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><ClipboardList size={28} className="text-blue-600" /><span className="font-bold text-sm">Mapa</span></Link>
+          <button onClick={handleLogout} className="bg-red-50 text-red-600 p-5 rounded-2xl border border-red-100 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><LogOut size={28} /><span className="font-bold text-sm">Sair</span></button>
+        </div>
+      </main>
+    </div>
+  );
+}
