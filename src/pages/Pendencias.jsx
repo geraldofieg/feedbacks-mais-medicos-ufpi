@@ -1,97 +1,103 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, AlertTriangle, UserX, CheckCircle } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, User, Calendar } from 'lucide-react';
+
+// A REGRA DE OURO
+const isModuloValido = (nome) => {
+  if (!nome) return false;
+  const lower = nome.toLowerCase();
+  if (lower.includes('recupera')) return false;
+  const match = lower.match(/\d+/);
+  if (match && parseInt(match[0], 10) < 7) return false;
+  return true; 
+};
 
 export default function Pendencias() {
-  const [alunos, setAlunos] = useState([]);
-  const [atividades, setAtividades] = useState([]);
+  const [pendencias, setPendencias] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [alunosAtivos, setAlunosAtivos] = useState([]);
 
   useEffect(() => {
-    // Busca todos os alunos em ordem alfabética
-    const unsubAlunos = onSnapshot(query(collection(db, 'alunos'), orderBy('nome', 'asc')), (snap) => {
-      setAlunos(snap.docs.map(doc => doc.data().nome));
+    const unsubAlunos = onSnapshot(collection(db, 'alunos'), (snap) => {
+      setAlunosAtivos(snap.docs.map(doc => doc.data().nome));
     });
 
-    // Busca todas as atividades para sabermos o que já foi entregue
     const unsubAtividades = onSnapshot(collection(db, 'atividades'), (snap) => {
-      setAtividades(snap.docs.map(doc => doc.data()));
+      const atividades = snap.docs.map(doc => doc.data());
+      
+      // Filtra apenas os módulos válidos (7 em diante)
+      const validAtiv = atividades.filter(a => isModuloValido(a.modulo));
+      const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
+
+      // Agrupa módulos e acha a data mais recente de cada um
+      const modulosMap = {};
+      validAtiv.forEach(a => {
+        if (!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
+        if (a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
+        modulosMap[a.modulo].tarefas.add(a.tarefa);
+      });
+
+      // Ordena módulos do mais recente para o mais antigo
+      const listaMod = Object.values(modulosMap).sort((a, b) => b.data - a.data);
+
+      const resultado = [];
+      listaMod.forEach(mod => {
+        mod.tarefas.forEach(tar => {
+          const devedores = alunosAtivos.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
+          if (devedores.length > 0) {
+            resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
+          }
+        });
+      });
+
+      setPendencias(resultado);
       setLoading(false);
     });
 
     return () => { unsubAlunos(); unsubAtividades(); };
-  }, []);
-
-  // Lógica de Agrupamento
-  const agrupado = {};
-  atividades.forEach(atv => {
-    if (!agrupado[atv.modulo]) agrupado[atv.modulo] = {};
-    if (!agrupado[atv.modulo][atv.tarefa]) agrupado[atv.modulo][atv.tarefa] = new Set();
-    agrupado[atv.modulo][atv.tarefa].add(atv.aluno);
-  });
-
-  const modulosOrdenados = Object.keys(agrupado).sort();
+  }, [alunosAtivos]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
-          <Link to="/" className="text-gray-500 hover:text-orange-600 transition-colors">
-            <ArrowLeft size={24} />
-          </Link>
+          <Link to="/" className="text-gray-500 hover:text-orange-500 transition-colors"><ArrowLeft size={24} /></Link>
           <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <AlertTriangle className="text-orange-500" /> Relatório de Pendências
           </h2>
         </div>
 
         {loading ? (
-          <div className="text-center py-20 text-orange-600 font-medium">Analisando entregas...</div>
-        ) : modulosOrdenados.length === 0 ? (
-          <div className="bg-white p-10 rounded-2xl text-center border-2 border-dashed border-gray-200 text-gray-500">
-            Nenhuma atividade cadastrada no sistema ainda.
+          <div className="text-center py-20 text-orange-500 font-bold">Processando devedores...</div>
+        ) : pendencias.length === 0 ? (
+          <div className="bg-white p-10 rounded-2xl text-center border-2 border-dashed border-green-200 text-green-600 font-bold">
+            Uau! Nenhuma pendência nos módulos recentes.
           </div>
         ) : (
           <div className="space-y-6">
-            {modulosOrdenados.map(modulo => {
-              const tarefasOrdenadas = Object.keys(agrupado[modulo]).sort();
-              
-              return (
-                <div key={modulo} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                  <div className="bg-gray-800 text-white p-4 font-black text-lg">
-                    {modulo}
-                  </div>
-                  
-                  <div className="divide-y divide-gray-100">
-                    {tarefasOrdenadas.map(tarefa => {
-                      const alunosQueEntregaram = agrupado[modulo][tarefa];
-                      const faltam = alunos.filter(a => !alunosQueEntregaram.has(a));
-
-                      return (
-                        <div key={tarefa} className="p-5">
-                          <h4 className="font-bold text-gray-700 text-md mb-3 border-b pb-2">{tarefa}</h4>
-                          
-                          {faltam.length === 0 ? (
-                            <div className="flex items-center gap-2 text-green-600 font-bold bg-green-50 p-3 rounded-lg">
-                              <CheckCircle size={20} /> Turma completa! Todos entregaram.
-                            </div>
-                          ) : (
-                            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {faltam.map((alunoFalta, i) => (
-                                <li key={i} className="flex items-center gap-2 text-red-600 bg-red-50 px-3 py-2 rounded-lg font-medium text-sm">
-                                  <UserX size={16} /> {alunoFalta}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      );
-                    })}
+            {pendencias.map((item, idx) => (
+              <div key={idx} className="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden">
+                <div className="bg-red-50 p-4 border-b border-red-100 flex items-center gap-3">
+                  <Calendar className="text-red-500" size={20} />
+                  <div>
+                    <h3 className="font-bold text-red-900">{item.modulo}</h3>
+                    <p className="text-sm font-medium text-red-700">{item.tarefa}</p>
                   </div>
                 </div>
-              );
-            })}
+                <div className="p-4">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Alunos Pendentes ({item.devedores.length})</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {item.devedores.map((aluno, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        <User size={14} className="text-gray-400"/> {aluno}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
