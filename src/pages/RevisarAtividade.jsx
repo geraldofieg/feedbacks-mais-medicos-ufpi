@@ -19,7 +19,6 @@ export default function RevisarAtividade() {
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
   // === CRACHÁ DE IDENTIFICAÇÃO ===
-  // Substitua pelo SEU e-mail exato de login mantendo as aspas!
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
   useEffect(() => {
@@ -64,15 +63,16 @@ export default function RevisarAtividade() {
     setTimeout(() => setCopiado(false), 2000);
   }
 
-  // NOVO: Agora grava a Data e Hora da Postagem
+  // === AQUI ESTÁ A MUDANÇA! ===
   async function handleMarcarPostado() {
     setMarcandoPostado(true);
     try {
       await updateDoc(doc(db, 'atividades', id), { 
         postado: true,
-        dataPostagem: new Date() // Grava a data do clique do Geraldo
+        dataPostagem: new Date()
       });
-      navigate('/lista/finalizados'); 
+      // Mudei de '/lista/finalizados' para '/lista/falta-postar'
+      navigate('/lista/falta-postar'); 
     } catch (error) { alert("Erro ao marcar."); setMarcandoPostado(false); }
   }
 
@@ -90,7 +90,6 @@ export default function RevisarAtividade() {
     }
   }
 
-  // Função para formatar as datas no ecrã
   const formatarData = (timestamp) => {
     if (!timestamp) return null;
     const dataObj = timestamp.toDate ? timestamp.toDate() : new Date(timestamp.seconds * 1000);
@@ -180,7 +179,6 @@ export default function RevisarAtividade() {
                   </div>
                 )}
 
-                {/* NOVO: Histórico de Carimbos de Tempo */}
                 <div className="mt-4 pt-4 border-t border-gray-700 space-y-2 text-xs text-gray-400 font-medium">
                   {atividade.dataAprovacao && (
                     <p className="flex items-center gap-2"><CalendarDays size={14}/> Revisado por Patrícia: {formatarData(atividade.dataAprovacao)}</p>
