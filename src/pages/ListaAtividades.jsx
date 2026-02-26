@@ -28,7 +28,12 @@ export default function ListaAtividades() {
         lista = lista.filter(atv => atv.postado === true); 
       }
       
-      lista.sort((a, b) => (b.dataAprovacao?.seconds || b.dataCriacao?.seconds || 0) - (a.dataAprovacao?.seconds || a.dataCriacao?.seconds || 0));
+      // Ordena de forma inteligente: pela data de postagem se estiver finalizado, ou pela aprovação
+      lista.sort((a, b) => {
+        const tempoA = a.dataPostagem?.seconds || a.dataAprovacao?.seconds || a.dataCriacao?.seconds || 0;
+        const tempoB = b.dataPostagem?.seconds || b.dataAprovacao?.seconds || b.dataCriacao?.seconds || 0;
+        return tempoB - tempoA;
+      });
       
       setAtividades(lista);
       setLoading(false);
@@ -60,11 +65,18 @@ export default function ListaAtividades() {
               let corIcone = status === 'pendente' ? 'bg-yellow-50 text-yellow-600' : status === 'falta-postar' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600';
               let icone = status === 'pendente' ? <Clock size={24} /> : status === 'falta-postar' ? <Send size={24} /> : <CheckCheck size={24} />;
 
-              // Formatando a data de Aprovação para exibir no card
-              let dataFormatada = '';
+              // Formatando a data de Aprovação
+              let dataAprovacaoFmt = '';
               if (atv.dataAprovacao) {
                 const dataObj = atv.dataAprovacao.toDate ? atv.dataAprovacao.toDate() : new Date(atv.dataAprovacao.seconds * 1000);
-                dataFormatada = dataObj.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                dataAprovacaoFmt = dataObj.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+              }
+
+              // Formatando a nova data de Postagem
+              let dataPostagemFmt = '';
+              if (atv.dataPostagem) {
+                const dataObj = atv.dataPostagem.toDate ? atv.dataPostagem.toDate() : new Date(atv.dataPostagem.seconds * 1000);
+                dataPostagemFmt = dataObj.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
               }
 
               return (
@@ -75,10 +87,16 @@ export default function ListaAtividades() {
                       <h3 className={`font-bold ${status === 'finalizados' ? 'text-gray-500' : 'text-gray-900'}`}>{atv.aluno}</h3>
                       <p className="text-sm text-gray-500 font-medium mb-2">{atv.modulo} • {atv.tarefa}</p>
                       
-                      {/* Selo de Data e Hora */}
-                      {dataFormatada && status !== 'pendente' && (
+                      {/* Selo Condicional (Depende da Caixa onde estamos) */}
+                      {status === 'falta-postar' && dataAprovacaoFmt && (
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                          <CalendarDays size={12} /> Aprovado em: {dataFormatada}
+                          <CalendarDays size={12} /> Aprovado em: {dataAprovacaoFmt}
+                        </span>
+                      )}
+                      
+                      {status === 'finalizados' && dataPostagemFmt && (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-50 px-2 py-1 rounded">
+                          <CalendarDays size={12} /> Postado no site: {dataPostagemFmt}
                         </span>
                       )}
 
