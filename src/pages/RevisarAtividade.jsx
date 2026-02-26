@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3 } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3, CalendarDays } from 'lucide-react';
 
 export default function RevisarAtividade() {
   const { id } = useParams();
@@ -18,6 +18,8 @@ export default function RevisarAtividade() {
   const [copiado, setCopiado] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
+  // === CRACHÁ DE IDENTIFICAÇÃO ===
+  // Substitua pelo SEU e-mail exato de login mantendo as aspas!
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
   useEffect(() => {
@@ -62,10 +64,14 @@ export default function RevisarAtividade() {
     setTimeout(() => setCopiado(false), 2000);
   }
 
+  // NOVO: Agora grava a Data e Hora da Postagem
   async function handleMarcarPostado() {
     setMarcandoPostado(true);
     try {
-      await updateDoc(doc(db, 'atividades', id), { postado: true });
+      await updateDoc(doc(db, 'atividades', id), { 
+        postado: true,
+        dataPostagem: new Date() // Grava a data do clique do Geraldo
+      });
       navigate('/lista/finalizados'); 
     } catch (error) { alert("Erro ao marcar."); setMarcandoPostado(false); }
   }
@@ -84,12 +90,17 @@ export default function RevisarAtividade() {
     }
   }
 
+  // Função para formatar as datas no ecrã
+  const formatarData = (timestamp) => {
+    if (!timestamp) return null;
+    const dataObj = timestamp.toDate ? timestamp.toDate() : new Date(timestamp.seconds * 1000);
+    return dataObj.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div></div>;
   if (!atividade) return <div className="text-center p-10 font-bold">Atividade não encontrada.</div>;
 
   const linkVoltar = atividade.status === 'pendente' ? '/lista/pendente' : !atividade.postado ? (isAdmin ? '/lista/falta-postar' : '/lista/finalizados') : '/lista/finalizados';
-
-  // NOVO: A lógica que dedura se o texto foi editado
   const foiEditado = atividade.feedbackFinal?.trim() !== atividade.feedbackSugerido?.trim();
 
   return (
@@ -140,8 +151,6 @@ export default function RevisarAtividade() {
               </div>
             ) : (
               <div className="bg-gray-800 p-6 rounded-2xl shadow-md text-white">
-                
-                {/* NOVO: Título com o Selo de IA */}
                 <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-gray-600 pb-2">
                   <CheckCircle size={20} />Aprovado
                   {foiEditado ? (
@@ -170,6 +179,17 @@ export default function RevisarAtividade() {
                     <CheckCheck size={18} /> Postado no Mais Médicos
                   </div>
                 )}
+
+                {/* NOVO: Histórico de Carimbos de Tempo */}
+                <div className="mt-4 pt-4 border-t border-gray-700 space-y-2 text-xs text-gray-400 font-medium">
+                  {atividade.dataAprovacao && (
+                    <p className="flex items-center gap-2"><CalendarDays size={14}/> Revisado por Patrícia: {formatarData(atividade.dataAprovacao)}</p>
+                  )}
+                  {atividade.postado && atividade.dataPostagem && (
+                    <p className="flex items-center gap-2 text-gray-300"><CalendarDays size={14}/> Postado por Geraldo: {formatarData(atividade.dataPostagem)}</p>
+                  )}
+                </div>
+
               </div>
             )}
 
