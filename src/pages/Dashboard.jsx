@@ -25,7 +25,7 @@ export default function Dashboard() {
   const [ultimaData, setUltimaData] = useState(null);
   
   const [alunosAtivos, setAlunosAtivos] = useState([]);
-  const [pendenciasPat, setPendenciasPat] = useState([]);
+  const [pendenciasGerais, setPendenciasGerais] = useState([]);
 
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
@@ -48,7 +48,8 @@ export default function Dashboard() {
       const taxa = aprovados.length > 0 ? Math.round((originais / aprovados.length) * 100) : 0;
       setIaStats({ total: aprovados.length, originais, taxa });
 
-      if (!isAdmin && alunosAtivos.length > 0) {
+      // === CÁLCULO DE PENDÊNCIAS (Agora calcula para TODOS) ===
+      if (alunosAtivos.length > 0) {
         const validAtiv = docs.filter(a => isModuloValido(a.modulo));
         const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
         
@@ -59,6 +60,7 @@ export default function Dashboard() {
           modulosMap[a.modulo].tarefas.add(a.tarefa);
         });
 
+        // Ordena módulos do mais recente pro mais antigo
         const listaMod = Object.values(modulosMap).sort((a,b) => b.data - a.data);
         
         const resultado = [];
@@ -68,7 +70,7 @@ export default function Dashboard() {
             if(devedores.length > 0) resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
           });
         });
-        setPendenciasPat(resultado);
+        setPendenciasGerais(resultado);
       }
     });
 
@@ -81,7 +83,7 @@ export default function Dashboard() {
     });
 
     return () => { unsubAlunos(); unsubAtividades(); unsubUltima(); };
-  }, [alunosAtivos, isAdmin]);
+  }, [alunosAtivos]); // Removido o isAdmin da dependência para rodar para todos
 
   async function handleLogout() { try { await logout(); navigate('/login'); } catch (e) { console.error(e); } }
 
@@ -146,7 +148,7 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* MENU DE AÇÕES RÁPIDAS (Agora vem ANTES da lista de alunos) */}
+        {/* MENU DE AÇÕES RÁPIDAS (Fica ANTES da lista de alunos) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {isAdmin && (
             <>
@@ -161,14 +163,14 @@ export default function Dashboard() {
           <button onClick={handleLogout} className="bg-red-50 text-red-600 p-5 rounded-2xl border border-red-100 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><LogOut size={28} /><span className="font-bold text-sm">Sair</span></button>
         </div>
 
-        {/* GESTÃO À VISTA DA PATRÍCIA (Agora fica no final da página) */}
-        {!isAdmin && pendenciasPat.length > 0 && (
+        {/* GESTÃO À VISTA PARA TODOS (Agora aparece no final da página para os dois perfis) */}
+        {pendenciasGerais.length > 0 && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
             <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-3">
               <AlertTriangle className="text-orange-500" /> Gestão à Vista: Alunos Pendentes
             </h3>
             <div className="space-y-4">
-              {pendenciasPat.map((item, idx) => (
+              {pendenciasGerais.map((item, idx) => (
                 <div key={idx} className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-bold text-orange-900">{item.modulo}</span>
