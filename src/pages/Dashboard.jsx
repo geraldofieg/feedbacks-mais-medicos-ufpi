@@ -5,27 +5,36 @@ import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   PlusCircle, ClipboardList, Users, Settings, LogOut, 
-  CheckCircle, Clock, Calendar, ChevronRight, AlertTriangle, Send, CheckCheck
+  CheckCircle, Clock, Calendar, ChevronRight, AlertTriangle, Send, CheckCheck, Sparkles
 } from 'lucide-react';
 
 export default function Dashboard() {
-  const { currentUser, logout } = useAuth(); // Pegamos o usuário logado
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ revisao: 0, postar: 0, finalizados: 0 });
+  const [iaStats, setIaStats] = useState({ total: 0, originais: 0, taxa: 0 }); // NOVO: Métrica da IA
   const [ultimaData, setUltimaData] = useState(null);
 
-  // === CRACHÁ DE IDENTIFICAÇÃO ===
-  // Substitua pelo SEU e-mail exato de login mantendo as aspas!
-  const isAdmin = currentUser?.email === 'geraldofieg@gmail.com'; 
+  // A linha blindada com o seu e-mail
+  const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'atividades'), (snap) => {
       const docs = snap.docs.map(doc => doc.data());
+      
+      // Conta os status normais
+      const aprovados = docs.filter(d => d.status === 'aprovado');
       setStats({
         revisao: docs.filter(d => d.status === 'pendente').length,
-        postar: docs.filter(d => d.status === 'aprovado' && !d.postado).length,
-        finalizados: docs.filter(d => d.status === 'aprovado' && d.postado === true).length
+        postar: aprovados.filter(d => !d.postado).length,
+        finalizados: aprovados.filter(d => d.postado === true).length
       });
+
+      // NOVO: Calcula o aproveitamento da IA
+      // Compara se o texto final é idêntico ao sugerido (ignorando espaços em branco nas pontas)
+      const originais = aprovados.filter(d => d.feedbackFinal?.trim() === d.feedbackSugerido?.trim()).length;
+      const taxa = aprovados.length > 0 ? Math.round((originais / aprovados.length) * 100) : 0;
+      setIaStats({ total: aprovados.length, originais, taxa });
     });
 
     const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
@@ -58,9 +67,25 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         
+        {/* NOVO: Termômetro da IA (Visível só para o Geraldo) */}
+        {isAdmin && (
+          <div className="mb-6 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="bg-white/20 p-3 rounded-xl"><Sparkles size={28} /></div>
+              <div>
+                <h3 className="font-bold text-lg">Termômetro da IA</h3>
+                <p className="text-purple-100 text-sm hidden md:block">Porcentagem de feedbacks aprovados sem NENHUMA alteração.</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-4xl font-black">{iaStats.taxa}%</span>
+              <p className="text-xs text-purple-200 font-medium">{iaStats.originais} de {iaStats.total} originais</p>
+            </div>
+          </div>
+        )}
+
         {/* As Caixas do Funil */}
         <div className={`grid grid-cols-1 gap-4 mb-8 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-          
           <Link to="/lista/pendente" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
             <div>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Revisão</p>
@@ -70,7 +95,6 @@ export default function Dashboard() {
             <div className="bg-yellow-50 p-4 rounded-2xl text-yellow-600 border border-yellow-100"><Clock size={32} /></div>
           </Link>
 
-          {/* Esta caixa SÓ aparece para o Geraldo */}
           {isAdmin && (
             <Link to="/lista/falta-postar" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
               <div>
@@ -94,8 +118,6 @@ export default function Dashboard() {
 
         {/* Menu de Ações Rápidas */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          
-          {/* Botões Exclusivos do Geraldo */}
           {isAdmin && (
             <>
               <Link to="/nova-atividade" className="bg-blue-600 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><PlusCircle size={28} /><span className="font-bold text-sm">Nova Atividade</span></Link>
@@ -104,7 +126,6 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* Botões Compartilhados (Visíveis para os dois) */}
           <Link to="/pendencias" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><AlertTriangle size={28} className="text-orange-500" /><span className="font-bold text-sm">Pendências</span></Link>
           <Link to="/mapa" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><ClipboardList size={28} className="text-blue-600" /><span className="font-bold text-sm">Mapa</span></Link>
           <button onClick={handleLogout} className="bg-red-50 text-red-600 p-5 rounded-2xl border border-red-100 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><LogOut size={28} /><span className="font-bold text-sm">Sair</span></button>
