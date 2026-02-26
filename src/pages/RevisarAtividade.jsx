@@ -20,7 +20,7 @@ export default function RevisarAtividade() {
 
   // === CRACHÁ DE IDENTIFICAÇÃO ===
   // Substitua pelo SEU e-mail exato de login mantendo as aspas!
-  const isAdmin = currentUser?.email === 'SEU_EMAIL_DE_LOGIN_AQUI'; 
+  const isAdmin = currentUser?.email === 'geraldofieg@gmail.com'; 
 
   useEffect(() => {
     async function buscarAtividade() {
