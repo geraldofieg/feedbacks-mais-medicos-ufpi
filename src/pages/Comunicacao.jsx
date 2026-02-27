@@ -145,6 +145,11 @@ export default function Comunicacao() {
     return primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1).toLowerCase();
   };
 
+  // NOVO: Função para remover acentos na hora da busca
+  const removerAcentos = (texto) => {
+    return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  };
+
   const handleCopiar = (texto, id) => {
     navigator.clipboard.writeText(texto);
     setCopiado(id);
@@ -163,11 +168,12 @@ export default function Comunicacao() {
     setCopiado(idCopia);
     setTimeout(() => setCopiado(null), 2000);
 
-    // Organiza as chaves da maior para a menor para evitar que "Gabriel" conflite com "Antônio Gabriel"
+    // Transforma "Antônio" em "antonio" tanto no dicionário quanto no banco de dados
+    const nomeLimpo = removerAcentos(nomeAluno.toLowerCase());
     const chavesOrdenadas = Object.keys(contatosWhatsApp).sort((a, b) => b.length - a.length);
     
     const chaveEncontrada = chavesOrdenadas.find(chave => 
-      nomeAluno.toLowerCase().includes(chave.toLowerCase())
+      nomeLimpo.includes(removerAcentos(chave.toLowerCase()))
     );
     
     const numero = chaveEncontrada ? contatosWhatsApp[chaveEncontrada] : "";
@@ -223,12 +229,10 @@ export default function Comunicacao() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           
-          {/* COLUNA 1: WHATSAPP (Ajustado o CSS para resolver o bug do celular: lg:sticky lg:top-4) */}
           <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-4">
             
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-200">
               
-              {/* BLOCO 1: Mensagem Geral */}
               <div>
                 <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
                   <MessageCircle size={20} className="text-green-600"/> Grupo da Turma
@@ -250,7 +254,6 @@ export default function Comunicacao() {
 
               <hr className="my-6 border-green-100" />
 
-              {/* BLOCO 2: Mensagens Individuais */}
               <div>
                 <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
                   <User size={20} className="text-green-600"/> Cobrança Direta
@@ -293,7 +296,6 @@ export default function Comunicacao() {
             </div>
           </div>
 
-          {/* COLUNA 2: Mensagens em Lote (Plataforma Oficial) */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
               <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
@@ -312,7 +314,6 @@ export default function Comunicacao() {
               ) : (
                 <div className="space-y-8">
                   
-                  {/* GRUPOS COM MÚLTIPLAS PENDÊNCIAS */}
                   {multiplas.length > 0 && (
                     <div>
                       <h4 className="font-black text-red-800 mb-3 flex items-center gap-2 bg-red-50 px-3 py-2 rounded-lg border border-red-100">
@@ -357,7 +358,6 @@ export default function Comunicacao() {
                     </div>
                   )}
 
-                  {/* GRUPOS COM 1 PENDÊNCIA */}
                   {unicas.length > 0 && (
                     <div>
                       <h4 className="font-black text-yellow-800 mb-3 flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-lg border border-yellow-100">
