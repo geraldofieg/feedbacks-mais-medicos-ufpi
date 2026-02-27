@@ -10,6 +10,7 @@ import MapaEntregas from './pages/MapaEntregas';
 import ListaAtividades from './pages/ListaAtividades';
 import Pendencias from './pages/Pendencias';
 import Cronograma from './pages/Cronograma';
+import Comunicacao from './pages/Comunicacao';
 
 function PrivateRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -26,6 +27,7 @@ function App() {
           
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/cronograma" element={<PrivateRoute><Cronograma /></PrivateRoute>} />
+          <Route path="/comunicacao" element={<PrivateRoute><Comunicacao /></PrivateRoute>} />
           <Route path="/nova-atividade" element={<PrivateRoute><NovaAtividade /></PrivateRoute>} />
           <Route path="/revisar/:id" element={<PrivateRoute><RevisarAtividade /></PrivateRoute>} />
           <Route path="/alunos" element={<PrivateRoute><Alunos /></PrivateRoute>} />
