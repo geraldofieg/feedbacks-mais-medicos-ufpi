@@ -5,7 +5,7 @@ import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   PlusCircle, ClipboardList, Users, Settings, LogOut, 
-  CheckCircle, Clock, Calendar, ChevronRight, AlertTriangle, Send, CheckCheck, Sparkles, User, CalendarRange
+  CheckCircle, Clock, Calendar, ChevronRight, AlertTriangle, Send, CheckCheck, Sparkles, User, CalendarRange, Megaphone
 } from 'lucide-react';
 
 import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestantes } from '../data/cronogramaData';
@@ -183,7 +183,7 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
           {isAdmin && (
             <>
               <Link to="/nova-atividade" className="bg-blue-600 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><PlusCircle size={28} /><span className="font-bold text-sm">Nova Ativ</span></Link>
@@ -194,6 +194,8 @@ export default function Dashboard() {
 
           <Link to="/cronograma" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><CalendarRange size={28} className="text-blue-500" /><span className="font-bold text-sm">Cronograma</span></Link>
           
+          <Link to="/comunicacao" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><Megaphone size={28} className="text-green-500" /><span className="font-bold text-sm">Cobranças</span></Link>
+
           <Link to="/pendencias" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><AlertTriangle size={28} className="text-orange-500" /><span className="font-bold text-sm">Pendências</span></Link>
           <Link to="/mapa" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><ClipboardList size={28} className="text-blue-600" /><span className="font-bold text-sm">Mapa</span></Link>
           <button onClick={handleLogout} className="bg-red-50 text-red-600 p-5 rounded-2xl border border-red-100 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><LogOut size={28} /><span className="font-bold text-sm">Sair</span></button>
