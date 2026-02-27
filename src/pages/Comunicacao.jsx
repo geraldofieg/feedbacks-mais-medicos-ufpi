@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Mail, Send, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Mail, Send, AlertCircle, Users } from 'lucide-react';
 import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestantes } from '../data/cronogramaData';
 
 export default function Comunicacao() {
@@ -24,9 +24,13 @@ export default function Comunicacao() {
       
       if (alunosAtivos.length > 0) {
         const entregas = new Set(docs.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
-        const resultadoAssincrono = [];
-        const resultadoSincrono = [];
+        let resultadoAssincrono = [];
+        let resultadoSincrono = [];
 
+        // 1. ORDENA OS ALUNOS EM ORDEM ALFABÉTICA (A a Z)
+        const alunosOrdenados = [...alunosAtivos].sort((a, b) => a.localeCompare(b));
+
+        // 2. BUSCA DO MÓDULO ASSÍNCRONO
         if (moduloAtual) {
           const numModuloOficial = moduloAtual.modulo.match(/\d+/)?.[0];
           const tarefasDoModulo = new Set();
@@ -41,19 +45,30 @@ export default function Comunicacao() {
             }
           });
 
-          alunosAtivos.forEach(aluno => {
+          // 3. AGRUPA PELA COMBINAÇÃO EXATA DE TAREFAS
+          const mapaAsync = {};
+          alunosOrdenados.forEach(aluno => {
             const tarefasDevendo = [];
             tarefasDoModulo.forEach(tar => {
               if (!entregas.has(`${aluno}-${nomeExatoMod}-${tar}`)) {
                 tarefasDevendo.push(tar);
               }
             });
+            
             if (tarefasDevendo.length > 0) {
-              resultadoAssincrono.push({ aluno, tarefas: tarefasDevendo, modulo: nomeExatoMod });
+              tarefasDevendo.sort(); // Garante que a ordem das tarefas não crie grupos duplicados
+              const chaveCombinacao = tarefasDevendo.join('|');
+              
+              if (!mapaAsync[chaveCombinacao]) {
+                mapaAsync[chaveCombinacao] = { modulo: nomeExatoMod, tarefas: tarefasDevendo, devedores: [] };
+              }
+              mapaAsync[chaveCombinacao].devedores.push(aluno);
             }
           });
+          resultadoAssincrono = Object.values(mapaAsync);
         }
 
+        // 4. BUSCA DO MÓDULO SÍNCRONO
         if (semanaAtual) {
           const numSemanaOficial = semanaAtual.semana.toString();
           const tarefasPossiveis = [semanaAtual.tema1, semanaAtual.tema2];
@@ -67,17 +82,26 @@ export default function Comunicacao() {
              }
           });
 
-          alunosAtivos.forEach(aluno => {
+          const mapaSync = {};
+          alunosOrdenados.forEach(aluno => {
             const tarefasDevendo = [];
             tarefasIniciadas.forEach(tar => {
               if (!entregas.has(`${aluno}-${nomeSemanaDB}-${tar}`)) {
                 tarefasDevendo.push(tar);
               }
             });
+            
             if (tarefasDevendo.length > 0) {
-              resultadoSincrono.push({ aluno, tarefas: tarefasDevendo, modulo: nomeSemanaDB });
+              tarefasDevendo.sort();
+              const chaveCombinacao = tarefasDevendo.join('|');
+              
+              if (!mapaSync[chaveCombinacao]) {
+                mapaSync[chaveCombinacao] = { modulo: nomeSemanaDB, tarefas: tarefasDevendo, devedores: [] };
+              }
+              mapaSync[chaveCombinacao].devedores.push(aluno);
             }
           });
+          resultadoSincrono = Object.values(mapaSync);
         }
 
         setPendenciasAgrupadas({ assincrono: resultadoAssincrono, sincrono: resultadoSincrono });
@@ -87,7 +111,6 @@ export default function Comunicacao() {
     return () => { unsubAlunos(); unsubAtividades(); };
   }, [alunosAtivos, moduloAtual, semanaAtual]);
 
-  // FUNÇÕES DE TEXTO INTELIGENTES
   const getMensagemDia = () => {
     const dia = new Date().getDay(); 
     if (dia === 5 || dia === 6) return "aproveite o final de semana para colocar em dia.";
@@ -99,13 +122,6 @@ export default function Comunicacao() {
     if (lista.length === 1) return lista[0];
     if (lista.length === 2) return `${lista[0]} e ${lista[1]}`;
     return lista.slice(0, -1).join(', ') + ' e ' + lista[lista.length - 1];
-  };
-
-  // NOVO: Função para pegar só o 1º nome e formatar (ex: JOÃO SILVA -> João)
-  const formatarPrimeiroNome = (nomeCompleto) => {
-    if (!nomeCompleto) return '';
-    const primeiroNome = nomeCompleto.trim().split(/\s+/)[0];
-    return primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1).toLowerCase();
   };
 
   const handleCopiar = (texto, id) => {
@@ -179,13 +195,13 @@ export default function Comunicacao() {
             </div>
           </div>
 
-          {/* COLUNA 2: Mensagens Individuais (Plataforma) */}
+          {/* COLUNA 2: Mensagens em Lote (Plataforma) */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
               <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
-                <Mail size={20} className="text-blue-600"/> Cobrança Individual (Plataforma)
+                <Users size={20} className="text-blue-600"/> Envio em Lote (Plataforma)
               </h3>
-              <p className="text-sm text-gray-600 mb-6">Textos dinâmicos agrupados por aluno para otimizar os seus envios.</p>
+              <p className="text-sm text-gray-600 mb-6">Alunos agrupados por tarefas pendentes (em ordem alfabética). Copie a mensagem uma única vez e envie para todos do grupo.</p>
 
               {!itemAtivo ? (
                 <div className="text-center py-10 text-gray-500 font-bold bg-gray-50 rounded-xl border border-dashed border-gray-200">
@@ -198,35 +214,44 @@ export default function Comunicacao() {
               ) : (
                 <div className="space-y-8">
                   
-                  {/* SESSÃO 1: MÚLTIPLAS PENDÊNCIAS */}
+                  {/* SESSÃO 1: GRUPOS COM MÚLTIPLAS PENDÊNCIAS */}
                   {multiplas.length > 0 && (
                     <div>
                       <h4 className="font-black text-red-800 mb-3 flex items-center gap-2 bg-red-50 px-3 py-2 rounded-lg border border-red-100">
-                        <AlertCircle size={18} className="text-red-500"/> Alunos com Múltiplas Pendências ({multiplas.length})
+                        <AlertCircle size={18} className="text-red-500"/> Devem 2 ou mais tarefas
                       </h4>
-                      <div className="grid gap-3">
-                        {multiplas.map((pend, i) => {
-                          const idCopia = `multi-${pend.aluno}`;
-                          const prefixo = pend.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
-                          const tarefasTexto = formatarListaTarefas(pend.tarefas);
-                          const primeiroNome = formatarPrimeiroNome(pend.aluno);
+                      <div className="grid gap-4">
+                        {multiplas.map((grupo, i) => {
+                          const idCopia = `multi-${i}`;
+                          const prefixo = grupo.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
+                          const tarefasTexto = formatarListaTarefas(grupo.tarefas);
                           
-                          // TEXTO INDIVIDUAL ATUALIZADO
-                          const msgIndividual = `Olá ${primeiroNome}, estou acompanhando aqui o nosso sistema e consta a pendência das tarefas '${tarefasTexto}' referente ${prefixo} ${pend.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização das atividades, para que você não fique prejudicado em sua nota. Qualquer dúvida, estou à disposição.`;
+                          // TEXTO GENÉRICO EM LOTE PARA MÚLTIPLAS TAREFAS
+                          const msgLote = `Olá, estou acompanhando aqui o nosso sistema e consta a pendência das tarefas '${tarefasTexto}' referente ${prefixo} ${grupo.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização das atividades, para que você não fique prejudicado(a) em sua nota. Qualquer dúvida, estou à disposição.`;
                           
                           return (
-                            <div key={i} className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border-2 border-red-100 hover:border-red-300 transition-colors shadow-sm">
-                              <div>
-                                <span className="font-black text-gray-900 block">{pend.aluno}</span>
-                                <span className="text-[10px] font-black uppercase text-red-500 tracking-wider mb-1 block">Deve: {tarefasTexto}</span>
-                                <p className="text-xs text-gray-500 line-clamp-2 md:line-clamp-1" title={msgIndividual}>{msgIndividual}</p>
+                            <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-red-100 hover:border-red-300 transition-colors shadow-sm">
+                              <div className="flex-1">
+                                <span className="text-xs font-black uppercase text-red-500 tracking-wider mb-2 block">
+                                  Alunos que devem: {tarefasTexto}
+                                </span>
+                                
+                                <div className="flex flex-wrap gap-1.5 mb-3">
+                                  {grupo.devedores.map((aluno, idx) => (
+                                    <span key={idx} className="bg-red-50 border border-red-100 text-red-900 text-xs font-bold px-2.5 py-1.5 rounded-md">
+                                      {aluno}
+                                    </span>
+                                  ))}
+                                </div>
+                                
+                                <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgLote}"</p>
                               </div>
                               <button 
-                                onClick={() => handleCopiar(msgIndividual, idCopia)}
-                                className={`shrink-0 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'}`}
+                                onClick={() => handleCopiar(msgLote, idCopia)}
+                                className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'}`}
                               >
-                                {copiado === idCopia ? <CheckCircle2 size={16}/> : <Copy size={16}/>} 
-                                {copiado === idCopia ? 'Copiado' : 'Copiar'}
+                                {copiado === idCopia ? <CheckCircle2 size={18}/> : <Copy size={18}/>} 
+                                {copiado === idCopia ? 'Copiado!' : 'Copiar Texto Padrão'}
                               </button>
                             </div>
                           );
@@ -235,35 +260,44 @@ export default function Comunicacao() {
                     </div>
                   )}
 
-                  {/* SESSÃO 2: PENDÊNCIA ÚNICA */}
+                  {/* SESSÃO 2: GRUPOS COM 1 PENDÊNCIA */}
                   {unicas.length > 0 && (
                     <div>
                       <h4 className="font-black text-yellow-800 mb-3 flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-lg border border-yellow-100">
-                        <AlertCircle size={18} className="text-yellow-500"/> Alunos com 1 Pendência ({unicas.length})
+                        <AlertCircle size={18} className="text-yellow-500"/> Devem 1 única tarefa
                       </h4>
-                      <div className="grid gap-3">
-                        {unicas.map((pend, i) => {
-                          const idCopia = `unica-${pend.aluno}`;
-                          const prefixo = pend.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
-                          const tarefasTexto = formatarListaTarefas(pend.tarefas);
-                          const primeiroNome = formatarPrimeiroNome(pend.aluno);
-
-                          // TEXTO INDIVIDUAL ATUALIZADO
-                          const msgIndividual = `Olá ${primeiroNome}, estou acompanhando aqui o nosso sistema e consta a pendência da tarefa '${tarefasTexto}' referente ${prefixo} ${pend.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização da tarefa, para que você não fique prejudicado em sua nota. Qualquer dúvida, estou à disposição.`;
+                      <div className="grid gap-4">
+                        {unicas.map((grupo, i) => {
+                          const idCopia = `unica-${i}`;
+                          const prefixo = grupo.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
+                          const tarefasTexto = formatarListaTarefas(grupo.tarefas);
+                          
+                          // TEXTO GENÉRICO EM LOTE PARA 1 TAREFA
+                          const msgLote = `Olá, estou acompanhando aqui o nosso sistema e consta a pendência da tarefa '${tarefasTexto}' referente ${prefixo} ${grupo.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização da tarefa, para que você não fique prejudicado(a) em sua nota. Qualquer dúvida, estou à disposição.`;
                           
                           return (
-                            <div key={i} className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border-2 border-yellow-100 hover:border-yellow-300 transition-colors shadow-sm">
-                              <div>
-                                <span className="font-black text-gray-900 block">{pend.aluno}</span>
-                                <span className="text-[10px] font-black uppercase text-yellow-600 tracking-wider mb-1 block">Deve: {tarefasTexto}</span>
-                                <p className="text-xs text-gray-500 line-clamp-2 md:line-clamp-1" title={msgIndividual}>{msgIndividual}</p>
+                            <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-yellow-100 hover:border-yellow-300 transition-colors shadow-sm">
+                              <div className="flex-1">
+                                <span className="text-xs font-black uppercase text-yellow-600 tracking-wider mb-2 block">
+                                  Alunos que devem: {tarefasTexto}
+                                </span>
+                                
+                                <div className="flex flex-wrap gap-1.5 mb-3">
+                                  {grupo.devedores.map((aluno, idx) => (
+                                    <span key={idx} className="bg-yellow-50 border border-yellow-100 text-yellow-900 text-xs font-bold px-2.5 py-1.5 rounded-md">
+                                      {aluno}
+                                    </span>
+                                  ))}
+                                </div>
+
+                                <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgLote}"</p>
                               </div>
                               <button 
-                                onClick={() => handleCopiar(msgIndividual, idCopia)}
-                                className={`shrink-0 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100'}`}
+                                onClick={() => handleCopiar(msgLote, idCopia)}
+                                className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100'}`}
                               >
-                                {copiado === idCopia ? <CheckCircle2 size={16}/> : <Copy size={16}/>} 
-                                {copiado === idCopia ? 'Copiado' : 'Copiar'}
+                                {copiado === idCopia ? <CheckCircle2 size={18}/> : <Copy size={18}/>} 
+                                {copiado === idCopia ? 'Copiado!' : 'Copiar Texto Padrão'}
                               </button>
                             </div>
                           );
