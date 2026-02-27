@@ -7,12 +7,19 @@ import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestant
 
 // ==========================================
 // 📖 DICIONÁRIO DE CONTATOS (WHATSAPP)
-// Adicione os números aqui. Apenas números e DDI (55).
-// O sistema buscará o nome, então "Gabriel" funciona para "Gabriel Silva".
 // ==========================================
 const contatosWhatsApp = {
-  "Gabriel": "556183539993", // <-- Nosso Piloto
-  // "NomeDoProximoAluno": "55...",
+  "Guilherme": "556291203480",
+  "Antônio Gabriel": "556499622132",
+  "Ester": "556283103511",
+  "Élida": "5511976727059",
+  "Elienne": "556194345290",
+  "Fellipy": "556499011276",
+  "Hellen": "556299863592",
+  "Anny": "556492553737",
+  "Handel": "556281305502",
+  "Beatriz": "556192263929",
+  "Gabriel": "556183539993"
 };
 
 export default function Comunicacao() {
@@ -151,21 +158,21 @@ export default function Comunicacao() {
     window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
   };
 
-  // NOVO: Função Inteligente para WhatsApp Individual
   const handleEnviarWhatsAppIndividual = (texto, nomeAluno, idCopia) => {
     navigator.clipboard.writeText(texto);
     setCopiado(idCopia);
     setTimeout(() => setCopiado(null), 2000);
 
-    // Procura no dicionário se existe alguma chave que faça parte do nome do aluno
-    const chaveEncontrada = Object.keys(contatosWhatsApp).find(chave => 
+    // Organiza as chaves da maior para a menor para evitar que "Gabriel" conflite com "Antônio Gabriel"
+    const chavesOrdenadas = Object.keys(contatosWhatsApp).sort((a, b) => b.length - a.length);
+    
+    const chaveEncontrada = chavesOrdenadas.find(chave => 
       nomeAluno.toLowerCase().includes(chave.toLowerCase())
     );
     
     const numero = chaveEncontrada ? contatosWhatsApp[chaveEncontrada] : "";
     const textoCodificado = encodeURIComponent(texto);
     
-    // Se achou o número, abre a conversa direta. Se não, abre a agenda geral do WA.
     const url = numero 
       ? `https://wa.me/${numero}?text=${textoCodificado}` 
       : `https://wa.me/?text=${textoCodificado}`;
@@ -183,7 +190,6 @@ export default function Comunicacao() {
   const multiplas = pendenciasAtuais.filter(p => p.tarefas.length > 1);
   const unicas = pendenciasAtuais.filter(p => p.tarefas.length === 1);
 
-  // NOVO: Achatar a lista de pendências para a visão individual do WhatsApp
   const listaIndividualZap = [];
   pendenciasAtuais.forEach(grupo => {
     grupo.devedores.forEach(aluno => {
@@ -217,8 +223,8 @@ export default function Comunicacao() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           
-          {/* COLUNA 1: WHATSAPP (Geral + Individual) */}
-          <div className="lg:col-span-1 space-y-6 sticky top-4">
+          {/* COLUNA 1: WHATSAPP (Ajustado o CSS para resolver o bug do celular: lg:sticky lg:top-4) */}
+          <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-4">
             
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-200">
               
@@ -244,7 +250,7 @@ export default function Comunicacao() {
 
               <hr className="my-6 border-green-100" />
 
-              {/* BLOCO 2: Mensagens Individuais (WhatsApp) */}
+              {/* BLOCO 2: Mensagens Individuais */}
               <div>
                 <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
                   <User size={20} className="text-green-600"/> Cobrança Direta
@@ -259,7 +265,6 @@ export default function Comunicacao() {
                   ) : (
                     listaIndividualZap.map((pend, idx) => {
                       const primeiroNome = formatarPrimeiroNome(pend.aluno);
-                      const prefixo = pend.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
                       const tarefasTexto = formatarListaTarefas(pend.tarefas);
                       const idCopia = `zap-${idx}`;
                       
@@ -294,7 +299,7 @@ export default function Comunicacao() {
               <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
                 <Users size={20} className="text-blue-600"/> Envio em Lote (Plataforma do Governo)
               </h3>
-              <p className="text-sm text-gray-600 mb-6">Alunos agrupados por tarefas pendentes. Copie a mensagem neutra uma única vez e envie para todos do grupo.</p>
+              <p className="text-sm text-gray-600 mb-6">Alunos agrupados por tarefas pendentes (em ordem alfabética). Copie a mensagem neutra uma única vez e envie para todos do grupo.</p>
 
               {!itemAtivo ? (
                 <div className="text-center py-10 text-gray-500 font-bold bg-gray-50 rounded-xl border border-dashed border-gray-200">
