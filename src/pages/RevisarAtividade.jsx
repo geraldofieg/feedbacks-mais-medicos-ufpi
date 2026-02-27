@@ -20,8 +20,16 @@ export default function RevisarAtividade() {
 
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
+  // EFEITO COLATERAL (Gatilho quando o ID do aluno muda na URL)
   useEffect(() => {
     async function buscarAtividade() {
+      // 1. FORÇA O RESET DE TODOS OS BOTÕES AO TROCAR DE ALUNO (A Cura do Bug!)
+      setLoading(true);
+      setSalvando(false);
+      setMarcandoPostado(false);
+      setExcluindo(false);
+      setCopiado(false);
+
       try {
         const docRef = doc(db, 'atividades', id);
         const docSnap = await getDoc(docRef);
@@ -29,8 +37,14 @@ export default function RevisarAtividade() {
           const dados = docSnap.data();
           setAtividade({ id: docSnap.id, ...dados });
           setFeedbackEditado(dados.feedbackSugerido || '');
+        } else {
+          setAtividade(null);
         }
-      } catch (error) { console.error(error); } finally { setLoading(false); }
+      } catch (error) { 
+        console.error(error); 
+      } finally { 
+        setLoading(false); 
+      }
     }
     buscarAtividade();
   }, [id]);
@@ -50,24 +64,15 @@ export default function RevisarAtividade() {
       const snap = await getDocs(q);
       const nextDoc = snap.docs.find(d => d.id !== id);
       
+      setSalvando(false); // Desliga o botão antes de viajar
+
       if (nextDoc) navigate('/revisar/' + nextDoc.id); 
       else navigate('/'); 
       
-    } catch (error) { alert("Erro ao salvar."); setSalvando(false); }
-  }
-
-  async function handleExcluir() {
-    if (window.confirm("Atenção: Tem certeza que deseja excluir esta atividade para sempre?")) {
-      setExcluindo(true);
-      try { await deleteDoc(doc(db, 'atividades', id)); navigate(-1); } 
-      catch (error) { alert("Erro ao excluir."); setExcluindo(false); }
+    } catch (error) { 
+      alert("Erro ao salvar."); 
+      setSalvando(false); 
     }
-  }
-
-  function handleCopiar() {
-    navigator.clipboard.writeText(atividade.feedbackFinal || atividade.feedbackSugerido);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 2000);
   }
 
   // NAVEGAÇÃO INTELIGENTE DO GERALDO
@@ -83,10 +88,29 @@ export default function RevisarAtividade() {
       const snap = await getDocs(q);
       const nextDoc = snap.docs.find(d => d.id !== id);
       
+      setMarcandoPostado(false); // Desliga o botão antes de viajar
+
       if (nextDoc) navigate('/revisar/' + nextDoc.id);
       else navigate('/'); 
       
-    } catch (error) { alert("Erro ao marcar."); setMarcandoPostado(false); }
+    } catch (error) { 
+      alert("Erro ao marcar."); 
+      setMarcandoPostado(false); 
+    }
+  }
+
+  async function handleExcluir() {
+    if (window.confirm("Atenção: Tem certeza que deseja excluir esta atividade para sempre?")) {
+      setExcluindo(true);
+      try { await deleteDoc(doc(db, 'atividades', id)); navigate(-1); } 
+      catch (error) { alert("Erro ao excluir."); setExcluindo(false); }
+    }
+  }
+
+  function handleCopiar() {
+    navigator.clipboard.writeText(atividade.feedbackFinal || atividade.feedbackSugerido);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
   }
 
   async function handleReverterPostagem() {
@@ -110,7 +134,7 @@ export default function RevisarAtividade() {
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div></div>;
-  if (!atividade) return <div className="text-center p-10 font-bold">Atividade não encontrada.</div>;
+  if (!atividade) return <div className="text-center p-10 font-bold text-gray-500">Esta atividade não foi encontrada ou já foi processada.</div>;
 
   const linkVoltar = atividade.status === 'pendente' ? '/lista/pendente' : !atividade.postado ? (isAdmin ? '/lista/falta-postar' : '/lista/finalizados') : '/lista/finalizados';
   const foiEditado = atividade.feedbackFinal?.trim() !== atividade.feedbackSugerido?.trim();
