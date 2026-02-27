@@ -27,7 +27,6 @@ export default function Comunicacao() {
         const resultadoAssincrono = [];
         const resultadoSincrono = [];
 
-        // BUSCA INTELIGENTE AGRUPADA DO MÓDULO ASSÍNCRONO
         if (moduloAtual) {
           const numModuloOficial = moduloAtual.modulo.match(/\d+/)?.[0];
           const tarefasDoModulo = new Set();
@@ -42,7 +41,6 @@ export default function Comunicacao() {
             }
           });
 
-          // Agrupa as tarefas por ALUNO
           alunosAtivos.forEach(aluno => {
             const tarefasDevendo = [];
             tarefasDoModulo.forEach(tar => {
@@ -56,7 +54,6 @@ export default function Comunicacao() {
           });
         }
 
-        // BUSCA INTELIGENTE AGRUPADA DO MÓDULO SÍNCRONO
         if (semanaAtual) {
           const numSemanaOficial = semanaAtual.semana.toString();
           const tarefasPossiveis = [semanaAtual.tema1, semanaAtual.tema2];
@@ -90,6 +87,7 @@ export default function Comunicacao() {
     return () => { unsubAlunos(); unsubAtividades(); };
   }, [alunosAtivos, moduloAtual, semanaAtual]);
 
+  // FUNÇÕES DE TEXTO INTELIGENTES
   const getMensagemDia = () => {
     const dia = new Date().getDay(); 
     if (dia === 5 || dia === 6) return "aproveite o final de semana para colocar em dia.";
@@ -97,11 +95,17 @@ export default function Comunicacao() {
     return "aproveite estes dias para colocar tudo em dia.";
   };
 
-  // Transforma array ["Fórum", "Desafio"] em "Fórum e Desafio"
   const formatarListaTarefas = (lista) => {
     if (lista.length === 1) return lista[0];
     if (lista.length === 2) return `${lista[0]} e ${lista[1]}`;
     return lista.slice(0, -1).join(', ') + ' e ' + lista[lista.length - 1];
+  };
+
+  // NOVO: Função para pegar só o 1º nome e formatar (ex: JOÃO SILVA -> João)
+  const formatarPrimeiroNome = (nomeCompleto) => {
+    if (!nomeCompleto) return '';
+    const primeiroNome = nomeCompleto.trim().split(/\s+/)[0];
+    return primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1).toLowerCase();
   };
 
   const handleCopiar = (texto, id) => {
@@ -205,7 +209,10 @@ export default function Comunicacao() {
                           const idCopia = `multi-${pend.aluno}`;
                           const prefixo = pend.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
                           const tarefasTexto = formatarListaTarefas(pend.tarefas);
-                          const msgIndividual = `Prezado(a) ${pend.aluno}, estou acompanhando aqui o nosso sistema e consta a pendência das tarefas '${tarefasTexto}' referente ${prefixo} ${pend.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização das atividades, para que você não fique prejudicado em sua nota. Qualquer dúvida, estou à disposição.`;
+                          const primeiroNome = formatarPrimeiroNome(pend.aluno);
+                          
+                          // TEXTO INDIVIDUAL ATUALIZADO
+                          const msgIndividual = `Olá ${primeiroNome}, estou acompanhando aqui o nosso sistema e consta a pendência das tarefas '${tarefasTexto}' referente ${prefixo} ${pend.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização das atividades, para que você não fique prejudicado em sua nota. Qualquer dúvida, estou à disposição.`;
                           
                           return (
                             <div key={i} className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border-2 border-red-100 hover:border-red-300 transition-colors shadow-sm">
@@ -239,7 +246,10 @@ export default function Comunicacao() {
                           const idCopia = `unica-${pend.aluno}`;
                           const prefixo = pend.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
                           const tarefasTexto = formatarListaTarefas(pend.tarefas);
-                          const msgIndividual = `Prezado(a) ${pend.aluno}, estou acompanhando aqui o nosso sistema e consta a pendência da tarefa '${tarefasTexto}' referente ${prefixo} ${pend.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização da tarefa, para que você não fique prejudicado em sua nota. Qualquer dúvida, estou à disposição.`;
+                          const primeiroNome = formatarPrimeiroNome(pend.aluno);
+
+                          // TEXTO INDIVIDUAL ATUALIZADO
+                          const msgIndividual = `Olá ${primeiroNome}, estou acompanhando aqui o nosso sistema e consta a pendência da tarefa '${tarefasTexto}' referente ${prefixo} ${pend.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização da tarefa, para que você não fique prejudicado em sua nota. Qualquer dúvida, estou à disposição.`;
                           
                           return (
                             <div key={i} className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border-2 border-yellow-100 hover:border-yellow-300 transition-colors shadow-sm">
