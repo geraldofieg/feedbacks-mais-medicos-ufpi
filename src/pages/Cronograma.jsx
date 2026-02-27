@@ -7,7 +7,6 @@ export default function Cronograma() {
   const [abaAtiva, setAbaAtiva] = useState('assincrono');
   const [esconderPassados, setEsconderPassados] = useState(true);
   
-  // NOVO: Estado para controlar o Modal Administrativo
   const [detalhesAdm, setDetalhesAdm] = useState(null);
 
   const formatarData = (dataIso) => {
@@ -67,7 +66,7 @@ export default function Cronograma() {
                 
                 <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 ${isAtual ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : status === 'passado' ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
 
-                {/* NOVO: Botão discreto para a planilha Excel */}
+                {/* Botão discreto para a planilha Excel */}
                 <button 
                   onClick={() => setDetalhesAdm({ tipo: 'assincrono', dados: item })}
                   className="absolute top-4 right-4 text-gray-400 hover:text-blue-600 flex items-center gap-1 text-xs font-bold transition-colors bg-gray-50 hover:bg-blue-100 px-2 py-1 rounded"
@@ -104,7 +103,7 @@ export default function Cronograma() {
                 
                 <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 ${isAtual ? 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]' : status === 'passado' ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
 
-                {/* NOVO: Botão discreto para a planilha Excel */}
+                {/* Botão discreto para a planilha Excel */}
                 <button 
                   onClick={() => setDetalhesAdm({ tipo: 'sincrono', dados: item })}
                   className="absolute top-4 right-4 text-gray-400 hover:text-purple-600 flex items-center gap-1 text-xs font-bold transition-colors bg-gray-50 hover:bg-purple-100 px-2 py-1 rounded"
@@ -142,7 +141,7 @@ export default function Cronograma() {
           })}
         </div>
 
-        {/* NOVO: MODAL ADMINISTRATIVO (Planilha Excel) */}
+        {/* MODAL ADMINISTRATIVO */}
         {detalhesAdm && (
           <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setDetalhesAdm(null)}>
             <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
@@ -156,11 +155,14 @@ export default function Cronograma() {
                 {detalhesAdm.tipo === 'assincrono' && (
                   <div className="space-y-4">
                     <div>
-                      <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider">Título Oficial Completo</span>
-                      <p className="font-medium text-gray-900 bg-gray-50 p-3 rounded-lg border border-gray-100">{detalhesAdm.dados.tituloCompleto}</p>
+                      {/* TÍTULO CORRIGIDO COM QUEBRA DE LINHA */}
+                      <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Eixo e Módulo Oficial</span>
+                      <p className="font-medium text-gray-900 bg-gray-50 p-3 rounded-lg border border-gray-200 whitespace-pre-line leading-relaxed shadow-inner">
+                        {detalhesAdm.dados.tituloCompleto}
+                      </p>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
                       <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-center">
                         <span className="block text-[10px] font-black text-blue-500 uppercase">Carga Horária</span>
                         <span className="text-lg font-black text-blue-900">{detalhesAdm.dados.ch}h</span>
