@@ -8,7 +8,6 @@ import {
   CheckCircle, Clock, Calendar, ChevronRight, AlertTriangle, Send, CheckCheck, Sparkles, User, CalendarRange
 } from 'lucide-react';
 
-// IMPORTAÇÃO DOS DADOS DO CRONOGRAMA
 import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestantes } from '../data/cronogramaData';
 
 export const isModuloValido = (nome) => {
@@ -32,7 +31,6 @@ export default function Dashboard() {
 
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
-  // LÓGICA DO WIDGET DO CRONOGRAMA
   const moduloAtual = cronogramaAssincrono.find(m => getStatusData(m.inicio, m.fim) === 'atual');
   const semanaAtual = cronogramaSincrono.find(s => getStatusData(s.inicio, s.fim) === 'atual');
 
@@ -109,14 +107,12 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
         
-        {/* NOVO: WIDGET DO CRONOGRAMA */}
         <div className="mb-6 bg-slate-800 rounded-2xl p-5 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-slate-700">
           <div className="flex items-center gap-4">
             <div className="bg-slate-700 p-3 rounded-xl"><CalendarRange size={28} className="text-blue-400" /></div>
             <div>
               <h3 className="font-bold text-lg text-slate-100 mb-1">Ponto de Situação do Curso</h3>
               <div className="flex flex-col gap-1.5">
-                {/* Status Assíncrono */}
                 {moduloAtual ? (
                   <p className="text-sm font-medium flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span> 
@@ -126,7 +122,6 @@ export default function Dashboard() {
                   <p className="text-sm font-medium flex items-center gap-2 text-slate-400"><span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Nenhum módulo assíncrono em andamento.</p>
                 )}
                 
-                {/* Status Síncrono */}
                 {semanaAtual ? (
                   <p className="text-sm font-medium flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span> 
@@ -143,13 +138,12 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* Termómetro da IA */}
         <div className="mb-6 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-white/20 p-3 rounded-xl"><Sparkles size={28} /></div>
             <div>
-              <h3 className="font-bold text-lg">Termómetro da IA</h3>
-              <p className="text-purple-100 text-sm hidden md:block">Percentagem de feedbacks aprovados sem NENHUMA alteração.</p>
+              <h3 className="font-bold text-lg">Termômetro da IA</h3>
+              <p className="text-purple-100 text-sm hidden md:block">Porcentagem de feedbacks aprovados sem NENHUMA alteração.</p>
             </div>
           </div>
           <div className="text-right">
@@ -158,84 +152,5 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* As Caixas do Funil */}
         <div className={`grid grid-cols-1 gap-4 mb-8 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-          <Link to="/lista/pendente" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
-            <div>
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Revisão</p>
-              <h3 className="text-4xl font-black text-yellow-500">{stats.revisao}</h3>
-              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Ver lista <ChevronRight size={16} /></div>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-2xl text-yellow-600 border border-yellow-100"><Clock size={32} /></div>
-          </Link>
-
-          {isAdmin && (
-            <Link to="/lista/falta-postar" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
-              <div>
-                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Postar</p>
-                <h3 className="text-4xl font-black text-blue-600">{stats.postar}</h3>
-                <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Copiar p/ Site <ChevronRight size={16} /></div>
-              </div>
-              <div className="bg-blue-50 p-4 rounded-2xl text-blue-600 border border-blue-100"><Send size={32} /></div>
-            </Link>
-          )}
-          
-          <Link to="/lista/finalizados" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
-            <div>
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Histórico Finalizado</p>
-              <h3 className="text-4xl font-black text-green-600">{stats.finalizados}</h3>
-              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Ver histórico <ChevronRight size={16} /></div>
-            </div>
-            <div className="bg-green-50 p-4 rounded-2xl text-green-600 border border-green-100"><CheckCheck size={32} /></div>
-          </Link>
-        </div>
-
-        {/* MENU DE AÇÕES RÁPIDAS */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-8">
-          {isAdmin && (
-            <>
-              <Link to="/nova-atividade" className="bg-blue-600 text-white p-5 rounded-2xl shadow-lg flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><PlusCircle size={28} /><span className="font-bold text-sm">Nova Ativ</span></Link>
-              <Link to="/alunos" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><Users size={28} className="text-blue-600" /><span className="font-bold text-sm">Alunos</span></Link>
-              <Link to="/configuracoes" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><Settings size={28} className="text-gray-500" /><span className="font-bold text-sm">Config</span></Link>
-            </>
-          )}
-
-          {/* NOVO: Botão Cronograma nas Ações Rápidas */}
-          <Link to="/cronograma" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><CalendarRange size={28} className="text-blue-500" /><span className="font-bold text-sm">Datas</span></Link>
-          
-          <Link to="/pendencias" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><AlertTriangle size={28} className="text-orange-500" /><span className="font-bold text-sm">Pendências</span></Link>
-          <Link to="/mapa" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><ClipboardList size={28} className="text-blue-600" /><span className="font-bold text-sm">Mapa</span></Link>
-          <button onClick={handleLogout} className="bg-red-50 text-red-600 p-5 rounded-2xl border border-red-100 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><LogOut size={28} /><span className="font-bold text-sm">Sair</span></button>
-        </div>
-
-        {/* GESTÃO À VISTA PARA TODOS */}
-        {pendenciasGerais.length > 0 && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
-            <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-3">
-              <AlertTriangle className="text-orange-500" /> Gestão à Vista: Alunos Pendentes
-            </h3>
-            <div className="space-y-4">
-              {pendenciasGerais.map((item, idx) => (
-                <div key={idx} className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-orange-900">{item.modulo}</span>
-                    <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">{item.devedores.length} pendências</span>
-                  </div>
-                  <p className="text-sm font-medium text-orange-800 mb-3">{item.tarefa}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {item.devedores.map((aluno, i) => (
-                      <span key={i} className="text-xs font-bold text-gray-600 bg-white px-2 py-1 rounded border border-gray-200 flex items-center gap-1">
-                        <User size={12}/> {aluno}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-      </main>
-    </div>
-  );
-}
+          <Link to="/lista/pendente" className="bg-white p-6 rounded-2xl shadow-sm border border-
