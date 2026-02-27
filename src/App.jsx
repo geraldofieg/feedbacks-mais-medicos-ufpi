@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Navbar from './components/Navbar'; // NOVO: Importação do nosso menu
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import NovaAtividade from './pages/NovaAtividade';
@@ -22,6 +23,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
+        {/* NOVO: A Navbar fica solta aqui, aparecendo no topo de todas as rotas */}
+        <Navbar /> 
+        
         <Routes>
           <Route path="/login" element={<Login />} />
           
