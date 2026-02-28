@@ -1,16 +1,18 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { getStorage } from 'firebase/storage';
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCrBaUN0keLVmEf-GXrevjSd6jHkvw7vaQ",
-  authDomain: "maismedicos-dev.firebaseapp.com",
-  projectId: "maismedicos-dev",
-  storageBucket: "maismedicos-dev.firebasestorage.app",
-  messagingSenderId: "246883613981",
-  appId: "1:246883613981:web:7bc776fd192046203ff5f4"
+  apiKey: "AIzaSyB29PzKLW5YG_8qIib-swms4veFI4Ev-F4",
+  authDomain: "feedbacks-mais-medicos-novo.firebaseapp.com",
+  projectId: "feedbacks-mais-medicos-novo",
+  storageBucket: "feedbacks-mais-medicos-novo.firebasestorage.app",
+  messagingSenderId: "390908095939",
+  appId: "1:390908095939:web:f8cd055c90c8d26e666176"
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
