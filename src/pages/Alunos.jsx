@@ -26,6 +26,7 @@ export default function Alunos() {
 
   async function handleAddAluno(e) {
     e.preventDefault();
+    if (salvando) return;
     if (!novoAluno.trim()) return;
     
     setSalvando(true);
@@ -42,11 +43,15 @@ export default function Alunos() {
   }
 
   async function handleExcluir(id) {
+    if (salvando) return;
     if (window.confirm('Tem certeza que deseja excluir este aluno?')) {
+      setSalvando(true);
       try {
         await deleteDoc(doc(db, 'alunos', id));
       } catch (error) {
         console.error("Erro ao excluir:", error);
+      } finally {
+        setSalvando(false);
       }
     }
   }
@@ -104,7 +109,7 @@ export default function Alunos() {
               {alunos.map(aluno => (
                 <li key={aluno.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
                   <span className="font-medium text-gray-800">{aluno.nome}</span>
-                  <button onClick={() => handleExcluir(aluno.id)} className="text-red-400 hover:text-red-600 transition-colors p-2">
+                  <button onClick={() => handleExcluir(aluno.id)} disabled={salvando} className="text-red-400 hover:text-red-600 transition-colors p-2 disabled:opacity-50">
                     <Trash2 size={18} />
                   </button>
                 </li>

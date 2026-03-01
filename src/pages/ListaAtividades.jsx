@@ -17,7 +17,15 @@ export default function ListaAtividades() {
 
   useEffect(() => {
     const statusBanco = status === 'pendente' ? 'pendente' : 'aprovado';
-    const q = query(collection(db, 'atividades'), where('status', '==', statusBanco));
+
+    const dataLimite = new Date();
+    dataLimite.setDate(dataLimite.getDate() - 90);
+
+    const q = query(
+      collection(db, 'atividades'),
+      where('status', '==', statusBanco),
+      where('dataCriacao', '>=', dataLimite)
+    );
 
     const unsub = onSnapshot(q, (snap) => {
       let lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
