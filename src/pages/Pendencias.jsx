@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ArrowLeft, AlertTriangle, User, Calendar } from 'lucide-react';
 
@@ -18,46 +18,60 @@ export default function Pendencias() {
   const [pendencias, setPendencias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [alunosAtivos, setAlunosAtivos] = useState([]);
+  const [atividadesBrutas, setAtividadesBrutas] = useState([]);
 
   useEffect(() => {
     const unsubAlunos = onSnapshot(collection(db, 'alunos'), (snap) => {
       setAlunosAtivos(snap.docs.map(doc => doc.data().nome));
     });
 
-    const unsubAtividades = onSnapshot(collection(db, 'atividades'), (snap) => {
-      const atividades = snap.docs.map(doc => doc.data());
-      
-      // Filtra apenas os módulos válidos (7 em diante)
-      const validAtiv = atividades.filter(a => isModuloValido(a.modulo));
-      const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
+    const dataLimite = new Date();
+    dataLimite.setDate(dataLimite.getDate() - 90);
+    const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
 
-      // Agrupa módulos e acha a data mais recente de cada um
-      const modulosMap = {};
-      validAtiv.forEach(a => {
-        if (!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
-        if (a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
-        modulosMap[a.modulo].tarefas.add(a.tarefa);
-      });
-
-      // Ordena módulos do mais recente para o mais antigo
-      const listaMod = Object.values(modulosMap).sort((a, b) => b.data - a.data);
-
-      const resultado = [];
-      listaMod.forEach(mod => {
-        mod.tarefas.forEach(tar => {
-          const devedores = alunosAtivos.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
-          if (devedores.length > 0) {
-            resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
-          }
-        });
-      });
-
-      setPendencias(resultado);
-      setLoading(false);
+    const unsubAtividades = onSnapshot(qAtividades, (snap) => {
+      setAtividadesBrutas(snap.docs.map(doc => doc.data()));
     });
 
     return () => { unsubAlunos(); unsubAtividades(); };
-  }, [alunosAtivos]);
+  }, []);
+
+  useEffect(() => {
+    if (!alunosAtivos.length || !atividadesBrutas.length) {
+      if (atividadesBrutas.length === 0) {
+        setLoading(false); // Can be empty if no activities exist
+      }
+      return;
+    }
+
+    // Filtra apenas os módulos válidos (7 em diante)
+    const validAtiv = atividadesBrutas.filter(a => isModuloValido(a.modulo));
+    const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
+
+    // Agrupa módulos e acha a data mais recente de cada um
+    const modulosMap = {};
+    validAtiv.forEach(a => {
+      if (!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
+      if (a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
+      modulosMap[a.modulo].tarefas.add(a.tarefa);
+    });
+
+    // Ordena módulos do mais recente para o mais antigo
+    const listaMod = Object.values(modulosMap).sort((a, b) => b.data - a.data);
+
+    const resultado = [];
+    listaMod.forEach(mod => {
+      mod.tarefas.forEach(tar => {
+        const devedores = alunosAtivos.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
+        if (devedores.length > 0) {
+          resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
+        }
+      });
+    });
+
+    setPendencias(resultado);
+    setLoading(false);
+  }, [alunosAtivos, atividadesBrutas]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">

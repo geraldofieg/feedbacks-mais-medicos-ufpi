@@ -16,6 +16,7 @@ export default function RevisarAtividade() {
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [salvandoAcao, setSalvandoAcao] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
@@ -28,6 +29,7 @@ export default function RevisarAtividade() {
       setSalvando(false);
       setMarcandoPostado(false);
       setExcluindo(false);
+      setSalvandoAcao(false);
       setCopiado(false);
 
       try {
@@ -128,25 +130,33 @@ export default function RevisarAtividade() {
   }
 
   async function handleReverterPostagem() {
+    if (salvandoAcao) return;
     if (window.confirm("Desfazer postagem? A atividade voltará para a lista de 'Falta Postar'.")) {
+      setSalvandoAcao(true);
       try { 
         await updateDoc(doc(db, 'atividades', id), { postado: false }); 
         navigate('/lista/falta-postar'); 
       } catch (error) { 
         console.error(error);
         alert("Erro ao reverter."); 
+      } finally {
+        setSalvandoAcao(false);
       }
     }
   }
 
   async function handleReverterRevisao() {
+    if (salvandoAcao) return;
     if (window.confirm("Devolver para Revisão? A atividade voltará para a caixa de 'Aguardando Revisão'.")) {
+      setSalvandoAcao(true);
       try { 
         await updateDoc(doc(db, 'atividades', id), { status: 'pendente', postado: false }); 
         navigate('/lista/pendente'); 
       } catch (error) { 
         console.error(error);
         alert("Erro ao reverter."); 
+      } finally {
+        setSalvandoAcao(false);
       }
     }
   }
@@ -256,13 +266,13 @@ export default function RevisarAtividade() {
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 text-center border-b border-gray-100 pb-2">Gerenciamento Gestor</h4>
                 
                 {atividade.postado && (
-                  <button onClick={handleReverterPostagem} className="w-full flex items-center justify-center gap-2 text-orange-600 hover:bg-orange-50 py-3 rounded-xl font-bold transition-colors text-sm">
+                  <button onClick={handleReverterPostagem} disabled={salvandoAcao} className="w-full flex items-center justify-center gap-2 text-orange-600 hover:bg-orange-50 py-3 rounded-xl font-bold transition-colors text-sm disabled:opacity-50">
                     <RotateCcw size={18} /> Desfazer Postagem
                   </button>
                 )}
                 
                 {atividade.status !== 'pendente' && (
-                  <button onClick={handleReverterRevisao} className="w-full flex items-center justify-center gap-2 text-yellow-600 hover:bg-yellow-50 py-3 rounded-xl font-bold transition-colors text-sm">
+                  <button onClick={handleReverterRevisao} disabled={salvandoAcao} className="w-full flex items-center justify-center gap-2 text-yellow-600 hover:bg-yellow-50 py-3 rounded-xl font-bold transition-colors text-sm disabled:opacity-50">
                     <RotateCcw size={18} /> Devolver p/ Revisão
                   </button>
                 )}
