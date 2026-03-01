@@ -1,4 +1,7 @@
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar'; // NOVO: Importação do nosso menu
 import Login from './pages/Login';
@@ -19,7 +22,29 @@ function PrivateRoute({ children }) {
   return currentUser ? children : <Navigate to="/login" />;
 }
 
+const VERSAO_LOCAL_APP = 1;
+
 function App() {
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const configRef = doc(db, 'sistema', 'config');
+      getDoc(configRef)
+        .then((docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.versaoAtiva > VERSAO_LOCAL_APP) {
+              window.location.reload(true);
+            }
+          }
+        })
+        .catch((error) => {
+          console.warn('Erro ao verificar versão do app:', error);
+        });
+    }, 600000); // 10 minutes
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   return (
     <Router>
       <AuthProvider>
