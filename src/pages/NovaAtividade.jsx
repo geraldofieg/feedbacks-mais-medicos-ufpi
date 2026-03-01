@@ -42,7 +42,7 @@ export default function NovaAtividade() {
         const snap = await getDocs(q);
         
         if (!snap.empty) {
-          const dadosAnteriores = snap.docs[0].data();
+          const dadosAnteriores = snap.docs.data();
           if (dadosAnteriores.enunciado) setEnunciado(dadosAnteriores.enunciado);
           if (dadosAnteriores.urlEnunciado) setUrlEnunciadoExistente(dadosAnteriores.urlEnunciado);
           
@@ -69,6 +69,7 @@ export default function NovaAtividade() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (loading) return; // TRAVA ADICIONADA: Impede duplo clique e reenvios simultâneos
     if (!alunoSelecionado || !modulo || !tarefa) { setMensagem('Preencha o módulo, a tarefa e o aluno.'); return; }
     
     setLoading(true); 
@@ -100,8 +101,10 @@ export default function NovaAtividade() {
     } catch (error) { 
       console.error(error);
       setMensagem('Erro ao salvar atividade.'); 
-      setLoading(false);
-    } 
+    } finally {
+      // TRAVA ADICIONADA: Garante que o loading seja desativado, quer a operação funcione ou dê erro.
+      setLoading(false); 
+    }
   }
 
   return (
@@ -165,7 +168,7 @@ export default function NovaAtividade() {
                 <label className={`block text-sm font-bold mb-1 ${urlEnunciadoExistente && !arquivoEnunciado ? 'text-green-900' : 'text-blue-900'}`}>
                   {urlEnunciadoExistente && !arquivoEnunciado ? '✅ Arquivo já vinculado' : 'Anexar Arquivo do Enunciado'}
                 </label>
-                <input type="file" accept=".pdf, image/*" onChange={e => setArquivoEnunciado(e.target.files[0])} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
+                <input type="file" accept=".pdf, image/*" onChange={e => setArquivoEnunciado(e.target.files)} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
               </div>
             </div>
           </div>
@@ -179,7 +182,7 @@ export default function NovaAtividade() {
               <UploadCloud className="text-gray-500" size={32} />
               <div className="flex-1 w-full">
                 <label className="block text-sm font-bold text-gray-700 mb-1">Anexar Arquivo do Aluno (Se houver)</label>
-                <input type="file" accept=".pdf, image/*" onChange={e => setArquivoResposta(e.target.files[0])} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-gray-600 file:text-white hover:file:bg-gray-700" />
+                <input type="file" accept=".pdf, image/*" onChange={e => setArquivoResposta(e.target.files)} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-gray-600 file:text-white hover:file:bg-gray-700" />
               </div>
             </div>
           </div>
