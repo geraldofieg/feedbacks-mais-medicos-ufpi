@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ArrowLeft, Check, X, ClipboardList } from 'lucide-react';
 
@@ -24,7 +24,11 @@ export default function MapaEntregas() {
       setAlunos(snap.docs.map(doc => doc.data().nome).sort());
     });
 
-    const unsubAtividades = onSnapshot(collection(db, 'atividades'), (snap) => {
+    const dataLimite = new Date();
+    dataLimite.setDate(dataLimite.getDate() - 90);
+    const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
+
+    const unsubAtividades = onSnapshot(qAtividades, (snap) => {
       const ativs = snap.docs.map(doc => doc.data()).filter(a => isModuloValido(a.modulo));
       
       const setEntregasTemp = new Set();

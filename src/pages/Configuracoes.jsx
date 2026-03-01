@@ -9,6 +9,7 @@ export default function Configuracoes() {
   const [tarefas, setTarefas] = useState([]);
   const [novoModulo, setNovoModulo] = useState('');
   const [novaTarefa, setNovaTarefa] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     const qModulos = query(collection(db, 'modulos'), orderBy('nome', 'asc'));
@@ -26,31 +27,43 @@ export default function Configuracoes() {
 
   async function handleAddModulo(e) {
     e.preventDefault();
+    if (salvando) return;
     if (!novoModulo.trim()) return;
+    setSalvando(true);
     try {
       await addDoc(collection(db, 'modulos'), { nome: novoModulo.trim() });
       setNovoModulo('');
-    } catch (error) { console.error("Erro:", error); }
+    } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
   }
 
   async function handleAddTarefa(e) {
     e.preventDefault();
+    if (salvando) return;
     if (!novaTarefa.trim()) return;
+    setSalvando(true);
     try {
       await addDoc(collection(db, 'tarefas'), { nome: novaTarefa.trim() });
       setNovaTarefa('');
-    } catch (error) { console.error("Erro:", error); }
+    } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
   }
 
   async function handleExcluirModulo(id) {
+    if (salvando) return;
     if (window.confirm('Tem certeza que deseja excluir este módulo?')) {
-      await deleteDoc(doc(db, 'modulos', id));
+      setSalvando(true);
+      try {
+        await deleteDoc(doc(db, 'modulos', id));
+      } finally { setSalvando(false); }
     }
   }
 
   async function handleExcluirTarefa(id) {
+    if (salvando) return;
     if (window.confirm('Tem certeza que deseja excluir esta tarefa?')) {
-      await deleteDoc(doc(db, 'tarefas', id));
+      setSalvando(true);
+      try {
+        await deleteDoc(doc(db, 'tarefas', id));
+      } finally { setSalvando(false); }
     }
   }
 
@@ -75,7 +88,7 @@ export default function Configuracoes() {
             
             <form onSubmit={handleAddModulo} className="flex gap-2 mb-6">
               <input required type="text" placeholder="Ex: Módulo 1..." className="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={novoModulo} onChange={e => setNovoModulo(e.target.value)} />
-              <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+              <button type="submit" disabled={salvando} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
                 <Plus size={20} />
               </button>
             </form>
@@ -85,7 +98,7 @@ export default function Configuracoes() {
               {modulos.map(mod => (
                 <li key={mod.id} className="py-3 flex justify-between items-center hover:bg-gray-50">
                   <span className="font-medium text-gray-700">{mod.nome}</span>
-                  <button onClick={() => handleExcluirModulo(mod.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={18} /></button>
+                  <button onClick={() => handleExcluirModulo(mod.id)} disabled={salvando} className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50"><Trash2 size={18} /></button>
                 </li>
               ))}
             </ul>
@@ -96,7 +109,7 @@ export default function Configuracoes() {
             
             <form onSubmit={handleAddTarefa} className="flex gap-2 mb-6">
               <input required type="text" placeholder="Ex: Fórum Temático..." className="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={novaTarefa} onChange={e => setNovaTarefa(e.target.value)} />
-              <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+              <button type="submit" disabled={salvando} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
                 <Plus size={20} />
               </button>
             </form>
@@ -106,7 +119,7 @@ export default function Configuracoes() {
               {tarefas.map(tar => (
                 <li key={tar.id} className="py-3 flex justify-between items-center hover:bg-gray-50">
                   <span className="font-medium text-gray-700">{tar.nome}</span>
-                  <button onClick={() => handleExcluirTarefa(tar.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={18} /></button>
+                  <button onClick={() => handleExcluirTarefa(tar.id)} disabled={salvando} className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50"><Trash2 size={18} /></button>
                 </li>
               ))}
             </ul>
