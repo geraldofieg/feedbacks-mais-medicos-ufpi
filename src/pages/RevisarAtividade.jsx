@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, limit } from 'firebase/firestore'; // IMPORTANTE: Adicionado 'limit'
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3, CalendarDays } from 'lucide-react';
@@ -23,7 +23,7 @@ export default function RevisarAtividade() {
   // EFEITO COLATERAL (Gatilho quando o ID do aluno muda na URL)
   useEffect(() => {
     async function buscarAtividade() {
-      // 1. FORÇA O RESET DE TODOS OS BOTÕES AO TROCAR DE ALUNO (A Cura do Bug!)
+      // 1. FORÇA O RESET DE TODOS OS BOTÕES AO TROCAR DE ALUNO
       setLoading(true);
       setSalvando(false);
       setMarcandoPostado(false);
@@ -51,6 +51,8 @@ export default function RevisarAtividade() {
 
   // NAVEGAÇÃO INTELIGENTE DA PATRÍCIA
   async function handleAprovar() {
+    if (salvando) return; // TRAVA: Impede cliques duplos
+
     setSalvando(true);
     try {
       await updateDoc(doc(db, 'atividades', id), {
@@ -60,23 +62,26 @@ export default function RevisarAtividade() {
         dataAprovacao: new Date()
       });
       
-      const q = query(collection(db, 'atividades'), where('status', '==', 'pendente'));
+      // TRAVA DE LEITURA: Adicionado limit(2) para não baixar o banco inteiro só pra achar o próximo
+      const q = query(collection(db, 'atividades'), where('status', '==', 'pendente'), limit(2));
       const snap = await getDocs(q);
       const nextDoc = snap.docs.find(d => d.id !== id);
       
-      setSalvando(false); // Desliga o botão antes de viajar
-
       if (nextDoc) navigate('/revisar/' + nextDoc.id); 
       else navigate('/'); 
       
     } catch (error) { 
+      console.error(error);
       alert("Erro ao salvar."); 
-      setSalvando(false); 
+    } finally {
+      setSalvando(false); // Libera o botão
     }
   }
 
   // NAVEGAÇÃO INTELIGENTE DO GERALDO
   async function handleMarcarPostado() {
+    if (marcandoPostado) return; // TRAVA: Impede cliques duplos
+
     setMarcandoPostado(true);
     try {
       await updateDoc(doc(db, 'atividades', id), { 
@@ -84,26 +89,35 @@ export default function RevisarAtividade() {
         dataPostagem: new Date()
       });
       
-      const q = query(collection(db, 'atividades'), where('status', '==', 'aprovado'), where('postado', '==', false));
+      // TRAVA DE LEITURA: Adicionado limit(2) para economizar leituras
+      const q = query(collection(db, 'atividades'), where('status', '==', 'aprovado'), where('postado', '==', false), limit(2));
       const snap = await getDocs(q);
       const nextDoc = snap.docs.find(d => d.id !== id);
       
-      setMarcandoPostado(false); // Desliga o botão antes de viajar
-
       if (nextDoc) navigate('/revisar/' + nextDoc.id);
       else navigate('/'); 
       
     } catch (error) { 
+      console.error(error);
       alert("Erro ao marcar."); 
-      setMarcandoPostado(false); 
+    } finally {
+      setMarcandoPostado(false); // Libera o botão
     }
   }
 
   async function handleExcluir() {
+    if (excluindo) return;
     if (window.confirm("Atenção: Tem certeza que deseja excluir esta atividade para sempre?")) {
       setExcluindo(true);
-      try { await deleteDoc(doc(db, 'atividades', id)); navigate(-1); } 
-      catch (error) { alert("Erro ao excluir."); setExcluindo(false); }
+      try { 
+        await deleteDoc(doc(db, 'atividades', id)); 
+        navigate(-1); 
+      } catch (error) { 
+        console.error(error);
+        alert("Erro ao excluir."); 
+      } finally {
+        setExcluindo(false);
+      }
     }
   }
 
@@ -115,15 +129,25 @@ export default function RevisarAtividade() {
 
   async function handleReverterPostagem() {
     if (window.confirm("Desfazer postagem? A atividade voltará para a lista de 'Falta Postar'.")) {
-      try { await updateDoc(doc(db, 'atividades', id), { postado: false }); navigate('/lista/falta-postar'); } 
-      catch (error) { alert("Erro ao reverter."); }
+      try { 
+        await updateDoc(doc(db, 'atividades', id), { postado: false }); 
+        navigate('/lista/falta-postar'); 
+      } catch (error) { 
+        console.error(error);
+        alert("Erro ao reverter."); 
+      }
     }
   }
 
   async function handleReverterRevisao() {
     if (window.confirm("Devolver para Revisão? A atividade voltará para a caixa de 'Aguardando Revisão'.")) {
-      try { await updateDoc(doc(db, 'atividades', id), { status: 'pendente', postado: false }); navigate('/lista/pendente'); } 
-      catch (error) { alert("Erro ao reverter."); }
+      try { 
+        await updateDoc(doc(db, 'atividades', id), { status: 'pendente', postado: false }); 
+        navigate('/lista/pendente'); 
+      } catch (error) { 
+        console.error(error);
+        alert("Erro ao reverter."); 
+      }
     }
   }
 
@@ -253,4 +277,5 @@ export default function RevisarAtividade() {
       </div>
     </div>
   );
-}
+                  }
+              
