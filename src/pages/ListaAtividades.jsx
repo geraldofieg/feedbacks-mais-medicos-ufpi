@@ -18,15 +18,12 @@ export default function ListaAtividades() {
   useEffect(() => {
     const fetchAtividades = async () => {
       setLoading(true);
-      
-      const statusBanco = status === 'falta-postar' || status === 'finalizados' ? 'aprovado' : 'pendente';
 
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() - 90);
 
       const q = query(
         collection(db, 'atividades'),
-        where('status', '==', statusBanco),
         where('dataCriacao', '>=', dataLimite)
       );
 
@@ -34,10 +31,12 @@ export default function ListaAtividades() {
         const snap = await getDocs(q);
         let lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        if (status === 'falta-postar') {
-          lista = lista.filter(atv => !atv.postado);
+        if (status === 'pendente') {
+          lista = lista.filter(atv => !atv.dataAprovacao || atv.status === 'pendente');
+        } else if (status === 'falta-postar') {
+          lista = lista.filter(atv => !!atv.dataAprovacao && !atv.dataPostagem);
         } else if (status === 'finalizados') {
-          lista = lista.filter(atv => atv.postado === true);
+          lista = lista.filter(atv => !!atv.dataPostagem);
         }
 
         // Ordena de forma inteligente: pela data de postagem se estiver finalizado, ou pela aprovação
