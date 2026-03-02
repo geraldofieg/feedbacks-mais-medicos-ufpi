@@ -19,12 +19,7 @@ export default function ListaAtividades() {
     const fetchAtividades = async () => {
       setLoading(true);
       
-      let statusBanco = 'pendente';
-      if (status === 'falta-postar') {
-        statusBanco = 'aprovado';
-      } else if (status === 'finalizados') {
-        statusBanco = 'postado';
-      }
+      const statusBanco = status === 'falta-postar' || status === 'finalizados' ? 'aprovado' : 'pendente';
 
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() - 90);
@@ -38,6 +33,12 @@ export default function ListaAtividades() {
       try {
         const snap = await getDocs(q);
         let lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        if (status === 'falta-postar') {
+          lista = lista.filter(atv => !atv.postado);
+        } else if (status === 'finalizados') {
+          lista = lista.filter(atv => atv.postado === true);
+        }
 
         // Ordena de forma inteligente: pela data de postagem se estiver finalizado, ou pela aprovação
         lista.sort((a, b) => {
