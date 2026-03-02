@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore'; // REMOVIDO onSnapshot, ADD getDocs
 import { db } from '../services/firebase';
 import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Mail, Send, AlertCircle, Users, User } from 'lucide-react';
 import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestantes } from '../data/cronogramaData';
@@ -43,39 +43,44 @@ export default function Comunicacao() {
   const [alunosAtivos, setAlunosAtivos] = useState([]);
   const [pendenciasAgrupadas, setPendenciasAgrupadas] = useState({ assincrono: [], sincrono: [] });
   const [copiado, setCopiado] = useState(null);
+  const [loading, setLoading] = useState(true); // NOVO: Estado de carregamento
 
   const moduloAtual = cronogramaAssincrono.find(m => getStatusData(m.inicio, m.fim) === 'atual');
   const semanaAtual = cronogramaSincrono.find(s => getStatusData(s.inicio, s.fim) === 'atual');
 
   useEffect(() => {
-    const unsubAlunos = onSnapshot(collection(db, 'alunos'), (snap) => {
-      setAlunosAtivos(snap.docs.map(d => d.data().nome));
-    });
+    async function fetchComunicacao() {
+      setLoading(true);
 
-    const unsubAtividades = onSnapshot(collection(db, 'atividades'), (snap) => {
-      const docs = snap.docs.map(doc => doc.data());
-      
-      if (alunosAtivos.length > 0) {
+      try {
+        // 1. Busca os Alunos (Leitura Única)
+        const alunosSnap = await getDocs(collection(db, 'alunos'));
+        const alunosLista = alunosSnap.docs.map(d => d.data().nome);
+        setAlunosAtivos(alunosLista);
+
+        if (alunosLista.length === 0) {
+          setLoading(false);
+          return;
+        }
+
+        // 2. Busca as Atividades Entregues (Leitura Única)
+        const dataLimite = new Date();
+        dataLimite.setDate(dataLimite.getDate() - 90);
+        const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
+        const ativSnap = await getDocs(qAtividades);
+        const docs = ativSnap.docs.map(doc => doc.data());
+
         const entregas = new Set(docs.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
         let resultadoAssincrono = [];
         let resultadoSincrono = [];
 
-        const alunosOrdenados = [...alunosAtivos].sort((a, b) => a.localeCompare(b));
+        const alunosOrdenados = [...alunosLista].sort((a, b) => a.localeCompare(b));
 
-        // BUSCA ASSÍNCRONA
+        // --- BUSCA ASSÍNCRONA ---
         if (moduloAtual) {
-          const numModuloOficial = moduloAtual.modulo.match(/\d+/)?.[0];
-          const tarefasDoModulo = new Set();
-          let nomeExatoMod = moduloAtual.modulo;
-
-          docs.forEach(a => {
-            const numDoc = a.modulo.match(/\d+/)?.[0];
-            const isAssincrono = !a.modulo.toLowerCase().includes('semana');
-            if (numModuloOficial && numDoc === numModuloOficial && isAssincrono) {
-              tarefasDoModulo.add(a.tarefa);
-              nomeExatoMod = a.modulo; 
-            }
-          });
+          const nomeExatoMod = moduloAtual.modulo;
+          // A CIRURGIA: Puxa as tarefas direto do Cronograma, não das entregas!
+          const tarefasDoModulo = moduloAtual.tarefas || []; 
 
           const mapaAsync = {};
           alunosOrdenados.forEach(aluno => {
@@ -99,25 +104,19 @@ export default function Comunicacao() {
           resultadoAssincrono = Object.values(mapaAsync);
         }
 
-        // BUSCA SÍNCRONA
+        // --- BUSCA SÍNCRONA ---
         if (semanaAtual) {
-          const numSemanaOficial = semanaAtual.semana.toString();
-          const tarefasPossiveis = [semanaAtual.tema1, semanaAtual.tema2];
-          let nomeSemanaDB = `Semana ${semanaAtual.semana}`;
-          const tarefasIniciadas = new Set();
-          
-          docs.forEach(a => {
-             if (a.modulo.includes(numSemanaOficial) && a.modulo.toLowerCase().includes('semana')) {
-                 nomeSemanaDB = a.modulo;
-                 if (tarefasPossiveis.includes(a.tarefa)) tarefasIniciadas.add(a.tarefa);
-             }
-          });
+          const nomeSemanaOficial = `Semana ${semanaAtual.semana}`;
+          // A CIRURGIA: Puxa os temas direto do Cronograma Síncrono
+          const tarefasPossiveis = [];
+          if (semanaAtual.tema1) tarefasPossiveis.push(semanaAtual.tema1);
+          if (semanaAtual.tema2) tarefasPossiveis.push(semanaAtual.tema2);
 
           const mapaSync = {};
           alunosOrdenados.forEach(aluno => {
             const tarefasDevendo = [];
-            tarefasIniciadas.forEach(tar => {
-              if (!entregas.has(`${aluno}-${nomeSemanaDB}-${tar}`)) {
+            tarefasPossiveis.forEach(tar => {
+              if (!entregas.has(`${aluno}-${nomeSemanaOficial}-${tar}`)) {
                 tarefasDevendo.push(tar);
               }
             });
@@ -127,7 +126,7 @@ export default function Comunicacao() {
               const chaveCombinacao = tarefasDevendo.join('|');
               
               if (!mapaSync[chaveCombinacao]) {
-                mapaSync[chaveCombinacao] = { modulo: nomeSemanaDB, tarefas: tarefasDevendo, devedores: [] };
+                mapaSync[chaveCombinacao] = { modulo: nomeSemanaOficial, tarefas: tarefasDevendo, devedores: [] };
               }
               mapaSync[chaveCombinacao].devedores.push(aluno);
             }
@@ -136,11 +135,16 @@ export default function Comunicacao() {
         }
 
         setPendenciasAgrupadas({ assincrono: resultadoAssincrono, sincrono: resultadoSincrono });
-      }
-    });
 
-    return () => { unsubAlunos(); unsubAtividades(); };
-  }, [alunosAtivos, moduloAtual, semanaAtual]);
+      } catch (error) {
+        console.error("Erro ao buscar dados de comunicação:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchComunicacao();
+  }, []); // Trava do useEffect para rodar só uma vez
 
   const formatarListaTarefas = (lista) => {
     if (lista.length === 1) return lista[0];
@@ -148,7 +152,6 @@ export default function Comunicacao() {
     return lista.slice(0, -1).join(', ') + ' e ' + lista[lista.length - 1];
   };
 
-  // NOVO: Função para remover acentos na hora da busca
   const removerAcentos = (texto) => {
     return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   };
@@ -171,7 +174,6 @@ export default function Comunicacao() {
     setCopiado(idCopia);
     setTimeout(() => setCopiado(null), 2000);
 
-    // Transforma "Antônio" em "antonio" tanto no dicionário quanto no banco de dados
     const nomeLimpo = removerAcentos(nomeAluno.toLowerCase());
     const chavesOrdenadas = Object.keys(contatosWhatsApp).sort((a, b) => b.length - a.length);
     
@@ -230,184 +232,190 @@ export default function Comunicacao() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          
-          <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-4">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-green-600 font-bold">
+            Carregando mensagens de comunicação...
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-200">
+            <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-4">
               
-              <div>
-                <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
-                  <MessageCircle size={20} className="text-green-600"/> Grupo da Turma
-                </h3>
-                <p className="text-xs text-gray-600 mb-4">Mensagem geral gerada automaticamente com os prazos oficiais.</p>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-200">
                 
-                <div className="bg-green-50 p-3 rounded-xl text-xs text-gray-800 font-medium whitespace-pre-wrap border border-green-100 mb-3 shadow-inner">
-                  {msgGeral}
-                </div>
-
-                <button 
-                  onClick={() => handleEnviarWhatsAppGeral(msgGeral)}
-                  disabled={!itemAtivo}
-                  className="w-full bg-green-600 text-white font-bold py-2.5 rounded-xl hover:bg-green-700 transition-colors flex justify-center items-center gap-2 shadow-sm disabled:opacity-50 text-sm"
-                >
-                  {copiado === 'geral' ? <><CheckCircle2 size={16}/> Abrindo WhatsApp...</> : <><Send size={16}/> Enviar para o Grupo</>}
-                </button>
-              </div>
-
-              <hr className="my-6 border-green-100" />
-
-              <div>
-                <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
-                  <User size={20} className="text-green-600"/> Cobrança Direta
-                </h3>
-                <p className="text-xs text-gray-600 mb-4">Envie mensagens privadas personalizadas para o WhatsApp de cada aluno.</p>
-
-                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
-                  {listaIndividualZap.length === 0 ? (
-                    <div className="text-center py-6 text-green-600 font-bold bg-green-50 rounded-xl text-sm">
-                      Nenhuma pendência ativa.
-                    </div>
-                  ) : (
-                    listaIndividualZap.map((pend, idx) => {
-                      const tarefasTexto = formatarListaTarefas(pend.tarefas);
-                      const idCopia = `zap-${idx}`;
-                      
-                      const msgIndZap = gerarTextoDinamicoPrazo(diasRestantes, pend.modulo);
-
-                      return (
-                        <div key={idx} className="bg-white border border-green-100 p-3 rounded-xl hover:border-green-300 transition-colors shadow-sm flex flex-col gap-2">
-                          <div>
-                            <span className="font-bold text-gray-900 text-sm block leading-tight">{pend.aluno}</span>
-                            <span className="text-[10px] text-gray-500 line-clamp-1">Deve: {tarefasTexto}</span>
-                          </div>
-                          <button 
-                            onClick={() => handleEnviarWhatsAppIndividual(msgIndZap, pend.aluno, idCopia)}
-                            className={`w-full py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1.5 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700' : 'bg-green-50 text-green-700 hover:bg-green-600 hover:text-white'}`}
-                          >
-                            {copiado === idCopia ? <CheckCircle2 size={14}/> : <Send size={14}/>} 
-                            {copiado === idCopia ? 'Enviando...' : 'Enviar Zap'}
-                          </button>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-              <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
-                <Users size={20} className="text-blue-600"/> Envio em Lote (Plataforma do Governo)
-              </h3>
-              <p className="text-sm text-gray-600 mb-6">Alunos agrupados por tarefas pendentes (em ordem alfabética). Copie a mensagem neutra uma única vez e envie para todos do grupo.</p>
-
-              {!itemAtivo ? (
-                <div className="text-center py-10 text-gray-500 font-bold bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                  Nenhum módulo ativo no momento.
-                </div>
-              ) : pendenciasAtuais.length === 0 ? (
-                <div className="text-center py-10 text-blue-600 font-bold bg-blue-50 rounded-xl border border-blue-200">
-                  Uau! Todos os alunos já entregaram as atividades atuais.
-                </div>
-              ) : (
-                <div className="space-y-8">
+                <div>
+                  <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
+                    <MessageCircle size={20} className="text-green-600"/> Grupo da Turma
+                  </h3>
+                  <p className="text-xs text-gray-600 mb-4">Mensagem geral gerada automaticamente com os prazos oficiais.</p>
                   
-                  {multiplas.length > 0 && (
-                    <div>
-                      <h4 className="font-black text-red-800 mb-3 flex items-center gap-2 bg-red-50 px-3 py-2 rounded-lg border border-red-100">
-                        <AlertCircle size={18} className="text-red-500"/> Devem 2 ou mais tarefas
-                      </h4>
-                      <div className="grid gap-4">
-                        {multiplas.map((grupo, i) => {
-                          const idCopia = `multi-${i}`;
-                          const tarefasTexto = formatarListaTarefas(grupo.tarefas);
-                          
-                          const msgLote = gerarTextoDinamicoPrazo(diasRestantes, grupo.modulo);
-                          
-                          return (
-                            <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-red-100 hover:border-red-300 transition-colors shadow-sm">
-                              <div className="flex-1">
-                                <span className="text-xs font-black uppercase text-red-500 tracking-wider mb-2 block">
-                                  Alunos que devem: {tarefasTexto}
-                                </span>
-                                
-                                <div className="flex flex-wrap gap-1.5 mb-3">
-                                  {grupo.devedores.map((aluno, idx) => (
-                                    <span key={idx} className="bg-red-50 border border-red-100 text-red-900 text-xs font-bold px-2.5 py-1.5 rounded-md">
-                                      {aluno}
-                                    </span>
-                                  ))}
-                                </div>
-                                
-                                <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgLote}"</p>
-                              </div>
-                              <button 
-                                onClick={() => handleCopiar(msgLote, idCopia)}
-                                className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'}`}
-                              >
-                                {copiado === idCopia ? <CheckCircle2 size={18}/> : <Copy size={18}/>} 
-                                {copiado === idCopia ? 'Copiado!' : 'Copiar Texto Padrão'}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  <div className="bg-green-50 p-3 rounded-xl text-xs text-gray-800 font-medium whitespace-pre-wrap border border-green-100 mb-3 shadow-inner">
+                    {msgGeral}
+                  </div>
 
-                  {unicas.length > 0 && (
-                    <div>
-                      <h4 className="font-black text-yellow-800 mb-3 flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-lg border border-yellow-100">
-                        <AlertCircle size={18} className="text-yellow-500"/> Devem 1 única tarefa
-                      </h4>
-                      <div className="grid gap-4">
-                        {unicas.map((grupo, i) => {
-                          const idCopia = `unica-${i}`;
-                          const tarefasTexto = formatarListaTarefas(grupo.tarefas);
-                          
-                          const msgLote = gerarTextoDinamicoPrazo(diasRestantes, grupo.modulo);
-                          
-                          return (
-                            <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-yellow-100 hover:border-yellow-300 transition-colors shadow-sm">
-                              <div className="flex-1">
-                                <span className="text-xs font-black uppercase text-yellow-600 tracking-wider mb-2 block">
-                                  Alunos que devem: {tarefasTexto}
-                                </span>
-                                
-                                <div className="flex flex-wrap gap-1.5 mb-3">
-                                  {grupo.devedores.map((aluno, idx) => (
-                                    <span key={idx} className="bg-yellow-50 border border-yellow-100 text-yellow-900 text-xs font-bold px-2.5 py-1.5 rounded-md">
-                                      {aluno}
-                                    </span>
-                                  ))}
-                                </div>
-
-                                <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgLote}"</p>
-                              </div>
-                              <button 
-                                onClick={() => handleCopiar(msgLote, idCopia)}
-                                className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100'}`}
-                              >
-                                {copiado === idCopia ? <CheckCircle2 size={18}/> : <Copy size={18}/>} 
-                                {copiado === idCopia ? 'Copiado!' : 'Copiar Texto Padrão'}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
+                  <button 
+                    onClick={() => handleEnviarWhatsAppGeral(msgGeral)}
+                    disabled={!itemAtivo}
+                    className="w-full bg-green-600 text-white font-bold py-2.5 rounded-xl hover:bg-green-700 transition-colors flex justify-center items-center gap-2 shadow-sm disabled:opacity-50 text-sm"
+                  >
+                    {copiado === 'geral' ? <><CheckCircle2 size={16}/> Abrindo WhatsApp...</> : <><Send size={16}/> Enviar para o Grupo</>}
+                  </button>
                 </div>
-              )}
-            </div>
-          </div>
 
-        </div>
+                <hr className="my-6 border-green-100" />
+
+                <div>
+                  <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
+                    <User size={20} className="text-green-600"/> Cobrança Direta
+                  </h3>
+                  <p className="text-xs text-gray-600 mb-4">Envie mensagens privadas personalizadas para o WhatsApp de cada aluno.</p>
+
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                    {listaIndividualZap.length === 0 ? (
+                      <div className="text-center py-6 text-green-600 font-bold bg-green-50 rounded-xl text-sm">
+                        Nenhuma pendência ativa.
+                      </div>
+                    ) : (
+                      listaIndividualZap.map((pend, idx) => {
+                        const tarefasTexto = formatarListaTarefas(pend.tarefas);
+                        const idCopia = `zap-${idx}`;
+                        
+                        const msgIndZap = gerarTextoDinamicoPrazo(diasRestantes, pend.modulo);
+
+                        return (
+                          <div key={idx} className="bg-white border border-green-100 p-3 rounded-xl hover:border-green-300 transition-colors shadow-sm flex flex-col gap-2">
+                            <div>
+                              <span className="font-bold text-gray-900 text-sm block leading-tight">{pend.aluno}</span>
+                              <span className="text-[10px] text-gray-500 line-clamp-1">Deve: {tarefasTexto}</span>
+                            </div>
+                            <button 
+                              onClick={() => handleEnviarWhatsAppIndividual(msgIndZap, pend.aluno, idCopia)}
+                              className={`w-full py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1.5 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700' : 'bg-green-50 text-green-700 hover:bg-green-600 hover:text-white'}`}
+                            >
+                              {copiado === idCopia ? <CheckCircle2 size={14}/> : <Send size={14}/>} 
+                              {copiado === idCopia ? 'Enviando...' : 'Enviar Zap'}
+                            </button>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div className="lg:col-span-2 space-y-4">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
+                  <Users size={20} className="text-blue-600"/> Envio em Lote (Plataforma do Governo)
+                </h3>
+                <p className="text-sm text-gray-600 mb-6">Alunos agrupados por tarefas pendentes (em ordem alfabética). Copie a mensagem neutra uma única vez e envie para todos do grupo.</p>
+
+                {!itemAtivo ? (
+                  <div className="text-center py-10 text-gray-500 font-bold bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                    Nenhum módulo ativo no momento.
+                  </div>
+                ) : pendenciasAtuais.length === 0 ? (
+                  <div className="text-center py-10 text-blue-600 font-bold bg-blue-50 rounded-xl border border-blue-200">
+                    Uau! Todos os alunos já entregaram as atividades atuais.
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    
+                    {multiplas.length > 0 && (
+                      <div>
+                        <h4 className="font-black text-red-800 mb-3 flex items-center gap-2 bg-red-50 px-3 py-2 rounded-lg border border-red-100">
+                          <AlertCircle size={18} className="text-red-500"/> Devem 2 ou mais tarefas
+                        </h4>
+                        <div className="grid gap-4">
+                          {multiplas.map((grupo, i) => {
+                            const idCopia = `multi-${i}`;
+                            const tarefasTexto = formatarListaTarefas(grupo.tarefas);
+                            
+                            const msgLote = gerarTextoDinamicoPrazo(diasRestantes, grupo.modulo);
+                            
+                            return (
+                              <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-red-100 hover:border-red-300 transition-colors shadow-sm">
+                                <div className="flex-1">
+                                  <span className="text-xs font-black uppercase text-red-500 tracking-wider mb-2 block">
+                                    Alunos que devem: {tarefasTexto}
+                                  </span>
+                                  
+                                  <div className="flex flex-wrap gap-1.5 mb-3">
+                                    {grupo.devedores.map((aluno, idx) => (
+                                      <span key={idx} className="bg-red-50 border border-red-100 text-red-900 text-xs font-bold px-2.5 py-1.5 rounded-md">
+                                        {aluno}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  
+                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgLote}"</p>
+                                </div>
+                                <button 
+                                  onClick={() => handleCopiar(msgLote, idCopia)}
+                                  className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'}`}
+                                >
+                                  {copiado === idCopia ? <CheckCircle2 size={18}/> : <Copy size={18}/>} 
+                                  {copiado === idCopia ? 'Copiado!' : 'Copiar Texto Padrão'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {unicas.length > 0 && (
+                      <div>
+                        <h4 className="font-black text-yellow-800 mb-3 flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-lg border border-yellow-100">
+                          <AlertCircle size={18} className="text-yellow-500"/> Devem 1 única tarefa
+                        </h4>
+                        <div className="grid gap-4">
+                          {unicas.map((grupo, i) => {
+                            const idCopia = `unica-${i}`;
+                            const tarefasTexto = formatarListaTarefas(grupo.tarefas);
+                            
+                            const msgLote = gerarTextoDinamicoPrazo(diasRestantes, grupo.modulo);
+                            
+                            return (
+                              <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-yellow-100 hover:border-yellow-300 transition-colors shadow-sm">
+                                <div className="flex-1">
+                                  <span className="text-xs font-black uppercase text-yellow-600 tracking-wider mb-2 block">
+                                    Alunos que devem: {tarefasTexto}
+                                  </span>
+                                  
+                                  <div className="flex flex-wrap gap-1.5 mb-3">
+                                    {grupo.devedores.map((aluno, idx) => (
+                                      <span key={idx} className="bg-yellow-50 border border-yellow-100 text-yellow-900 text-xs font-bold px-2.5 py-1.5 rounded-md">
+                                        {aluno}
+                                      </span>
+                                    ))}
+                                  </div>
+
+                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgLote}"</p>
+                                </div>
+                                <button 
+                                  onClick={() => handleCopiar(msgLote, idCopia)}
+                                  className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${copiado === idCopia ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100'}`}
+                                >
+                                  {copiado === idCopia ? <CheckCircle2 size={18}/> : <Copy size={18}/>} 
+                                  {copiado === idCopia ? 'Copiado!' : 'Copiar Texto Padrão'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
       </div>
     </div>
   );
