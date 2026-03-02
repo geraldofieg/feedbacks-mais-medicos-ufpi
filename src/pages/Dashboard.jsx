@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore'; // IMPORTANTE: Adicionado 'where'
+import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -50,16 +50,39 @@ export default function Dashboard() {
       const atividadesSnap = await getDocs(qAtividades);
       const docs = atividadesSnap.docs.map(doc => doc.data());
       
-      const aprovados = docs.filter(d => !!d.dataAprovacao); // JÁ possuem dataAprovacao
-      setStats({
-        revisao: docs.filter(d => !d.dataAprovacao || d.status === 'pendente').length,
-        postar: aprovados.filter(d => !d.dataPostagem && d.status !== 'postado').length,
-        finalizados: aprovados.filter(d => !!d.dataPostagem || d.status === 'postado').length
+      // --- INÍCIO DA CORREÇÃO MANUAL DO ARQUITETO ---
+      let contRevisao = 0;
+      let contPostar = 0;
+      let contFinalizado = 0;
+      const atividadesProcessadas = []; // Para a IA
+
+      docs.forEach(d => {
+        // Regra blindada que aceita tanto o padrão novo (datas) quanto o antigo (boolean/status)
+        const isFinalizado = !!d.dataPostagem || d.postado === true || d.status === 'postado';
+        const isAprovado = !!d.dataAprovacao || d.status === 'aprovado';
+
+        if (isFinalizado) {
+          contFinalizado++;
+          atividadesProcessadas.push(d); // Vai pro termômetro
+        } else if (isAprovado) {
+          contPostar++;
+          atividadesProcessadas.push(d); // Vai pro termômetro
+        } else {
+          contRevisao++;
+        }
       });
 
-      const originais = aprovados.filter(d => d.feedbackFinal?.trim() === d.feedbackSugerido?.trim()).length;
-      const taxa = aprovados.length > 0 ? Math.round((originais / aprovados.length) * 100) : 0;
-      setIaStats({ total: aprovados.length, originais, taxa });
+      setStats({
+        revisao: contRevisao,
+        postar: contPostar,
+        finalizados: contFinalizado
+      });
+
+      // Recalcula o Termômetro da IA apenas com os aprovados/finalizados
+      const originais = atividadesProcessadas.filter(d => d.feedbackFinal?.trim() === d.feedbackSugerido?.trim()).length;
+      const taxa = atividadesProcessadas.length > 0 ? Math.round((originais / atividadesProcessadas.length) * 100) : 0;
+      setIaStats({ total: atividadesProcessadas.length, originais, taxa });
+      // --- FIM DA CORREÇÃO MANUAL DO ARQUITETO ---
 
       if (alunosAtuais.length > 0) {
         const validAtiv = docs.filter(a => isModuloValido(a.modulo));
@@ -238,4 +261,4 @@ export default function Dashboard() {
       </main>
     </div>
   );
-}
+          }
