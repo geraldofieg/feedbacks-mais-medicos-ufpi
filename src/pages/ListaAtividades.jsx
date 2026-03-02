@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ArrowLeft, Clock, CheckCircle, ChevronRight, CheckCheck, Send, CalendarDays } from 'lucide-react';
 
@@ -16,38 +16,45 @@ export default function ListaAtividades() {
   };
 
   useEffect(() => {
-    const statusBanco = status === 'pendente' ? 'pendente' : 'aprovado';
-
-    const dataLimite = new Date();
-    dataLimite.setDate(dataLimite.getDate() - 90);
-
-    const q = query(
-      collection(db, 'atividades'),
-      where('status', '==', statusBanco),
-      where('dataCriacao', '>=', dataLimite)
-    );
-
-    const unsub = onSnapshot(q, (snap) => {
-      let lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const fetchAtividades = async () => {
+      setLoading(true);
       
+      let statusBanco = 'pendente';
       if (status === 'falta-postar') {
-        lista = lista.filter(atv => !atv.postado); 
+        statusBanco = 'aprovado';
       } else if (status === 'finalizados') {
-        lista = lista.filter(atv => atv.postado === true); 
+        statusBanco = 'postado';
       }
-      
-      // Ordena de forma inteligente: pela data de postagem se estiver finalizado, ou pela aprovação
-      lista.sort((a, b) => {
-        const tempoA = a.dataPostagem?.seconds || a.dataAprovacao?.seconds || a.dataCriacao?.seconds || 0;
-        const tempoB = b.dataPostagem?.seconds || b.dataAprovacao?.seconds || b.dataCriacao?.seconds || 0;
-        return tempoB - tempoA;
-      });
-      
-      setAtividades(lista);
-      setLoading(false);
-    }, (error) => { console.error(error); setLoading(false); });
 
-    return () => unsub();
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - 90);
+
+      const q = query(
+        collection(db, 'atividades'),
+        where('status', '==', statusBanco),
+        where('dataCriacao', '>=', dataLimite)
+      );
+
+      try {
+        const snap = await getDocs(q);
+        let lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Ordena de forma inteligente: pela data de postagem se estiver finalizado, ou pela aprovação
+        lista.sort((a, b) => {
+          const tempoA = a.dataPostagem?.seconds || a.dataAprovacao?.seconds || a.dataCriacao?.seconds || 0;
+          const tempoB = b.dataPostagem?.seconds || b.dataAprovacao?.seconds || b.dataCriacao?.seconds || 0;
+          return tempoB - tempoA;
+        });
+
+        setAtividades(lista);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAtividades();
   }, [status]);
 
   return (

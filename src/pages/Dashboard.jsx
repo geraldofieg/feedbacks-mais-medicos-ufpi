@@ -53,8 +53,8 @@ export default function Dashboard() {
       const aprovados = docs.filter(d => d.status === 'aprovado');
       setStats({
         revisao: docs.filter(d => d.status === 'pendente').length,
-        postar: aprovados.filter(d => !d.postado).length,
-        finalizados: aprovados.filter(d => d.postado === true).length
+        postar: aprovados.length,
+        finalizados: docs.filter(d => d.status === 'postado').length
       });
 
       const originais = aprovados.filter(d => d.feedbackFinal?.trim() === d.feedbackSugerido?.trim()).length;
