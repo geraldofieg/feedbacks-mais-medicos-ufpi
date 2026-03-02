@@ -8,6 +8,22 @@ import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestant
 // ==========================================
 // 📖 DICIONÁRIO DE CONTATOS (WHATSAPP)
 // ==========================================
+const gerarTextoDinamicoPrazo = (diasRestantes, nomeModulo) => {
+  if (diasRestantes >= 20) {
+    return `Olá! 🌟 Passando para avisar que o ${nomeModulo} já está em andamento. Faltam ${diasRestantes} dias para o encerramento, então temos um bom tempo. Quem já quiser ir adiantando as atividades, desejo excelentes estudos!`;
+  }
+  if (diasRestantes >= 8) {
+    return `Olá, pessoal! Nosso lembrete de acompanhamento sobre o ${nomeModulo}. O cronograma está avançando e entramos na fase intermediária da nossa atividade. Faltam ${diasRestantes} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia!`;
+  }
+  if (diasRestantes >= 1) {
+    return `Olá, colegas! 🚨 Passando para alertar que entramos na reta final do ${nomeModulo}. Faltam apenas ${diasRestantes} dias para o encerramento! Solicitamos a regularização das tarefas pendentes o quanto antes para que ninguém fique prejudicado na nota oficial.`;
+  }
+  return `Olá! O prazo oficial para as atividades do ${nomeModulo} foi encerrado. Notei pendências no sistema. Por favor, regularize a sua entrega imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
+};
+
+// ==========================================
+// 📖 DICIONÁRIO DE CONTATOS (WHATSAPP)
+// ==========================================
 const contatosWhatsApp = {
   "Guilherme": "556291203480",
   "Antônio Gabriel": "556499622132",
@@ -126,23 +142,10 @@ export default function Comunicacao() {
     return () => { unsubAlunos(); unsubAtividades(); };
   }, [alunosAtivos, moduloAtual, semanaAtual]);
 
-  const getMensagemDia = () => {
-    const dia = new Date().getDay(); 
-    if (dia === 5 || dia === 6) return "aproveite o final de semana para colocar em dia.";
-    if (dia === 0 || dia === 1 || dia === 2) return "desejo uma semana produtiva para colocar tudo em dia.";
-    return "aproveite estes dias para colocar tudo em dia.";
-  };
-
   const formatarListaTarefas = (lista) => {
     if (lista.length === 1) return lista[0];
     if (lista.length === 2) return `${lista[0]} e ${lista[1]}`;
     return lista.slice(0, -1).join(', ') + ' e ' + lista[lista.length - 1];
-  };
-
-  const formatarPrimeiroNome = (nomeCompleto) => {
-    if (!nomeCompleto) return '';
-    const primeiroNome = nomeCompleto.trim().split(/\s+/)[0];
-    return primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1).toLowerCase();
   };
 
   // NOVO: Função para remover acentos na hora da busca
@@ -189,7 +192,7 @@ export default function Comunicacao() {
   const gerarMensagemGeral = (itemAtivo, diasRestantes, tipo) => {
     if (!itemAtivo) return "Não há atividades oficiais em andamento neste momento.";
     const nome = tipo === 'assincrono' ? itemAtivo.modulo : `Semana ${itemAtivo.semana}`;
-    return `Olá, colegas! 🌟 Passando para lembrar que estamos na reta final de ${nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Quem ainda tem atividades pendentes, ${getMensagemDia()} Solicitamos a regularização da tarefa, para que você não fique prejudicado em sua nota. Qualquer dúvida, estou à disposição.`;
+    return gerarTextoDinamicoPrazo(diasRestantes, nome);
   };
 
   const pendenciasAtuais = pendenciasAgrupadas[abaAtiva] || [];
@@ -267,11 +270,10 @@ export default function Comunicacao() {
                     </div>
                   ) : (
                     listaIndividualZap.map((pend, idx) => {
-                      const primeiroNome = formatarPrimeiroNome(pend.aluno);
                       const tarefasTexto = formatarListaTarefas(pend.tarefas);
                       const idCopia = `zap-${idx}`;
                       
-                      const msgIndZap = `Olá ${primeiroNome}, tudo bem? 🌟 Passando para lembrar que estamos na reta final de ${pend.modulo}. Vi aqui no sistema que ainda consta pendência nas tarefas: *${tarefasTexto}*. O prazo oficial encerra em ${diasRestantes} dias. ${getMensagemDia()} Qualquer dúvida, estou à disposição!`;
+                      const msgIndZap = gerarTextoDinamicoPrazo(diasRestantes, pend.modulo);
 
                       return (
                         <div key={idx} className="bg-white border border-green-100 p-3 rounded-xl hover:border-green-300 transition-colors shadow-sm flex flex-col gap-2">
@@ -322,10 +324,9 @@ export default function Comunicacao() {
                       <div className="grid gap-4">
                         {multiplas.map((grupo, i) => {
                           const idCopia = `multi-${i}`;
-                          const prefixo = grupo.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
                           const tarefasTexto = formatarListaTarefas(grupo.tarefas);
                           
-                          const msgLote = `Olá, estou acompanhando aqui o nosso sistema e consta a pendência das tarefas '${tarefasTexto}' referente ${prefixo} ${grupo.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização das atividades, para que você não fique prejudicado(a) em sua nota. Qualquer dúvida, estou à disposição.`;
+                          const msgLote = gerarTextoDinamicoPrazo(diasRestantes, grupo.modulo);
                           
                           return (
                             <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-red-100 hover:border-red-300 transition-colors shadow-sm">
@@ -366,10 +367,9 @@ export default function Comunicacao() {
                       <div className="grid gap-4">
                         {unicas.map((grupo, i) => {
                           const idCopia = `unica-${i}`;
-                          const prefixo = grupo.modulo.toLowerCase().includes('semana') ? 'à' : 'ao';
                           const tarefasTexto = formatarListaTarefas(grupo.tarefas);
                           
-                          const msgLote = `Olá, estou acompanhando aqui o nosso sistema e consta a pendência da tarefa '${tarefasTexto}' referente ${prefixo} ${grupo.modulo}. O prazo oficial encerra em ${diasRestantes} dias. Solicitamos a regularização da tarefa, para que você não fique prejudicado(a) em sua nota. Qualquer dúvida, estou à disposição.`;
+                          const msgLote = gerarTextoDinamicoPrazo(diasRestantes, grupo.modulo);
                           
                           return (
                             <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-yellow-100 hover:border-yellow-300 transition-colors shadow-sm">
