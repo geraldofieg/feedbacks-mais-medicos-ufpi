@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore'; // IMPORTANTE: Adicionado 'where'
+import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore'; // IMPORTANTE: Adicionado 'where'
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -35,71 +35,66 @@ export default function Dashboard() {
   const semanaAtual = cronogramaSincrono.find(s => getStatusData(s.inicio, s.fim) === 'atual');
 
   useEffect(() => {
-    // 1. Ouvinte de Alunos
-    const unsubAlunos = onSnapshot(collection(db, 'alunos'), (snap) => {
-      setAlunosAtivos(snap.docs.map(d => d.data().nome));
-    });
+    async function fetchData() {
+      // 1. Ouvinte de Alunos (substituido por getDocs)
+      const alunosSnap = await getDocs(collection(db, 'alunos'));
+      const alunosAtuais = alunosSnap.docs.map(d => d.data().nome);
+      setAlunosAtivos(alunosAtuais);
 
-    // 2. TRAVA DE HISTÓRICO: Busca apenas atividades dos últimos 90 dias
-    // Isso impede que milhares de atividades antigas sejam baixadas toda vez, sugando a cota gratuita
-    const dataLimite = new Date();
-    dataLimite.setDate(dataLimite.getDate() - 90);
+      // 2. TRAVA DE HISTÓRICO: Busca apenas atividades dos últimos 90 dias
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - 90);
 
-    const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
+      const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
 
-    const unsubAtividades = onSnapshot(qAtividades, (snap) => {
-      const docs = snap.docs.map(doc => doc.data());
+      const atividadesSnap = await getDocs(qAtividades);
+      const docs = atividadesSnap.docs.map(doc => doc.data());
       
-      const aprovados = docs.filter(d => d.status === 'aprovado');
+      const aprovados = docs.filter(d => !!d.dataAprovacao); // JÁ possuem dataAprovacao
       setStats({
-        revisao: docs.filter(d => d.status === 'pendente').length,
-        postar: aprovados.filter(d => !d.postado).length,
-        finalizados: aprovados.filter(d => d.postado === true).length
+        revisao: docs.filter(d => !d.dataAprovacao || d.status === 'pendente').length,
+        postar: aprovados.filter(d => !d.dataPostagem).length,
+        finalizados: aprovados.filter(d => !!d.dataPostagem).length
       });
 
       const originais = aprovados.filter(d => d.feedbackFinal?.trim() === d.feedbackSugerido?.trim()).length;
       const taxa = aprovados.length > 0 ? Math.round((originais / aprovados.length) * 100) : 0;
       setIaStats({ total: aprovados.length, originais, taxa });
 
-      // Atualiza pendências apenas com os alunos que já carregaram no estado (usando prev state seria ideal, mas assim funciona com a lógica atual sem causar loops)
-      setAlunosAtivos((alunosAtuais) => {
-        if (alunosAtuais.length > 0) {
-          const validAtiv = docs.filter(a => isModuloValido(a.modulo));
-          const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
-          
-          const modulosMap = {};
-          validAtiv.forEach(a => {
-            if(!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
-            if(a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
-            modulosMap[a.modulo].tarefas.add(a.tarefa);
-          });
+      if (alunosAtuais.length > 0) {
+        const validAtiv = docs.filter(a => isModuloValido(a.modulo));
+        const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
 
-          const listaMod = Object.values(modulosMap).sort((a,b) => b.data - a.data);
-          
-          const resultado = [];
-          listaMod.forEach(mod => {
-            mod.tarefas.forEach(tar => {
-              const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
-              if(devedores.length > 0) resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
-            });
-          });
-          setPendenciasGerais(resultado);
-        }
-        return alunosAtuais;
-      });
-    });
+        const modulosMap = {};
+        validAtiv.forEach(a => {
+          if(!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
+          if(a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
+          modulosMap[a.modulo].tarefas.add(a.tarefa);
+        });
 
-    // 3. Ouvinte da Última Data
-    const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
-    const unsubUltima = onSnapshot(qUltima, (snap) => {
-      if (!snap.empty) {
-        const data = snap.docs.data().dataCriacao?.toDate();
+        const listaMod = Object.values(modulosMap).sort((a,b) => b.data - a.data);
+
+        const resultado = [];
+        listaMod.forEach(mod => {
+          mod.tarefas.forEach(tar => {
+            const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
+            if(devedores.length > 0) resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
+          });
+        });
+        setPendenciasGerais(resultado);
+      }
+
+      // 3. Ouvinte da Última Data (substituido por getDocs)
+      const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
+      const ultimaSnap = await getDocs(qUltima);
+      if (!ultimaSnap.empty) {
+        const data = ultimaSnap.docs[0].data().dataCriacao?.toDate();
         if (data) setUltimaData(data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
       }
-    });
+    }
 
-    return () => { unsubAlunos(); unsubAtividades(); unsubUltima(); };
-  }, []); // TRAVA DE LOOP: Dependência vazia garante que o useEffect rode só 1 vez e não recrie ouvintes
+    fetchData();
+  }, []); // TRAVA DE LOOP: Dependência vazia garante que o useEffect rode só 1 vez
 
   async function handleLogout() { try { await logout(); navigate('/login'); } catch (e) { console.error(e); } }
 

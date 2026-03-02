@@ -134,7 +134,7 @@ export default function RevisarAtividade() {
     if (window.confirm("Desfazer postagem? A atividade voltará para a lista de 'Falta Postar'.")) {
       setSalvandoAcao(true);
       try { 
-        await updateDoc(doc(db, 'atividades', id), { postado: false }); 
+        await updateDoc(doc(db, 'atividades', id), { postado: false, dataPostagem: null });
         navigate('/lista/falta-postar'); 
       } catch (error) { 
         console.error(error);
@@ -150,7 +150,7 @@ export default function RevisarAtividade() {
     if (window.confirm("Devolver para Revisão? A atividade voltará para a caixa de 'Aguardando Revisão'.")) {
       setSalvandoAcao(true);
       try { 
-        await updateDoc(doc(db, 'atividades', id), { status: 'pendente', postado: false }); 
+        await updateDoc(doc(db, 'atividades', id), { status: 'pendente', postado: false, dataAprovacao: null, dataPostagem: null });
         navigate('/lista/pendente'); 
       } catch (error) { 
         console.error(error);
@@ -170,7 +170,11 @@ export default function RevisarAtividade() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div></div>;
   if (!atividade) return <div className="text-center p-10 font-bold text-gray-500">Esta atividade não foi encontrada ou já foi processada.</div>;
 
-  const linkVoltar = atividade.status === 'pendente' ? '/lista/pendente' : !atividade.postado ? (isAdmin ? '/lista/falta-postar' : '/lista/finalizados') : '/lista/finalizados';
+  const isPendente = !atividade.dataAprovacao || atividade.status === 'pendente';
+  const isFaltaPostar = !!atividade.dataAprovacao && !atividade.dataPostagem;
+  const isFinalizado = !!atividade.dataPostagem;
+
+  const linkVoltar = isPendente ? '/lista/pendente' : isFaltaPostar ? (isAdmin ? '/lista/falta-postar' : '/lista/finalizados') : '/lista/finalizados';
   const foiEditado = atividade.feedbackFinal?.trim() !== atividade.feedbackSugerido?.trim();
 
   return (
@@ -179,10 +183,10 @@ export default function RevisarAtividade() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <Link to={linkVoltar} className="text-gray-500 hover:text-blue-600"><ArrowLeft size={24} /></Link>
-            <h2 className="text-2xl font-black text-gray-800">{atividade.status === 'pendente' ? 'Revisão de Feedback' : !atividade.postado ? 'Aprovado' : 'Feedback Concluído'}</h2>
+            <h2 className="text-2xl font-black text-gray-800">{isPendente ? 'Revisão de Feedback' : isFaltaPostar ? 'Aprovado' : 'Feedback Concluído'}</h2>
           </div>
-          <span className={`px-3 py-1 rounded-full text-sm font-bold border uppercase ${atividade.status === 'pendente' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : !atividade.postado ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-green-100 text-green-800 border-green-200'}`}>
-            {atividade.status === 'pendente' ? 'Pendente' : !atividade.postado ? 'Aprovado' : 'Finalizado'}
+          <span className={`px-3 py-1 rounded-full text-sm font-bold border uppercase ${isPendente ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : isFaltaPostar ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-green-100 text-green-800 border-green-200'}`}>
+            {isPendente ? 'Pendente' : isFaltaPostar ? 'Aprovado' : 'Finalizado'}
           </span>
         </div>
 
@@ -213,7 +217,7 @@ export default function RevisarAtividade() {
 
           <div className="lg:col-span-1 space-y-4">
             
-            {atividade.status === 'pendente' ? (
+            {isPendente ? (
               <div className="bg-blue-600 p-6 rounded-2xl shadow-md text-white">
                 <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-blue-500 pb-2"><CheckCircle size={20} />3. Aprovar Feedback</h3>
                 <textarea rows="8" className="w-full p-4 rounded-xl text-gray-800 font-medium mb-4 shadow-inner" value={feedbackEditado} onChange={(e) => setFeedbackEditado(e.target.value)}></textarea>
@@ -238,13 +242,13 @@ export default function RevisarAtividade() {
                   <Copy size={24} /> {copiado ? 'Texto Copiado!' : 'Copiar Feedback'}
                 </button>
 
-                {isAdmin && !atividade.postado && (
+                {isAdmin && isFaltaPostar && (
                   <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-blue-600 text-white font-black text-md py-4 rounded-xl hover:bg-blue-700 transition-all border border-blue-500 flex justify-center items-center gap-2">
                     {marcandoPostado ? 'Salvando...' : <><Send size={20}/> Marcar como Postado</>}
                   </button>
                 )}
                 
-                {atividade.postado && (
+                {isFinalizado && (
                   <div className="w-full bg-green-900 text-green-100 font-bold text-sm py-3 rounded-xl flex justify-center items-center gap-2 border border-green-700">
                     <CheckCheck size={18} /> Postado no Mais Médicos
                   </div>
@@ -254,7 +258,7 @@ export default function RevisarAtividade() {
                   {atividade.dataAprovacao && (
                     <p className="flex items-center gap-2"><CalendarDays size={14}/> Revisado por Patrícia: {formatarData(atividade.dataAprovacao)}</p>
                   )}
-                  {atividade.postado && atividade.dataPostagem && (
+                  {isFinalizado && (
                     <p className="flex items-center gap-2 text-gray-300"><CalendarDays size={14}/> Postado por Geraldo: {formatarData(atividade.dataPostagem)}</p>
                   )}
                 </div>
@@ -265,13 +269,13 @@ export default function RevisarAtividade() {
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 text-center border-b border-gray-100 pb-2">Gerenciamento Gestor</h4>
                 
-                {atividade.postado && (
+                {isFinalizado && (
                   <button onClick={handleReverterPostagem} disabled={salvandoAcao} className="w-full flex items-center justify-center gap-2 text-orange-600 hover:bg-orange-50 py-3 rounded-xl font-bold transition-colors text-sm disabled:opacity-50">
                     <RotateCcw size={18} /> Desfazer Postagem
                   </button>
                 )}
                 
-                {atividade.status !== 'pendente' && (
+                {!isPendente && (
                   <button onClick={handleReverterRevisao} disabled={salvandoAcao} className="w-full flex items-center justify-center gap-2 text-yellow-600 hover:bg-yellow-50 py-3 rounded-xl font-bold transition-colors text-sm disabled:opacity-50">
                     <RotateCcw size={18} /> Devolver p/ Revisão
                   </button>
