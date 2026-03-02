@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, getDocs, limit } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, getDocs, limit, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import { ArrowLeft, Save, UploadCloud, CheckCircle } from 'lucide-react';
@@ -38,11 +38,32 @@ export default function NovaAtividade() {
   useEffect(() => {
     async function buscarEnunciadoAnterior() {
       if (modulo && tarefa) {
+        // Primeiro, tentar buscar o enunciado padrão salvo diretamente na Tarefa
+        const tarefaObj = tarefasList.find(t => t.nome === tarefa);
+
+        if (tarefaObj) {
+          const tarefaRef = doc(db, 'tarefas', tarefaObj.id);
+          const tarefaSnap = await getDoc(tarefaRef);
+
+          if (tarefaSnap.exists()) {
+            const dadosTarefa = tarefaSnap.data();
+            if (dadosTarefa.enunciadoPadrao || dadosTarefa.urlEnunciadoPadrao) {
+              if (dadosTarefa.enunciadoPadrao) setEnunciado(dadosTarefa.enunciadoPadrao);
+              if (dadosTarefa.urlEnunciadoPadrao) setUrlEnunciadoExistente(dadosTarefa.urlEnunciadoPadrao);
+
+              setAutofillAviso(true);
+              setTimeout(() => setAutofillAviso(false), 5000);
+              return; // Achou na tarefa, não precisa buscar nas atividades
+            }
+          }
+        }
+
+        // Fallback: se não achar na tarefa, busca da última atividade
         const q = query(collection(db, 'atividades'), where('modulo', '==', modulo), where('tarefa', '==', tarefa), limit(1));
         const snap = await getDocs(q);
         
         if (!snap.empty) {
-          const dadosAnteriores = snap.docs.data();
+          const dadosAnteriores = snap.docs[0].data();
           if (dadosAnteriores.enunciado) setEnunciado(dadosAnteriores.enunciado);
           if (dadosAnteriores.urlEnunciado) setUrlEnunciadoExistente(dadosAnteriores.urlEnunciado);
           
@@ -57,7 +78,7 @@ export default function NovaAtividade() {
       }
     }
     buscarEnunciadoAnterior();
-  }, [modulo, tarefa]);
+  }, [modulo, tarefa, tarefasList]);
 
   const uploadArquivo = async (arquivo, pasta) => {
     if (!arquivo) return null;
@@ -66,6 +87,45 @@ export default function NovaAtividade() {
     const url = await getDownloadURL(arquivoRef);
     return url;
   };
+
+  async function handleSalvarEnunciado() {
+    if (loading) return;
+    if (!modulo || !tarefa) {
+      setMensagem('Preencha o módulo e a tarefa para salvar o enunciado.');
+      return;
+    }
+
+    setLoading(true);
+    setMensagem('Salvando enunciado na tarefa...');
+
+    try {
+      const tarefaObj = tarefasList.find(t => t.nome === tarefa);
+      if (!tarefaObj) {
+        setMensagem('Tarefa não encontrada.');
+        setLoading(false);
+        return;
+      }
+
+      let urlEnunciadoFinal = urlEnunciadoExistente;
+      if (arquivoEnunciado && arquivoEnunciado.length > 0) {
+        urlEnunciadoFinal = await uploadArquivo(arquivoEnunciado[0], 'enunciados');
+      }
+
+      const tarefaRef = doc(db, 'tarefas', tarefaObj.id);
+      await updateDoc(tarefaRef, {
+        enunciadoPadrao: enunciado || '',
+        urlEnunciadoPadrao: urlEnunciadoFinal || null
+      });
+
+      setMensagem('Enunciado salvo na tarefa com sucesso!');
+      setTimeout(() => setMensagem(''), 3000);
+    } catch (error) {
+      console.error(error);
+      setMensagem('Erro ao salvar enunciado.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -192,7 +252,10 @@ export default function NovaAtividade() {
             <textarea required rows="6" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 whitespace-pre-wrap" value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Escreva o feedback sugerido..."></textarea>
           </div>
 
-          <div className="pt-6 border-t border-gray-100 flex justify-end">
+          <div className="pt-6 border-t border-gray-100 flex flex-col sm:flex-row justify-end gap-4">
+            <button type="button" onClick={handleSalvarEnunciado} disabled={loading} className="w-full md:w-auto flex items-center justify-center gap-2 bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-bold hover:bg-gray-300 transition-colors disabled:opacity-50 text-base">
+              Salvar enunciado da tarefa
+            </button>
             <button type="submit" disabled={loading} className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 text-lg">
               <Save size={24} /> {loading ? 'Salvando...' : 'Salvar Atividade'}
             </button>
