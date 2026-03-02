@@ -34,9 +34,9 @@ export default function ListaAtividades() {
         if (status === 'pendente') {
           lista = lista.filter(atv => !atv.dataAprovacao || atv.status === 'pendente');
         } else if (status === 'falta-postar') {
-          lista = lista.filter(atv => !!atv.dataAprovacao && !atv.dataPostagem);
+          lista = lista.filter(atv => !!atv.dataAprovacao && !atv.dataPostagem && atv.status !== 'postado');
         } else if (status === 'finalizados') {
-          lista = lista.filter(atv => !!atv.dataPostagem);
+          lista = lista.filter(atv => !!atv.dataPostagem || atv.status === 'postado');
         }
 
         // Ordena de forma inteligente: pela data de postagem se estiver finalizado, ou pela aprovação

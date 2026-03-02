@@ -171,8 +171,8 @@ export default function RevisarAtividade() {
   if (!atividade) return <div className="text-center p-10 font-bold text-gray-500">Esta atividade não foi encontrada ou já foi processada.</div>;
 
   const isPendente = !atividade.dataAprovacao || atividade.status === 'pendente';
-  const isFaltaPostar = !!atividade.dataAprovacao && !atividade.dataPostagem;
-  const isFinalizado = !!atividade.dataPostagem;
+  const isFaltaPostar = !!atividade.dataAprovacao && !atividade.dataPostagem && atividade.status !== 'postado';
+  const isFinalizado = !!atividade.dataPostagem || atividade.status === 'postado';
 
   const linkVoltar = isPendente ? '/lista/pendente' : isFaltaPostar ? (isAdmin ? '/lista/falta-postar' : '/lista/finalizados') : '/lista/finalizados';
   const foiEditado = atividade.feedbackFinal?.trim() !== atividade.feedbackSugerido?.trim();
@@ -258,7 +258,7 @@ export default function RevisarAtividade() {
                   {atividade.dataAprovacao && (
                     <p className="flex items-center gap-2"><CalendarDays size={14}/> Revisado por Patrícia: {formatarData(atividade.dataAprovacao)}</p>
                   )}
-                  {isFinalizado && (
+                  {isFinalizado && atividade.dataPostagem && (
                     <p className="flex items-center gap-2 text-gray-300"><CalendarDays size={14}/> Postado por Geraldo: {formatarData(atividade.dataPostagem)}</p>
                   )}
                 </div>
