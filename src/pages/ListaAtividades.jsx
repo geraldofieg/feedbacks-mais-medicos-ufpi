@@ -31,13 +31,22 @@ export default function ListaAtividades() {
         const snap = await getDocs(q);
         let lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        if (status === 'pendente') {
-          lista = lista.filter(atv => !atv.dataAprovacao || atv.status === 'pendente');
-        } else if (status === 'falta-postar') {
-          lista = lista.filter(atv => !!atv.dataAprovacao && !atv.dataPostagem && atv.status !== 'postado');
-        } else if (status === 'finalizados') {
-          lista = lista.filter(atv => !!atv.dataPostagem || atv.status === 'postado');
-        }
+        // --- INÍCIO DA CORREÇÃO MANUAL DO ARQUITETO ---
+        // Lógica de funil blindado (idêntica ao Dashboard)
+        lista = lista.filter(atv => {
+          const isFinalizado = !!atv.dataPostagem || atv.postado === true || atv.status === 'postado';
+          const isAprovado = !!atv.dataAprovacao || atv.status === 'aprovado';
+
+          if (status === 'finalizados') {
+            return isFinalizado;
+          } else if (status === 'falta-postar') {
+            return !isFinalizado && isAprovado;
+          } else if (status === 'pendente') {
+            return !isFinalizado && !isAprovado;
+          }
+          return false;
+        });
+        // --- FIM DA CORREÇÃO MANUAL DO ARQUITETO ---
 
         // Ordena de forma inteligente: pela data de postagem se estiver finalizado, ou pela aprovação
         lista.sort((a, b) => {
