@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore'; // REMOVIDO onSnapshot, ADD getDocs
 import { db } from '../services/firebase';
 import { ArrowLeft, AlertTriangle, User, Calendar } from 'lucide-react';
+import { cronogramaAssincrono } from '../data/cronogramaData'; // IMPORTANDO O CALENDÁRIO OFICIAL
 
-// A REGRA DE OURO
+// A REGRA DE OURO MANTIDA
 const isModuloValido = (nome) => {
   if (!nome) return false;
   const lower = nome.toLowerCase();
@@ -17,61 +18,72 @@ const isModuloValido = (nome) => {
 export default function Pendencias() {
   const [pendencias, setPendencias] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [alunosAtivos, setAlunosAtivos] = useState([]);
-  const [atividadesBrutas, setAtividadesBrutas] = useState([]);
 
   useEffect(() => {
-    const unsubAlunos = onSnapshot(collection(db, 'alunos'), (snap) => {
-      setAlunosAtivos(snap.docs.map(doc => doc.data().nome));
-    });
+    async function fetchPendencias() {
+      setLoading(true);
 
-    const dataLimite = new Date();
-    dataLimite.setDate(dataLimite.getDate() - 90);
-    const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
+      try {
+        // 1. Busca os Alunos (Leitura Única e Barata)
+        const alunosSnap = await getDocs(collection(db, 'alunos'));
+        const alunosAtivos = alunosSnap.docs.map(doc => doc.data().nome);
 
-    const unsubAtividades = onSnapshot(qAtividades, (snap) => {
-      setAtividadesBrutas(snap.docs.map(doc => doc.data()));
-    });
+        if (alunosAtivos.length === 0) {
+          setLoading(false);
+          return;
+        }
 
-    return () => { unsubAlunos(); unsubAtividades(); };
-  }, []);
+        // 2. Busca as Atividades Entregues (Leitura Única)
+        const dataLimite = new Date();
+        dataLimite.setDate(dataLimite.getDate() - 90);
+        const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
+        
+        const atividadesSnap = await getDocs(qAtividades);
+        const atividadesBrutas = atividadesSnap.docs.map(doc => doc.data());
 
-  useEffect(() => {
-    if (!alunosAtivos.length || !atividadesBrutas.length) {
-      if (atividadesBrutas.length === 0) {
-        setLoading(false); // Can be empty if no activities exist
+        // 3. Filtra apenas os módulos válidos (7 em diante) e cria a "lista de presença"
+        const validAtiv = atividadesBrutas.filter(a => isModuloValido(a.modulo));
+        const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
+
+        // 4. A CIRURGIA: Cria o mapa de tarefas a partir do CRONOGRAMA, e não das entregas!
+        const modulosMap = {};
+        const moduloCount = 1; // Só pra criar um "tempo falso" para ordenação decrescente
+        let ordemModulos = cronogramaAssincrono.length;
+
+        cronogramaAssincrono.forEach(item => {
+          if (isModuloValido(item.modulo)) {
+             modulosMap[item.modulo] = {
+               nome: item.modulo,
+               data: ordemModulos--, // Garante que o Módulo 8 (fim da lista) tenha peso maior
+               tarefas: new Set(item.tarefas) // Puxa TODAS as tarefas oficiais, mesmo as vazias
+             };
+          }
+        });
+
+        // Ordena módulos do maior (Módulo 8) para o menor (Módulo 7)
+        const listaMod = Object.values(modulosMap).sort((a, b) => b.data - a.data);
+
+        // 5. Cruza os alunos com o cronograma oficial
+        const resultado = [];
+        listaMod.forEach(mod => {
+          mod.tarefas.forEach(tar => {
+            const devedores = alunosAtivos.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
+            if (devedores.length > 0) {
+              resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
+            }
+          });
+        });
+
+        setPendencias(resultado);
+      } catch (error) {
+        console.error("Erro ao buscar pendências:", error);
+      } finally {
+        setLoading(false);
       }
-      return;
     }
 
-    // Filtra apenas os módulos válidos (7 em diante)
-    const validAtiv = atividadesBrutas.filter(a => isModuloValido(a.modulo));
-    const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
-
-    // Agrupa módulos e acha a data mais recente de cada um
-    const modulosMap = {};
-    validAtiv.forEach(a => {
-      if (!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
-      if (a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
-      modulosMap[a.modulo].tarefas.add(a.tarefa);
-    });
-
-    // Ordena módulos do mais recente para o mais antigo
-    const listaMod = Object.values(modulosMap).sort((a, b) => b.data - a.data);
-
-    const resultado = [];
-    listaMod.forEach(mod => {
-      mod.tarefas.forEach(tar => {
-        const devedores = alunosAtivos.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
-        if (devedores.length > 0) {
-          resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
-        }
-      });
-    });
-
-    setPendencias(resultado);
-    setLoading(false);
-  }, [alunosAtivos, atividadesBrutas]);
+    fetchPendencias();
+  }, []); // Trava do useEffect para rodar apenas uma vez na montagem
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
