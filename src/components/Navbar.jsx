@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Building2, Users } from 'lucide-react';
+import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Building2, Users, Settings } from 'lucide-react';
 
 export default function Navbar() {
   const { currentUser, logout } = useAuth();
@@ -64,12 +64,15 @@ export default function Navbar() {
     }
   }
 
+  // Lista atualizada com os novos atalhos para SaaS
   const navLinks = [
     { path: '/', icon: <Home size={18} />, label: 'Início' },
+    { path: '/alunos', icon: <Users size={18} />, label: 'Alunos' },
     { path: '/cronograma', icon: <CalendarRange size={18} />, label: 'Datas' },
-    { path: '/comunicacao', icon: <Megaphone size={18} />, label: 'Comunicação' },
+    { path: '/comunicacao', icon: <Megaphone size={18} />, label: 'Avisos' },
     { path: '/pendencias', icon: <AlertTriangle size={18} />, label: 'Pendências' },
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
+    { path: '/configuracoes', icon: <Settings size={18} />, label: 'Ajustes' },
   ];
 
   return (
