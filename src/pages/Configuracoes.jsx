@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, addDoc, deleteDoc, doc, updateDoc, query, onSnapshot, serverTimestamp, orderBy, where, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Building2, Users, Layers, Hand, ChevronRight, BookOpen } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Settings, Building2, Users, Layers, Hand, BookOpen, CheckCircle } from 'lucide-react';
 
 export default function Configuracoes() {
   const [instituicoes, setInstituicoes] = useState([]);
@@ -12,13 +12,14 @@ export default function Configuracoes() {
   const [novaTurma, setNovaTurma] = useState('');
   const [instituicaoSelecionadaParaTurma, setInstituicaoSelecionadaParaTurma] = useState('');
   
-  // NÍVEL 3 
+  // NÍVEL 3 (Agora focado no padrão de mercado: Tarefas e Subtarefas)
   const [turmaAtivaNivel3, setTurmaAtivaNivel3] = useState('');
-  const [modulosDaTurma, setModulosDaTurma] = useState([]);
-  const [novoModuloNome, setNovoModuloNome] = useState('');
-  const [tarefaNomes, setTarefaNomes] = useState({}); 
+  const [tarefasDaTurma, setTarefasDaTurma] = useState([]);
+  const [novaTarefaNome, setNovaTarefaNome] = useState('');
+  const [subtarefaNomes, setSubtarefaNomes] = useState({}); 
   
   const [salvando, setSalvando] = useState(false);
+  const [mensagem, setMensagem] = useState(''); // Estado para o feedback visual de sucesso
 
   // Escuta o menu superior
   useEffect(() => {
@@ -41,12 +42,13 @@ export default function Configuracoes() {
 
   // Busca Nível 3 
   useEffect(() => {
-    if (!turmaAtivaNivel3) { setModulosDaTurma([]); return; }
+    if (!turmaAtivaNivel3) { setTarefasDaTurma([]); return; }
+    // Manti a coleção 'saas_modulos' no banco para não quebrar o que você já testou, 
+    // mas na tela tudo é Tarefa. Se quiser, podemos renomear o banco depois.
     const qMod = query(collection(db, 'saas_modulos'), where('idTurma', '==', turmaAtivaNivel3), orderBy('dataCriacao', 'asc'));
-    const unsub = onSnapshot(qMod, (snap) => setModulosDaTurma(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+    const unsub = onSnapshot(qMod, (snap) => setTarefasDaTurma(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
     return () => unsub();
   }, [turmaAtivaNivel3]);
-
 
   // === FUNÇÕES DE NAVEGAÇÃO RÁPIDA (UX) ===
   const irParaNovaTurma = (idInstituicao) => {
@@ -54,9 +56,14 @@ export default function Configuracoes() {
     document.getElementById('nivel2')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const irParaModulos = (idTurma) => {
+  const irParaTarefas = (idTurma) => {
     setTurmaAtivaNivel3(idTurma);
     document.getElementById('nivel3')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const mostrarMensagem = (msg) => {
+    setMensagem(msg);
+    setTimeout(() => setMensagem(''), 3000); // Some após 3 segundos
   };
 
   // --- Ações Instituição ---
@@ -74,7 +81,7 @@ export default function Configuracoes() {
     try { 
       const docRef = await addDoc(collection(db, 'saas_turmas'), { idInstituicao: instituicaoSelecionadaParaTurma, nome: novaTurma.trim(), dataCriacao: serverTimestamp() }); 
       setNovaTurma(''); 
-      irParaModulos(docRef.id); // Cria e já desce pro Nível 3
+      irParaTarefas(docRef.id); // Cria e já desce pro Nível 3
     } finally { setSalvando(false); }
   }
   async function handleExcluirTurma(id) {
@@ -87,21 +94,28 @@ export default function Configuracoes() {
     }
   }
 
-  // --- Ações Módulos e Tarefas ---
-  async function handleAddModulo(e) {
-    e.preventDefault(); if (salvando || !novoModuloNome.trim() || !turmaAtivaNivel3) return; setSalvando(true);
-    try { await addDoc(collection(db, 'saas_modulos'), { idTurma: turmaAtivaNivel3, nome: novoModuloNome.trim(), tarefas: [], dataCriacao: serverTimestamp() }); setNovoModuloNome(''); } finally { setSalvando(false); }
+  // --- Ações Tarefas e Subtarefas ---
+  async function handleAddTarefaPrincipal(e) {
+    e.preventDefault(); if (salvando || !novaTarefaNome.trim() || !turmaAtivaNivel3) return; setSalvando(true);
+    try { 
+      await addDoc(collection(db, 'saas_modulos'), { idTurma: turmaAtivaNivel3, nome: novaTarefaNome.trim(), tarefas: [], dataCriacao: serverTimestamp() }); 
+      setNovaTarefaNome(''); 
+      mostrarMensagem('Tarefa criada com sucesso!');
+    } finally { setSalvando(false); }
   }
-  async function handleExcluirModulo(id) {
-    if (window.confirm('Excluir Módulo inteiro?')) { setSalvando(true); try { await deleteDoc(doc(db, 'saas_modulos', id)); } finally { setSalvando(false); } }
+  async function handleExcluirTarefaPrincipal(id) {
+    if (window.confirm('Excluir esta Tarefa inteira?')) { setSalvando(true); try { await deleteDoc(doc(db, 'saas_modulos', id)); } finally { setSalvando(false); } }
   }
-  async function handleAddTarefa(idModulo) {
-    const nomeTarefa = tarefaNomes[idModulo];
-    if (salvando || !nomeTarefa?.trim()) return; setSalvando(true);
-    try { await updateDoc(doc(db, 'saas_modulos', idModulo), { tarefas: arrayUnion(nomeTarefa.trim()) }); setTarefaNomes({ ...tarefaNomes, [idModulo]: '' }); } finally { setSalvando(false); }
+  async function handleAddSubtarefa(idTarefaPrincipal) {
+    const nomeSubtarefa = subtarefaNomes[idTarefaPrincipal];
+    if (salvando || !nomeSubtarefa?.trim()) return; setSalvando(true);
+    try { 
+      await updateDoc(doc(db, 'saas_modulos', idTarefaPrincipal), { tarefas: arrayUnion(nomeSubtarefa.trim()) }); 
+      setSubtarefaNomes({ ...subtarefaNomes, [idTarefaPrincipal]: '' }); 
+    } finally { setSalvando(false); }
   }
-  async function handleExcluirTarefa(idModulo, nomeTarefa) {
-    if (window.confirm(`Remover tarefa '${nomeTarefa}'?`)) { setSalvando(true); try { await updateDoc(doc(db, 'saas_modulos', idModulo), { tarefas: arrayRemove(nomeTarefa) }); } finally { setSalvando(false); } }
+  async function handleExcluirSubtarefa(idTarefaPrincipal, nomeSubtarefa) {
+    if (window.confirm(`Remover subtarefa '${nomeSubtarefa}'?`)) { setSalvando(true); try { await updateDoc(doc(db, 'saas_modulos', idTarefaPrincipal), { tarefas: arrayRemove(nomeSubtarefa) }); } finally { setSalvando(false); } }
   }
 
   return (
@@ -126,7 +140,6 @@ export default function Configuracoes() {
                   <span className="font-bold text-indigo-900 text-lg">{inst.nome}</span>
                   <button onClick={() => handleExcluirInstituicao(inst.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={16}/></button>
                 </div>
-                {/* BOTÃO DE AÇÃO RÁPIDA */}
                 <button onClick={() => irParaNovaTurma(inst.id)} className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 py-2 px-3 rounded-lg flex items-center justify-center gap-1 w-full transition-colors">
                   <Plus size={14}/> Nova Turma nesta Instituição
                 </button>
@@ -159,9 +172,8 @@ export default function Configuracoes() {
                     </div>
                     <button onClick={() => handleExcluirTurma(turma.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={16}/></button>
                   </div>
-                  {/* BOTÃO DE AÇÃO RÁPIDA */}
-                  <button onClick={() => irParaModulos(turma.id)} className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 py-2 px-3 rounded-lg flex items-center justify-center gap-1 w-full transition-colors">
-                    <BookOpen size={14}/> Gerenciar Módulos
+                  <button onClick={() => irParaTarefas(turma.id)} className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 py-2 px-3 rounded-lg flex items-center justify-center gap-1 w-full transition-colors">
+                    <BookOpen size={14}/> Gerenciar Tarefas
                   </button>
                 </div>
               )
@@ -171,11 +183,11 @@ export default function Configuracoes() {
 
         {/* NÍVEL 3 */}
         <div id="nivel3" className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-orange-200 border-t-4 border-t-orange-500 scroll-mt-24">
-          <h3 className="text-xl font-black text-orange-900 mb-6 flex items-center gap-2 border-b pb-4"><Layers size={24} /> Nível 3: Módulos e Tarefas</h3>
+          <h3 className="text-xl font-black text-orange-900 mb-6 flex items-center gap-2 border-b pb-4"><Layers size={24} /> Nível 3: Tarefas e Subtarefas</h3>
           
-          <div className="mb-8 bg-gray-50 p-5 rounded-xl border border-gray-200 flex flex-col md:flex-row md:items-center gap-4">
+          <div className="mb-6 bg-gray-50 p-5 rounded-xl border border-gray-200 flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
-              <label className="block text-sm font-bold text-gray-700 mb-2">Configurar Módulos de qual Turma?</label>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Configurar Tarefas de qual Turma?</label>
               <select className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 bg-white" value={turmaAtivaNivel3} onChange={e => setTurmaAtivaNivel3(e.target.value)}>
                 <option value="">Selecione uma turma...</option>
                 {turmas.map(t => { 
@@ -189,23 +201,37 @@ export default function Configuracoes() {
           {!turmaAtivaNivel3 ? (
             <div className="bg-orange-50 p-6 rounded-xl text-center border border-orange-100 flex flex-col items-center">
               <Hand className="text-orange-400 mb-3 animate-bounce" size={32} />
-              <p className="text-orange-800 font-bold">Selecione uma turma na caixa acima (ou clique em "Gerenciar Módulos" na lista de turmas) para começar.</p>
+              <p className="text-orange-800 font-bold">Selecione uma turma na caixa acima (ou clique em "Gerenciar Tarefas" na lista de turmas) para começar.</p>
             </div>
           ) : (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <form onSubmit={handleAddModulo} className="mb-8 flex gap-2"><input required type="text" placeholder="Nome do Módulo (Ex: Módulo 1 - Ética)" className="flex-1 p-3 border border-orange-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500" value={novoModuloNome} onChange={e => setNovoModuloNome(e.target.value)} /><button type="submit" disabled={salvando} className="bg-orange-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 hover:bg-orange-700 transition-colors"><Plus size={20} /> Criar Módulo</button></form>
+              
+              {/* FEEDBACK DE SUCESSO AQUI */}
+              {mensagem && (
+                <div className="mb-6 p-4 bg-green-100 text-green-800 border border-green-200 rounded-lg font-bold flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle size={20} className="text-green-600" /> {mensagem}
+                </div>
+              )}
+
+              <form onSubmit={handleAddTarefaPrincipal} className="mb-8 flex gap-2">
+                <input required type="text" placeholder="Nome da Tarefa (Ex: Prova Bimestral)" className="flex-1 p-3 border border-orange-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500" value={novaTarefaNome} onChange={e => setNovaTarefaNome(e.target.value)} />
+                <button type="submit" disabled={salvando} className="bg-orange-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 hover:bg-orange-700 transition-colors"><Plus size={20} /> Criar Tarefa</button>
+              </form>
               
               <div className="space-y-6">
-                {modulosDaTurma.length === 0 && <p className="text-sm text-gray-500 italic text-center py-4">Ainda não há módulos nesta turma. Crie o primeiro acima!</p>}
+                {tarefasDaTurma.length === 0 && <p className="text-sm text-gray-500 italic text-center py-4">Ainda não há tarefas nesta turma. Crie a primeira acima!</p>}
                 
-                {modulosDaTurma.map(mod => (
-                  <div key={mod.id} className="border border-orange-100 bg-orange-50/30 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-orange-100 p-4 flex justify-between items-center"><h4 className="font-black text-orange-900">{mod.nome}</h4><button onClick={() => handleExcluirModulo(mod.id)} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button></div>
+                {tarefasDaTurma.map(tarefa => (
+                  <div key={tarefa.id} className="border border-orange-100 bg-orange-50/30 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-orange-100 p-4 flex justify-between items-center"><h4 className="font-black text-orange-900">{tarefa.nome}</h4><button onClick={() => handleExcluirTarefaPrincipal(tarefa.id)} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button></div>
                     <div className="p-4 bg-white">
-                      <div className="flex gap-2 mb-4"><input type="text" placeholder="Nova Tarefa (Ex: Desafio 1)" className="flex-1 p-2 border border-gray-200 rounded text-sm outline-none focus:border-orange-400" value={tarefaNomes[mod.id] || ''} onChange={e => setTarefaNomes({...tarefaNomes, [mod.id]: e.target.value})} /><button onClick={() => handleAddTarefa(mod.id)} disabled={salvando || !tarefaNomes[mod.id]?.trim()} className="bg-orange-500 text-white px-4 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-orange-600 transition-colors">Adicionar Tarefa</button></div>
+                      <div className="flex gap-2 mb-4">
+                        <input type="text" placeholder="Adicionar Subtarefa (Ex: Resenha)" className="flex-1 p-2 border border-gray-200 rounded text-sm outline-none focus:border-orange-400" value={subtarefaNomes[tarefa.id] || ''} onChange={e => setSubtarefaNomes({...subtarefaNomes, [tarefa.id]: e.target.value})} />
+                        <button onClick={() => handleAddSubtarefa(tarefa.id)} disabled={salvando || !subtarefaNomes[tarefa.id]?.trim()} className="bg-orange-500 text-white px-4 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-orange-600 transition-colors">Adicionar Subtarefa</button>
+                      </div>
                       <div className="space-y-2">
-                        {(!mod.tarefas || mod.tarefas.length === 0) && <p className="text-xs text-gray-400 italic">Nenhuma tarefa. Adicione a primeira!</p>}
-                        {mod.tarefas?.map((tar, idx) => (<div key={idx} className="flex justify-between items-center bg-gray-50 border border-gray-100 p-2 rounded text-sm"><span className="font-medium text-gray-700">{tar}</span><button onClick={() => handleExcluirTarefa(mod.id, tar)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>))}
+                        {(!tarefa.tarefas || tarefa.tarefas.length === 0) && <p className="text-xs text-gray-400 italic">Nenhuma subtarefa. Adicione a primeira!</p>}
+                        {tarefa.tarefas?.map((sub, idx) => (<div key={idx} className="flex justify-between items-center bg-gray-50 border border-gray-100 p-2 rounded text-sm"><span className="font-medium text-gray-700">{sub}</span><button onClick={() => handleExcluirSubtarefa(tarefa.id, sub)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>))}
                       </div>
                     </div>
                   </div>
