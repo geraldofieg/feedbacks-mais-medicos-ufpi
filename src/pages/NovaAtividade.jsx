@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+-import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, getDocs, limit, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -12,7 +12,7 @@ export default function NovaAtividade() {
   
   const [alunosList, setAlunosList] = useState([]);
   const [modulosList, setModulosList] = useState([]);
-  const [tarefasList, setTarefasList] = useState([]);
+  const [tarefasList, setTarefasList] = useState([]); // Mantido para o Dicionário de Enunciados
 
   const [modulo, setModulo] = useState('');
   const [tarefa, setTarefa] = useState('');
@@ -30,7 +30,7 @@ export default function NovaAtividade() {
 
   useEffect(() => {
     const unsubAlunos = onSnapshot(query(collection(db, 'alunos'), orderBy('nome', 'asc')), (snap) => setAlunosList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
-    const unsubModulos = onSnapshot(query(collection(db, 'modulos'), orderBy('nome', 'asc')), (snap) => setModulosList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
+    const unsubModulos = onSnapshot(query(collection(db, 'modulos'), orderBy('nome', 'asc')), (snap) => setModulosList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })))); // Ajustado para pegar o array tarefas
     const unsubTarefas = onSnapshot(query(collection(db, 'tarefas'), orderBy('nome', 'asc')), (snap) => setTarefasList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
     return () => { unsubAlunos(); unsubModulos(); unsubTarefas(); };
   }, []);
@@ -38,7 +38,7 @@ export default function NovaAtividade() {
   useEffect(() => {
     async function buscarEnunciadoAnterior() {
       if (modulo && tarefa) {
-        // Primeiro, tentar buscar o enunciado padrão salvo diretamente na Tarefa
+        // Primeiro, tentar buscar o enunciado padrão salvo no Dicionário de Tarefas
         const tarefaObj = tarefasList.find(t => t.nome === tarefa);
 
         if (tarefaObj) {
@@ -99,23 +99,27 @@ export default function NovaAtividade() {
     setMensagem('Salvando enunciado na tarefa...');
 
     try {
-      const tarefaObj = tarefasList.find(t => t.nome === tarefa);
-      if (!tarefaObj) {
-        setMensagem('Tarefa não encontrada.');
-        setLoading(false);
-        return;
-      }
-
       let urlEnunciadoFinal = urlEnunciadoExistente;
       if (arquivoEnunciado && arquivoEnunciado.length > 0) {
         urlEnunciadoFinal = await uploadArquivo(arquivoEnunciado[0], 'enunciados');
       }
 
-      const tarefaRef = doc(db, 'tarefas', tarefaObj.id);
-      await updateDoc(tarefaRef, {
-        enunciadoPadrao: enunciado || '',
-        urlEnunciadoPadrao: urlEnunciadoFinal || null
-      });
+      // CIRURGIA DE PROTEÇÃO: Se a tarefa não existir no Dicionário antigo, ele cria na hora!
+      const tarefaObj = tarefasList.find(t => t.nome === tarefa);
+      
+      if (!tarefaObj) {
+        await addDoc(collection(db, 'tarefas'), {
+          nome: tarefa,
+          enunciadoPadrao: enunciado || '',
+          urlEnunciadoPadrao: urlEnunciadoFinal || null
+        });
+      } else {
+        const tarefaRef = doc(db, 'tarefas', tarefaObj.id);
+        await updateDoc(tarefaRef, {
+          enunciadoPadrao: enunciado || '',
+          urlEnunciadoPadrao: urlEnunciadoFinal || null
+        });
+      }
 
       setMensagem('Enunciado salvo na tarefa com sucesso!');
       setTimeout(() => setMensagem(''), 3000);
@@ -129,7 +133,7 @@ export default function NovaAtividade() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (loading) return; // TRAVA ADICIONADA: Impede duplo clique e reenvios simultâneos
+    if (loading) return; 
     if (!alunoSelecionado || !modulo || !tarefa) { setMensagem('Preencha o módulo, a tarefa e o aluno.'); return; }
     
     setLoading(true); 
@@ -162,10 +166,13 @@ export default function NovaAtividade() {
       console.error(error);
       setMensagem('Erro ao salvar atividade.'); 
     } finally {
-      // TRAVA ADICIONADA: Garante que o loading seja desativado, quer a operação funcione ou dê erro.
       setLoading(false); 
     }
   }
+
+  // --- LÓGICA DA CASCATA INTELIGENTE ---
+  const moduloSelecionadoObj = modulosList.find(m => m.nome === modulo);
+  const tarefasDisponiveis = moduloSelecionadoObj ? (moduloSelecionadoObj.tarefas || []) : [];
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
@@ -186,16 +193,19 @@ export default function NovaAtividade() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-5 rounded-xl border border-gray-100">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Módulo *</label>
-              <select required className="w-full p-3 border border-gray-300 rounded-lg bg-white" value={modulo} onChange={e => setModulo(e.target.value)}>
+              <select required className="w-full p-3 border border-gray-300 rounded-lg bg-white" value={modulo} onChange={e => {
+                  setModulo(e.target.value);
+                  setTarefa(''); // Reseta a tarefa se mudar de módulo
+                }}>
                 <option value="">Selecione...</option>
                 {modulosList.map(m => <option key={m.id} value={m.nome}>{m.nome}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Tarefa *</label>
-              <select required className="w-full p-3 border border-gray-300 rounded-lg bg-white" value={tarefa} onChange={e => setTarefa(e.target.value)}>
-                <option value="">Selecione...</option>
-                {tarefasList.map(t => <option key={t.id} value={t.nome}>{t.nome}</option>)}
+              <select required disabled={!modulo} className="w-full p-3 border border-gray-300 rounded-lg bg-white disabled:opacity-50 disabled:bg-gray-100" value={tarefa} onChange={e => setTarefa(e.target.value)}>
+                <option value="">{modulo ? "Selecione a tarefa..." : "Escolha o módulo primeiro"}</option>
+                {tarefasDisponiveis.map((t, idx) => <option key={idx} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
