@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, getDocs, limit, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../services/firebase';
-import { ArrowLeft, Save, UploadCloud, CheckCircle } from 'lucide-react';
+// import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // Comentado para evitar estourar cota
+import { db } from '../services/firebase';
+import { ArrowLeft, Save, CheckCircle } from 'lucide-react'; // Tirei o UploadCloud
 
 export default function NovaAtividade() {
   const navigate = useNavigate();
@@ -12,7 +12,7 @@ export default function NovaAtividade() {
   
   const [alunosList, setAlunosList] = useState([]);
   const [modulosList, setModulosList] = useState([]);
-  const [tarefasList, setTarefasList] = useState([]); // Mantido para o Dicionário de Enunciados
+  const [tarefasList, setTarefasList] = useState([]); 
 
   const [modulo, setModulo] = useState('');
   const [tarefa, setTarefa] = useState('');
@@ -22,6 +22,7 @@ export default function NovaAtividade() {
   const [resposta, setResposta] = useState('');
   const [feedback, setFeedback] = useState('');
 
+  // Estados de arquivo mantidos apenas para não quebrar outras dependências, mas inativos
   const [arquivoEnunciado, setArquivoEnunciado] = useState(null);
   const [arquivoResposta, setArquivoResposta] = useState(null);
   
@@ -30,7 +31,7 @@ export default function NovaAtividade() {
 
   useEffect(() => {
     const unsubAlunos = onSnapshot(query(collection(db, 'alunos'), orderBy('nome', 'asc')), (snap) => setAlunosList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
-    const unsubModulos = onSnapshot(query(collection(db, 'modulos'), orderBy('nome', 'asc')), (snap) => setModulosList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })))); // Ajustado para pegar o array tarefas
+    const unsubModulos = onSnapshot(query(collection(db, 'modulos'), orderBy('nome', 'asc')), (snap) => setModulosList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })))); 
     const unsubTarefas = onSnapshot(query(collection(db, 'tarefas'), orderBy('nome', 'asc')), (snap) => setTarefasList(snap.docs.map(doc => ({ id: doc.id, nome: doc.data().nome }))));
     return () => { unsubAlunos(); unsubModulos(); unsubTarefas(); };
   }, []);
@@ -38,7 +39,6 @@ export default function NovaAtividade() {
   useEffect(() => {
     async function buscarEnunciadoAnterior() {
       if (modulo && tarefa) {
-        // Primeiro, tentar buscar o enunciado padrão salvo no Dicionário de Tarefas
         const tarefaObj = tarefasList.find(t => t.nome === tarefa);
 
         if (tarefaObj) {
@@ -53,12 +53,11 @@ export default function NovaAtividade() {
 
               setAutofillAviso(true);
               setTimeout(() => setAutofillAviso(false), 5000);
-              return; // Achou na tarefa, não precisa buscar nas atividades
+              return; 
             }
           }
         }
 
-        // Fallback: se não achar na tarefa, busca da última atividade
         const q = query(collection(db, 'atividades'), where('modulo', '==', modulo), where('tarefa', '==', tarefa), limit(1));
         const snap = await getDocs(q);
         
@@ -80,6 +79,8 @@ export default function NovaAtividade() {
     buscarEnunciadoAnterior();
   }, [modulo, tarefa, tarefasList]);
 
+  // Função de upload desativada por enquanto para não gerar erro 402
+  /*
   const uploadArquivo = async (arquivo, pasta) => {
     if (!arquivo) return null;
     const arquivoRef = ref(storage, `${pasta}/${Date.now()}_${arquivo.name}`);
@@ -87,6 +88,7 @@ export default function NovaAtividade() {
     const url = await getDownloadURL(arquivoRef);
     return url;
   };
+  */
 
   async function handleSalvarEnunciado() {
     if (loading) return;
@@ -99,12 +101,9 @@ export default function NovaAtividade() {
     setMensagem('Salvando enunciado na tarefa...');
 
     try {
-      let urlEnunciadoFinal = urlEnunciadoExistente;
-      if (arquivoEnunciado && arquivoEnunciado.length > 0) {
-        urlEnunciadoFinal = await uploadArquivo(arquivoEnunciado[0], 'enunciados');
-      }
+      // Desativado: let urlEnunciadoFinal = await uploadArquivo(...)
+      let urlEnunciadoFinal = urlEnunciadoExistente; 
 
-      // CIRURGIA DE PROTEÇÃO: Se a tarefa não existir no Dicionário antigo, ele cria na hora!
       const tarefaObj = tarefasList.find(t => t.nome === tarefa);
       
       if (!tarefaObj) {
@@ -140,12 +139,9 @@ export default function NovaAtividade() {
     setMensagem('Salvando atividade...');
     
     try {
+      // Desativado para evitar bloqueio do plano Spark
       let urlEnunciadoFinal = urlEnunciadoExistente;
-      if (arquivoEnunciado) {
-        urlEnunciadoFinal = await uploadArquivo(arquivoEnunciado, 'enunciados');
-      }
-
-      const urlResposta = await uploadArquivo(arquivoResposta, 'respostas');
+      let urlResposta = null;
 
       await addDoc(collection(db, 'atividades'), { 
         modulo, 
@@ -170,7 +166,6 @@ export default function NovaAtividade() {
     }
   }
 
-  // --- LÓGICA DA CASCATA INTELIGENTE ---
   const moduloSelecionadoObj = modulosList.find(m => m.nome === modulo);
   const tarefasDisponiveis = moduloSelecionadoObj ? (moduloSelecionadoObj.tarefas || []) : [];
 
@@ -182,12 +177,6 @@ export default function NovaAtividade() {
           <h2 className="text-2xl font-bold text-gray-800">Cadastrar Nova Atividade</h2>
         </div>
         
-        {mensagem && (
-          <div className={`p-4 rounded-lg mb-6 text-center font-bold ${mensagem.includes('sucesso') ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800 animate-pulse'}`}>
-            {mensagem}
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200 space-y-8">
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-5 rounded-xl border border-gray-100">
@@ -195,7 +184,7 @@ export default function NovaAtividade() {
               <label className="block text-sm font-bold text-gray-700 mb-2">Módulo *</label>
               <select required className="w-full p-3 border border-gray-300 rounded-lg bg-white" value={modulo} onChange={e => {
                   setModulo(e.target.value);
-                  setTarefa(''); // Reseta a tarefa se mudar de módulo
+                  setTarefa(''); 
                 }}>
                 <option value="">Selecione...</option>
                 {modulosList.map(m => <option key={m.id} value={m.nome}>{m.nome}</option>)}
@@ -219,19 +208,21 @@ export default function NovaAtividade() {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="text-lg font-bold text-gray-800">1. Enunciado da Atividade</h3>
-              {autofillAviso && (
-                <span className="text-xs font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
-                  <CheckCircle size={14} /> Recuperado automaticamente!
-                </span>
-              )}
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-bold text-gray-800">1. Enunciado da Atividade</h3>
+                {autofillAviso && (
+                  <span className="text-xs font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
+                    <CheckCircle size={14} /> Recuperado automaticamente!
+                  </span>
+                )}
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Texto do Enunciado</label>
               <textarea rows="6" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 whitespace-pre-wrap" value={enunciado} onChange={e => setEnunciado(e.target.value)} placeholder="Digite o enunciado aqui..."></textarea>
             </div>
 
+            {/* UPLOAD DE ENUNCIADO OCULTADO TEMPORARIAMENTE
             <div className={`p-4 rounded-lg border flex flex-col sm:flex-row items-center gap-4 ${urlEnunciadoExistente && !arquivoEnunciado ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-100'}`}>
               <UploadCloud className={urlEnunciadoExistente && !arquivoEnunciado ? 'text-green-500' : 'text-blue-500'} size={32} />
               <div className="flex-1 w-full">
@@ -241,6 +232,7 @@ export default function NovaAtividade() {
                 <input type="file" accept=".pdf, image/*" onChange={e => setArquivoEnunciado(e.target.files)} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
               </div>
             </div>
+            */}
           </div>
 
           <div className="space-y-4">
@@ -248,6 +240,8 @@ export default function NovaAtividade() {
             <div>
               <textarea rows="6" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 whitespace-pre-wrap" value={resposta} onChange={e => setResposta(e.target.value)} placeholder="Cole o que o aluno escreveu..."></textarea>
             </div>
+            
+            {/* UPLOAD DE ALUNO OCULTADO TEMPORARIAMENTE
             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row items-center gap-4">
               <UploadCloud className="text-gray-500" size={32} />
               <div className="flex-1 w-full">
@@ -255,6 +249,7 @@ export default function NovaAtividade() {
                 <input type="file" accept=".pdf, image/*" onChange={e => setArquivoResposta(e.target.files)} className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-gray-600 file:text-white hover:file:bg-gray-700" />
               </div>
             </div>
+            */}
           </div>
 
           <div>
@@ -262,7 +257,14 @@ export default function NovaAtividade() {
             <textarea required rows="6" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 whitespace-pre-wrap" value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Escreva o feedback sugerido..."></textarea>
           </div>
 
-          <div className="pt-6 border-t border-gray-100 flex flex-col sm:flex-row justify-end gap-4">
+          {/* ÁREA DE FEEDBACK (UX ARRUMADA) - Fica grudada nos botões */}
+          {mensagem && (
+            <div className={`p-4 rounded-lg text-center font-bold ${mensagem.includes('sucesso') ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800 animate-pulse'}`}>
+              {mensagem}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row justify-end gap-4">
             <button type="button" onClick={handleSalvarEnunciado} disabled={loading} className="w-full md:w-auto flex items-center justify-center gap-2 bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-bold hover:bg-gray-300 transition-colors disabled:opacity-50 text-base">
               Salvar enunciado da tarefa
             </button>
