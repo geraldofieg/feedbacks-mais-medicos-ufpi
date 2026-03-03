@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, addDoc, deleteDoc, doc, query, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Archive, Calendar, DatabaseZap, CheckCircle } from 'lucide-react';
-import { cronogramaAssincrono, cronogramaSincrono } from '../data/cronogramaData'; // Importando o calendário oficial!
+import { ArrowLeft, Plus, Trash2, Settings, Archive, Calendar, CheckCircle, Eraser } from 'lucide-react';
 
 export default function Configuracoes() {
   const [modulos, setModulos] = useState([]);
@@ -13,7 +12,7 @@ export default function Configuracoes() {
   
   const [salvando, setSalvando] = useState(false);
   const [novaTarefaModulo, setNovaTarefaModulo] = useState({}); 
-  const [sincronizacaoConcluida, setSincronizacaoConcluida] = useState(false);
+  const [faxinaConcluida, setFaxinaConcluida] = useState(false);
 
   useEffect(() => {
     const qModulos = query(collection(db, 'modulos'));
@@ -27,66 +26,42 @@ export default function Configuracoes() {
   const modulosArquivados = modulos.filter(m => m.status === 'arquivado').sort((a, b) => (b.dataCriacao?.toMillis?.() || 0) - (a.dataCriacao?.toMillis?.() || 0));
 
   // ==========================================
-  // FERRAMENTA DE UPSERT (SINCRONIZAÇÃO INTELIGENTE)
+  // FERRAMENTA DE FAXINA (MERGE DE DUPLICATAS)
   // ==========================================
-  const criarDataFirestore = (dataStr, isFim) => {
-    if (!dataStr) return null;
-    const [ano, mes, dia] = dataStr.split('-');
-    const d = new Date(ano, mes - 1, dia);
-    if (isFim) d.setHours(23, 59, 59, 999); // Fim do dia
-    else d.setHours(0, 0, 0, 0); // Início do dia
-    return d;
-  };
-
-  const handleSincronizarCronograma = async () => {
-    if (!window.confirm("Isso vai atualizar os módulos existentes com as datas oficiais e criar os que faltam. Confirma?")) return;
+  const handleFaxinaDuplicatas = async () => {
+    if (!window.confirm("Isso vai mesclar as tarefas dos Módulos 1 ao 8 antigos para os novos, e apagar os antigos. Confirma?")) return;
     setSalvando(true);
     
     try {
       const promessas = [];
 
-      // 1. Varre o Assíncrono
-      cronogramaAssincrono.forEach(item => {
-        const existente = modulos.find(m => m.nome.toLowerCase() === item.modulo.toLowerCase());
-        const dInicio = criarDataFirestore(item.inicio, false);
-        const dFim = criarDataFirestore(item.fim, true);
+      // Faz a varredura do 1 ao 10
+      for (let i = 1; i <= 10; i++) {
+        const prefixoVelho = `Módulo ${i}`;
+        const prefixoNovo = `Módulo ${i} -`; // O novo gerado pelo cronograma tem o " - "
 
-        if (existente) {
-          // Apenas injeta as datas, não mexe nas tarefas
-          promessas.push(updateDoc(doc(db, 'modulos', existente.id), { dataInicio: dInicio, dataFim: dFim }));
-        } else {
-          // Cria o módulo novo
-          promessas.push(addDoc(collection(db, 'modulos'), {
-            nome: item.modulo, tarefas: [], status: 'ativo', dataCriacao: serverTimestamp(),
-            dataInicio: dInicio, dataFim: dFim
-          }));
+        const modVelho = modulos.find(m => m.nome.trim().toLowerCase() === prefixoVelho.toLowerCase());
+        const modNovo = modulos.find(m => m.nome.trim().toLowerCase().startsWith(prefixoNovo.toLowerCase()));
+
+        if (modVelho && modNovo) {
+          // 1. Pega as tarefas do velho e junta com o novo (se houver)
+          const tarefasVelhas = modVelho.tarefas || [];
+          const tarefasNovas = modNovo.tarefas || [];
+          const tarefasMescladas = Array.from(new Set([...tarefasNovas, ...tarefasVelhas]));
+
+          // 2. Atualiza o novo com as tarefas resgatadas
+          promessas.push(updateDoc(doc(db, 'modulos', modNovo.id), { tarefas: tarefasMescladas }));
+          
+          // 3. Deleta o módulo velho e duplicado
+          promessas.push(deleteDoc(doc(db, 'modulos', modVelho.id)));
         }
-      });
-
-      // 2. Varre o Síncrono
-      cronogramaSincrono.forEach(item => {
-        const nomeSemana = `Semana ${item.semana}`;
-        const existente = modulos.find(m => m.nome.toLowerCase() === nomeSemana.toLowerCase());
-        const dInicio = criarDataFirestore(item.inicio, false);
-        const dFim = criarDataFirestore(item.fim, true);
-        const tarefasSync = [item.tema1, item.tema2].filter(Boolean); // Ignora vazios
-
-        if (existente) {
-          promessas.push(updateDoc(doc(db, 'modulos', existente.id), { dataInicio: dInicio, dataFim: dFim }));
-        } else {
-          promessas.push(addDoc(collection(db, 'modulos'), {
-            nome: nomeSemana, tarefas: tarefasSync, status: 'ativo', dataCriacao: serverTimestamp(),
-            dataInicio: dInicio, dataFim: dFim
-          }));
-        }
-      });
+      }
 
       await Promise.all(promessas);
-      setSincronizacaoConcluida(true);
-      setTimeout(() => setSincronizacaoConcluida(false), 5000);
+      setFaxinaConcluida(true);
     } catch (error) {
-      console.error("Erro na sincronização:", error);
-      alert("Erro ao sincronizar o cronograma.");
+      console.error("Erro na faxina:", error);
+      alert("Erro ao limpar duplicatas.");
     } finally {
       setSalvando(false);
     }
@@ -95,6 +70,15 @@ export default function Configuracoes() {
   // ==========================================
   // CRUD MANUAL
   // ==========================================
+  const criarDataFirestore = (dataStr, isFim) => {
+    if (!dataStr) return null;
+    const [ano, mes, dia] = dataStr.split('-');
+    const d = new Date(ano, mes - 1, dia);
+    if (isFim) d.setHours(23, 59, 59, 999); 
+    else d.setHours(0, 0, 0, 0); 
+    return d;
+  };
+
   async function handleAddModulo(e) {
     e.preventDefault();
     if (salvando || !novoModulo.trim()) return;
@@ -108,9 +92,7 @@ export default function Configuracoes() {
         dataInicio: novoDataInicio ? criarDataFirestore(novoDataInicio, false) : null,
         dataFim: novoDataFim ? criarDataFirestore(novoDataFim, true) : null
       });
-      setNovoModulo('');
-      setNovoDataInicio('');
-      setNovoDataFim('');
+      setNovoModulo(''); setNovoDataInicio(''); setNovoDataFim('');
     } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
   }
 
@@ -271,23 +253,23 @@ export default function Configuracoes() {
           )}
         </div>
 
-        {/* FERRAMENTA DE UPSERT (RODAPÉ) */}
-        <div className="bg-purple-50 p-6 rounded-2xl shadow-sm border border-purple-200">
+        {/* FERRAMENTA DE FAXINA (RODAPÉ) */}
+        <div className="bg-orange-50 p-6 rounded-2xl shadow-sm border border-orange-200">
           <div className="flex items-center gap-3 mb-4">
-            <DatabaseZap className="text-purple-600" size={28} />
+            <Eraser className="text-orange-600" size={28} />
             <div>
-              <h3 className="text-lg font-black text-purple-900">Importador Automático de Cronograma</h3>
-              <p className="text-sm font-medium text-purple-700">Injeta as datas oficiais nas unidades existentes e cria os módulos futuros automaticamente.</p>
+              <h3 className="text-lg font-black text-orange-900">Faxina de Duplicatas</h3>
+              <p className="text-sm font-medium text-orange-700">Mescla os módulos velhos com os oficiais e limpa a tela.</p>
             </div>
           </div>
 
-          {!sincronizacaoConcluida ? (
-            <button onClick={handleSincronizarCronograma} disabled={salvando} className="bg-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-purple-700 transition-all disabled:opacity-50 flex items-center gap-2">
-              <DatabaseZap size={20} /> {salvando ? 'Injetando dados...' : 'Sincronizar Cronograma da UFPI'}
+          {!faxinaConcluida ? (
+            <button onClick={handleFaxinaDuplicatas} disabled={salvando} className="bg-orange-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-orange-700 transition-all disabled:opacity-50 flex items-center gap-2">
+              <Eraser size={20} /> {salvando ? 'Limpando...' : 'Rodar Faxina'}
             </button>
           ) : (
             <div className="bg-green-100 text-green-800 p-4 rounded-xl font-bold flex items-center gap-2 border border-green-200">
-              <CheckCircle size={24} /> Cronograma injetado no banco de dados com sucesso!
+              <CheckCircle size={24} /> Duplicatas removidas e tarefas resgatadas com sucesso!
             </div>
           )}
         </div>
