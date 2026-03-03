@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, addDoc, deleteDoc, doc, updateDoc, query, onSnapshot, serverTimestamp, orderBy, where, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Building2, Users, CheckCircle, BookOpen, Layers } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Settings, Building2, Users, CheckCircle, BookOpen, Layers, Hand } from 'lucide-react'; // <-- A mãozinha causadora do erro está importada!
 
 export default function Configuracoes() {
   const [instituicoes, setInstituicoes] = useState([]);
@@ -31,16 +31,19 @@ export default function Configuracoes() {
     return () => { unsubInst(); unsubTurmas(); };
   }, []);
 
-  // 2. Busca de Tarefas (Nível 3) - Corrigido o bug do "Fantasma" tirando o orderBy direto no Firebase
+  // 2. Busca de Tarefas (Nível 3)
   useEffect(() => {
     if (!turmaAtiva) { setTarefas([]); return; }
     
-    // Agora salvamos na coleção 'saas_tarefas' para ficar com o nome correto no banco também
     const qTarefas = query(collection(db, 'saas_tarefas'), where('idTurma', '==', turmaAtiva));
     const unsub = onSnapshot(qTarefas, (snap) => {
       let dados = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Ordenação feita no JS para evitar erro de índice no Firebase
-      dados.sort((a, b) => (a.dataCriacao?.seconds || 0) - (b.dataCriacao?.seconds || 0));
+      // Ordenação feita de forma blindada para evitar tela cinza no carregamento
+      dados.sort((a, b) => {
+        const timeA = (a.dataCriacao && a.dataCriacao.seconds) ? a.dataCriacao.seconds : 0;
+        const timeB = (b.dataCriacao && b.dataCriacao.seconds) ? b.dataCriacao.seconds : 0;
+        return timeA - timeB;
+      });
       setTarefas(dados);
     });
     return () => unsub();
@@ -62,7 +65,7 @@ export default function Configuracoes() {
     e.preventDefault(); if (salvando || !novaTurmaRapida.nome.trim() || !novaTurmaRapida.idInst) return; setSalvando(true);
     try {
       const docRef = await addDoc(collection(db, 'saas_turmas'), { idInstituicao: novaTurmaRapida.idInst, nome: novaTurmaRapida.nome.trim(), dataCriacao: serverTimestamp() });
-      setTurmaAtiva(docRef.id); // Já seleciona a turma nova automaticamente
+      setTurmaAtiva(docRef.id); 
       setModalTurmaRapida(false);
       setNovaTurmaRapida({ nome: '', idInst: '' });
       mostrarMensagem('Turma criada e selecionada!');
@@ -74,18 +77,28 @@ export default function Configuracoes() {
 
   // --- AÇÕES NÍVEL 3 E 4 (TAREFAS E SUBTAREFAS) ---
   async function handleAddTarefa(e) {
-    e.preventDefault(); if (salvando || !novaTarefa.nome.trim() || !turmaAtiva) return; setSalvando(true);
+    e.preventDefault(); 
+    const tituloSeguro = (novaTarefa.nome || '').trim();
+    const enunciadoSeguro = (novaTarefa.enunciado || '').trim();
+    
+    if (salvando || !tituloSeguro || !turmaAtiva) return; 
+    setSalvando(true);
     try {
       await addDoc(collection(db, 'saas_tarefas'), { 
         idTurma: turmaAtiva, 
-        nome: novaTarefa.nome.trim(), 
-        enunciado: novaTarefa.enunciado.trim(), 
+        nome: tituloSeguro, 
+        enunciado: enunciadoSeguro, 
         subtarefas: [], 
         dataCriacao: serverTimestamp() 
       });
       setNovaTarefa({ nome: '', enunciado: '' });
-      mostrarMensagem('Tarefa principal criada com sucesso!');
-    } finally { setSalvando(false); }
+      mostrarMensagem('Tarefa criada com sucesso!');
+    } catch (error) {
+      console.error(error);
+      mostrarMensagem('Erro ao criar tarefa.');
+    } finally { 
+      setSalvando(false); 
+    }
   }
   
   async function handleExcluirTarefa(id) {
@@ -167,9 +180,8 @@ export default function Configuracoes() {
             <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-orange-200 border-t-4 border-t-orange-500 h-full">
               <h3 className="text-xl font-black text-orange-900 mb-6 flex items-center gap-2 border-b pb-4"><Layers size={24} /> Central de Tarefas</h3>
               
-              {/* O NOVO SELETOR INTELIGENTE */}
               <div className="mb-6 bg-orange-50 p-5 rounded-xl border border-orange-100">
-                <label className="block text-sm font-bold text-orange-900 mb-2">Para qual Turma você quer lançar Tarefas?</label>
+                <label className="block text-sm font-bold text-orange-900 mb-2">Para qual turma você quer lançar tarefa?</label>
                 <select 
                   className="w-full p-3 border border-orange-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 bg-white font-medium" 
                   value={turmaAtiva} 
@@ -183,11 +195,10 @@ export default function Configuracoes() {
                     const instPai = instituicoes.find(i => i.id === t.idInstituicao);
                     return <option key={t.id} value={t.id}>{instPai ? `${instPai.nome} > ` : ''}{t.nome}</option>
                   })}
-                  <option value="NOVA" className="font-bold text-orange-600 bg-orange-50">✨ + Criar Nova Turma Rápido</option>
+                  <option value="NOVA" className="font-bold text-orange-600 bg-orange-50">✨ + Criar nova turma</option>
                 </select>
               </div>
 
-              {/* MODAL/ÁREA DE CRIAÇÃO RÁPIDA DE TURMA (Aparece se ele escolher "Criar Nova Turma") */}
               {modalTurmaRapida && (
                 <div className="mb-6 p-5 border-2 border-dashed border-orange-300 bg-orange-50/50 rounded-xl animate-in fade-in">
                   <h4 className="font-bold text-orange-800 mb-3 flex items-center gap-2"><Plus size={18}/> Criação Rápida de Turma</h4>
@@ -207,16 +218,20 @@ export default function Configuracoes() {
               {turmaAtiva && !modalTurmaRapida && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                   
-                  {/* CRIAÇÃO DA TAREFA (NÍVEL 3) */}
+                  {/* CRIAÇÃO DA TAREFA */}
                   <form onSubmit={handleAddTarefa} className="mb-8 bg-white border border-gray-200 p-5 rounded-xl shadow-sm">
-                    <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BookOpen size={18}/> Nova Tarefa</h4>
+                    <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+                      <h4 className="font-bold text-gray-800 flex items-center gap-2"><BookOpen size={18}/> Nova tarefa</h4>
+                      <span className="text-xs font-medium text-gray-400 italic">* campo obrigatório</span>
+                    </div>
+                    
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título da Tarefa *</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">TÍTULO*</label>
                         <input required type="text" placeholder="Ex: Prova Bimestral ou Desafio Final" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500" value={novaTarefa.nome} onChange={e => setNovaTarefa({...novaTarefa, nome: e.target.value})} />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Enunciado Geral / Orientações (Opcional)</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">ENUNCIADO</label>
                         <textarea rows="2" placeholder="Descreva aqui o que o aluno deve fazer..." className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
                       </div>
                       <button type="submit" disabled={salvando} className="w-full bg-orange-600 text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 hover:bg-orange-700 transition-colors"><Plus size={20} /> Lançar Tarefa</button>
@@ -237,7 +252,7 @@ export default function Configuracoes() {
                           <button onClick={() => handleExcluirTarefa(tarefa.id)} className="text-red-400 hover:text-red-600 ml-4"><Trash2 size={18}/></button>
                         </div>
                         
-                        {/* SUBTAREFAS (NÍVEL 4) */}
+                        {/* SUBTAREFAS */}
                         <div className="p-4 bg-white border-t border-orange-50">
                           <p className="text-xs font-bold text-gray-400 uppercase mb-3">Subdivisões da Tarefa (Opcional)</p>
                           <div className="flex gap-2 mb-4">
