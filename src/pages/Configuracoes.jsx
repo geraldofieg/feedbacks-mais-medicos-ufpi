@@ -11,6 +11,9 @@ export default function Configuracoes() {
   
   const [turmaAtiva, setTurmaAtiva] = useState('');
   
+  // Controle de Tela da Central (O Segredo da nova UX)
+  const [isCriandoTarefa, setIsCriandoTarefa] = useState(false);
+  
   const [novaTarefa, setNovaTarefa] = useState({ nome: '', enunciado: '' });
   const [subtarefaNomes, setSubtarefaNomes] = useState({}); 
   const [novaInstNome, setNovaInstNome] = useState('');
@@ -20,21 +23,23 @@ export default function Configuracoes() {
 
   const [salvando, setSalvando] = useState(false);
   
-  // Mensagens locais (Contextuais)
+  // Mensagens locais
   const [msgInst, setMsgInst] = useState('');
   const [msgTurma, setMsgTurma] = useState('');
   const [msgTarefa, setMsgTarefa] = useState('');
 
-  // Busca Nível 1
   useEffect(() => {
     const unsubInst = onSnapshot(query(collection(db, 'saas_instituicoes'), orderBy('nome', 'asc')), (snap) => setInstituicoes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
     const unsubTurmas = onSnapshot(query(collection(db, 'saas_turmas'), orderBy('nome', 'asc')), (snap) => setTurmas(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
     return () => { unsubInst(); unsubTurmas(); };
   }, []);
 
-  // Busca Nível 3
   useEffect(() => {
-    if (!turmaAtiva) { setTarefas([]); return; }
+    if (!turmaAtiva) { 
+      setTarefas([]); 
+      setIsCriandoTarefa(false); // Reseta o form se mudar de turma
+      return; 
+    }
     const qTarefas = query(collection(db, 'saas_tarefas'), where('idTurma', '==', turmaAtiva));
     const unsub = onSnapshot(qTarefas, (snap) => {
       let dados = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -48,7 +53,6 @@ export default function Configuracoes() {
     return () => unsub();
   }, [turmaAtiva]);
 
-  // Função genérica para piscar a mensagem por 5 segundos no lugar certo
   const mostrarMsg = (setter, texto) => {
     setter(texto);
     setTimeout(() => setter(''), 5000);
@@ -71,6 +75,7 @@ export default function Configuracoes() {
       setTurmaAtiva(docRef.id); 
       setModalTurmaRapida(false);
       setNovaTurmaRapida({ nome: '', idInst: '' });
+      setIsCriandoTarefa(true); // Se a turma é novinha, já abre o form de tarefa pra ele
       mostrarMsg(setMsgTurma, 'Turma criada e selecionada!');
     } finally { setSalvando(false); }
   }
@@ -78,7 +83,7 @@ export default function Configuracoes() {
     if (window.confirm('Excluir Turma?')) { try { await deleteDoc(doc(db, 'saas_turmas', id)); if(turmaAtiva === id) setTurmaAtiva(''); } catch(e){console.error(e)} }
   }
 
-  // --- AÇÕES NÍVEL 3 E 4 (TAREFAS E SUBTAREFAS) ---
+  // --- AÇÕES NÍVEL 3 E 4 ---
   async function handleAddTarefa(e) {
     e.preventDefault(); 
     const tituloSeguro = (novaTarefa.nome || '').trim();
@@ -95,6 +100,7 @@ export default function Configuracoes() {
         dataCriacao: serverTimestamp() 
       });
       setNovaTarefa({ nome: '', enunciado: '' });
+      setIsCriandoTarefa(false); // Fecha o formulário após salvar com sucesso
       mostrarMsg(setMsgTarefa, 'Tarefa criada com sucesso!');
     } catch (error) {
       console.error(error);
@@ -138,14 +144,7 @@ export default function Configuracoes() {
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
               <h3 className="text-lg font-black text-indigo-900 mb-4 flex items-center gap-2 border-b pb-3"><Building2 size={20} /> Instituições</h3>
-              
-              {/* Feedback Local: Instituição */}
-              {msgInst && (
-                <div className="mb-3 p-2 bg-green-100 text-green-800 border border-green-200 rounded text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
-                  <CheckCircle size={14} /> {msgInst}
-                </div>
-              )}
-
+              {msgInst && <div className="mb-3 p-2 bg-green-100 text-green-800 border border-green-200 rounded text-xs font-bold flex items-center gap-1.5 animate-in fade-in"><CheckCircle size={14} /> {msgInst}</div>}
               <form onSubmit={handleAddInstituicao} className="flex gap-2 mb-4">
                 <input required type="text" placeholder="Nova (Ex: UFPI)" className="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500" value={novaInstNome} onChange={e => setNovaInstNome(e.target.value)} />
                 <button type="submit" disabled={salvando} className="bg-indigo-600 text-white px-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors"><Plus size={18} /></button>
@@ -181,13 +180,14 @@ export default function Configuracoes() {
             </div>
           </div>
 
-          {/* COLUNA DIREITA: O CORAÇÃO DO SISTEMA (L3 E L4) */}
+          {/* COLUNA DIREITA: O CORAÇÃO DO SISTEMA (A VERDADEIRA CENTRAL) */}
           <div className="lg:col-span-8">
-            <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-orange-200 border-t-4 border-t-orange-500 h-full">
+            <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-orange-200 border-t-4 border-t-orange-500 h-full flex flex-col">
               <h3 className="text-xl font-black text-orange-900 mb-6 flex items-center gap-2 border-b pb-4"><Layers size={24} /> Central de Tarefas</h3>
               
+              {/* O NOVO TEXTO NEUTRO E DIRETIVO */}
               <div className="mb-6 bg-orange-50 p-5 rounded-xl border border-orange-100">
-                <label className="block text-sm font-bold text-orange-900 mb-2">Para qual turma você quer lançar tarefa?</label>
+                <label className="block text-sm font-bold text-orange-900 mb-2">Selecione a turma para gerenciar suas tarefas:</label>
                 <select 
                   className="w-full p-3 border border-orange-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 bg-white font-medium" 
                   value={turmaAtiva} 
@@ -205,12 +205,8 @@ export default function Configuracoes() {
                 </select>
               </div>
 
-              {/* Feedback Local: Turma Rápida */}
-              {msgTurma && (
-                <div className="mb-6 p-3 bg-green-100 text-green-800 border border-green-200 rounded-lg text-sm font-bold flex items-center gap-2 animate-in fade-in">
-                  <CheckCircle size={18} /> {msgTurma}
-                </div>
-              )}
+              {msgTurma && <div className="mb-6 p-3 bg-green-100 text-green-800 border border-green-200 rounded-lg text-sm font-bold flex items-center gap-2 animate-in fade-in"><CheckCircle size={18} /> {msgTurma}</div>}
+              {msgTarefa && <div className="mb-6 p-3 bg-green-100 text-green-800 border border-green-200 rounded-lg text-sm font-bold flex items-center gap-2 animate-in fade-in"><CheckCircle size={18} /> {msgTarefa}</div>}
 
               {modalTurmaRapida && (
                 <div className="mb-6 p-5 border-2 border-dashed border-orange-300 bg-orange-50/50 rounded-xl animate-in fade-in">
@@ -221,50 +217,62 @@ export default function Configuracoes() {
                       {instituicoes.map(inst => <option key={inst.id} value={inst.id}>{inst.nome}</option>)}
                     </select>
                     <input required type="text" placeholder="Nome da Turma" className="p-2 border rounded-lg bg-white flex-1 outline-none" value={novaTurmaRapida.nome} onChange={e => setNovaTurmaRapida({...novaTurmaRapida, nome: e.target.value})} />
-                    <button type="submit" className="bg-orange-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-orange-700">Salvar e Selecionar</button>
+                    <button type="submit" className="bg-orange-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-orange-700">Salvar</button>
                     <button type="button" onClick={() => setModalTurmaRapida(false)} className="bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-lg hover:bg-gray-300">Cancelar</button>
                   </form>
-                  {instituicoes.length === 0 && <p className="text-xs text-red-500 font-bold mt-2">Você precisa criar uma Instituição na coluna ao lado primeiro!</p>}
                 </div>
               )}
 
               {turmaAtiva && !modalTurmaRapida && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1 flex flex-col">
                   
-                  {/* CRIAÇÃO DA TAREFA */}
-                  <form onSubmit={handleAddTarefa} className="mb-8 bg-white border border-gray-200 p-5 rounded-xl shadow-sm">
-                    <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-                      <h4 className="font-bold text-gray-800 flex items-center gap-2"><BookOpen size={18}/> Nova tarefa</h4>
-                      <span className="text-xs font-medium text-gray-400 italic">* campo obrigatório</span>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">TÍTULO*</label>
-                        <input required type="text" placeholder="Ex: Prova Bimestral ou Desafio Final" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500" value={novaTarefa.nome} onChange={e => setNovaTarefa({...novaTarefa, nome: e.target.value})} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">ENUNCIADO</label>
-                        <textarea rows="2" placeholder="Descreva aqui o que o aluno deve fazer..." className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
-                      </div>
-                      
-                      {/* Feedback Local: Tarefa (Agora colado no botão de Lançar Tarefa) */}
-                      {msgTarefa && (
-                        <div className="p-3 bg-green-100 text-green-800 border border-green-200 rounded-lg text-sm font-bold flex items-center gap-2 animate-in fade-in">
-                          <CheckCircle size={18} /> {msgTarefa}
-                        </div>
-                      )}
+                  {/* CABEÇALHO DA CENTRAL (Visualização > Criação) */}
+                  <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-3">
+                    <h4 className="font-bold text-gray-800 flex items-center gap-2"><BookOpen size={18}/> Tarefas da Turma</h4>
+                    {!isCriandoTarefa && (
+                      <button onClick={() => setIsCriandoTarefa(true)} className="bg-orange-100 text-orange-700 hover:bg-orange-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
+                        <Plus size={16}/> Nova tarefa
+                      </button>
+                    )}
+                  </div>
 
-                      <button type="submit" disabled={salvando} className="w-full bg-orange-600 text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 hover:bg-orange-700 transition-colors"><Plus size={20} /> Lançar Tarefa</button>
-                    </div>
-                  </form>
+                  {/* FORMULÁRIO DE CRIAÇÃO (ESCONDIDO POR PADRÃO) */}
+                  {isCriandoTarefa && (
+                    <form onSubmit={handleAddTarefa} className="mb-8 bg-orange-50 border border-orange-200 p-5 rounded-xl shadow-sm animate-in slide-in-from-top-2">
+                      <div className="flex justify-between items-center mb-4 border-b border-orange-100 pb-3">
+                        <h4 className="font-bold text-orange-900 flex items-center gap-2">Cadastrar nova tarefa</h4>
+                        <span className="text-xs font-medium text-orange-600 italic">* campo obrigatório</span>
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-orange-800 uppercase mb-1">TÍTULO*</label>
+                          <input required type="text" placeholder="Ex: Prova Bimestral ou Desafio Final" className="w-full p-3 border border-orange-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500" value={novaTarefa.nome} onChange={e => setNovaTarefa({...novaTarefa, nome: e.target.value})} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-orange-800 uppercase mb-1">ENUNCIADO</label>
+                          <textarea rows="2" placeholder="Descreva aqui o que o aluno deve fazer..." className="w-full p-3 border border-orange-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
+                        </div>
+                        <div className="flex items-center gap-3 pt-2">
+                          <button type="submit" disabled={salvando} className="flex-1 bg-orange-600 text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 hover:bg-orange-700 transition-colors"><CheckCircle size={20} /> Salvar Tarefa</button>
+                          <button type="button" onClick={() => setIsCriandoTarefa(false)} className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-bold hover:bg-gray-300 transition-colors">Cancelar</button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
                   
                   {/* LISTAGEM DE TAREFAS */}
-                  <div className="space-y-6">
-                    {tarefas.length === 0 && <p className="text-sm text-gray-500 italic text-center py-4">Nenhuma tarefa lançada para esta turma.</p>}
+                  <div className="space-y-6 flex-1">
+                    {tarefas.length === 0 && !isCriandoTarefa && (
+                      <div className="text-center py-10 bg-gray-50 rounded-xl border border-gray-100">
+                        <p className="text-gray-500 font-medium mb-3">Esta turma ainda não possui tarefas.</p>
+                        <button onClick={() => setIsCriandoTarefa(true)} className="bg-orange-500 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-orange-600 transition-colors inline-flex items-center gap-2">
+                          <Plus size={18}/> Criar a primeira tarefa
+                        </button>
+                      </div>
+                    )}
                     
                     {tarefas.map(tarefa => (
-                      <div key={tarefa.id} className="border border-orange-100 bg-orange-50/20 rounded-xl overflow-hidden shadow-sm">
+                      <div key={tarefa.id} className="border border-orange-100 bg-orange-50/20 rounded-xl overflow-hidden shadow-sm hover:border-orange-300 transition-colors">
                         <div className="bg-orange-100 p-4 flex justify-between items-start">
                           <div>
                             <h4 className="font-black text-orange-900 text-lg leading-tight">{tarefa.nome}</h4>
