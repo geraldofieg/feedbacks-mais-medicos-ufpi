@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
-import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Send, AlertCircle, Users, User, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Send, AlertCircle, Users, User, ChevronDown, CalendarClock } from 'lucide-react';
 
 // ==========================================
 // 📖 DICIONÁRIO DE CONTATOS (WHATSAPP)
@@ -119,6 +119,40 @@ export default function Comunicacao() {
     calcularPendencias();
   }, [unidadeSelecionadaId, unidadesAtivas, alunosAtivos]);
 
+  // ==========================================
+  // INTELIGÊNCIA DE DATAS E MENSAGENS (A MÁGICA HÍBRIDA)
+  // ==========================================
+  const getDiasRestantes = (timestampFim) => {
+    if (!timestampFim || !timestampFim.toDate) return null;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dataFim = timestampFim.toDate();
+    const diferencaTime = dataFim.getTime() - hoje.getTime();
+    return Math.ceil(diferencaTime / (1000 * 3600 * 24));
+  };
+
+  const gerarMensagem = (unidadeObj) => {
+    if (!unidadeObj) return '';
+    const diasRestantes = getDiasRestantes(unidadeObj.dataFim);
+
+    if (diasRestantes !== null) {
+      // Inteligência ativada (Com data limite)
+      if (diasRestantes < 0) {
+        return `Olá! O prazo oficial para as atividades do(a) ${unidadeObj.nome} foi encerrado. Notei pendências no sistema. Por favor, regularize a sua entrega imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
+      }
+      if (diasRestantes >= 20) {
+        return `Olá! 🌟 Passando para avisar que o(a) ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento, então temos um bom tempo. Quem já quiser ir adiantando as atividades, desejo excelentes estudos!`;
+      }
+      if (diasRestantes >= 8) {
+        return `Olá, pessoal! Nosso lembrete de acompanhamento sobre o(a) ${unidadeObj.nome}. O cronograma está avançando e entramos na fase intermediária da nossa atividade. Faltam ${diasRestantes} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia!`;
+      }
+      return `Olá, colegas! 🚨 Passando para alertar que entramos na reta final do(a) ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Solicitamos a regularização das tarefas pendentes o quanto antes para que ninguém fique prejudicado.`;
+    } else {
+      // Mensagem genérica (Sem data limite)
+      return `Olá! Passando para lembrar do nosso acompanhamento sobre o(a) ${unidadeObj.nome}. O cronograma está avançando! Solicitamos a regularização das tarefas pendentes o quanto antes para não acumular. Desejo excelentes estudos!`;
+    }
+  };
+
 
   const formatarListaTarefas = (lista) => {
     if (lista.length === 1) return lista[0];
@@ -128,13 +162,12 @@ export default function Comunicacao() {
 
   const removerAcentos = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-  // LÓGICA DE FEEDBACK CONTEXTUAL (Avisos nos botões)
   const aplicarFeedback = (idCopia, acaoAposFeedback) => {
     setCopiado(idCopia);
     setTimeout(() => {
       setCopiado(null);
       if (acaoAposFeedback) acaoAposFeedback();
-    }, 1500); // 1.5s de feedback visual antes da ação ou reset
+    }, 1500); 
   };
 
   const handleCopiar = (texto, id) => {
@@ -162,13 +195,9 @@ export default function Comunicacao() {
     aplicarFeedback(idCopia, () => window.open(url, '_blank'));
   };
 
-  // MENSAGEM GENÉRICA (Até definirmos como colocar o prazo final no banco)
-  const gerarMensagem = (nomeUnidade) => {
-    return `Olá! Passando para lembrar do nosso acompanhamento sobre o(a) ${nomeUnidade}. O cronograma está avançando! Solicitamos a regularização das tarefas pendentes o quanto antes para não acumular. Desejo excelentes estudos!`;
-  };
-
   const unidadeAtualObj = unidadesAtivas.find(u => u.id === unidadeSelecionadaId);
-  const msgPadrao = unidadeAtualObj ? gerarMensagem(unidadeAtualObj.nome) : '';
+  const msgPronta = unidadeAtualObj ? gerarMensagem(unidadeAtualObj) : '';
+  const diasRestantesVisual = unidadeAtualObj ? getDiasRestantes(unidadeAtualObj.dataFim) : null;
 
   const multiplas = pendenciasDaUnidade.filter(p => p.tarefas.length > 1);
   const unicas = pendenciasDaUnidade.filter(p => p.tarefas.length === 1);
@@ -197,23 +226,39 @@ export default function Comunicacao() {
             <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Unidade em Foco</h3>
             <p className="text-xs text-gray-400">Selecione qual atividade deseja cobrar agora.</p>
           </div>
-          <div className="relative w-full md:w-96">
-            <select 
-              className="w-full appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-green-500 focus:border-green-500 block p-3 pr-10 font-bold"
-              value={unidadeSelecionadaId}
-              onChange={(e) => setUnidadeSelecionadaId(e.target.value)}
-              disabled={unidadesAtivas.length === 0}
-            >
-              {unidadesAtivas.length === 0 ? (
-                <option value="">Nenhuma unidade ativa</option>
-              ) : (
-                unidadesAtivas.map(u => (
-                  <option key={u.id} value={u.id}>{u.nome}</option>
-                ))
-              )}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-              <ChevronDown size={18} />
+          <div className="flex-1 w-full md:w-auto flex flex-col md:flex-row items-center gap-3 justify-end">
+            
+            {/* Tag de Status de Prazo */}
+            {diasRestantesVisual !== null && (
+              <div className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap ${diasRestantesVisual < 0 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                <CalendarClock size={16} /> 
+                {diasRestantesVisual < 0 ? 'Prazo Encerrado' : `Faltam ${diasRestantesVisual} dias`}
+              </div>
+            )}
+            {diasRestantesVisual === null && unidadeAtualObj && (
+              <div className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap bg-gray-100 text-gray-500">
+                <CalendarClock size={16} /> Sem prazo definido
+              </div>
+            )}
+
+            <div className="relative w-full md:w-96">
+              <select 
+                className="w-full appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-green-500 focus:border-green-500 block p-3 pr-10 font-bold"
+                value={unidadeSelecionadaId}
+                onChange={(e) => setUnidadeSelecionadaId(e.target.value)}
+                disabled={unidadesAtivas.length === 0}
+              >
+                {unidadesAtivas.length === 0 ? (
+                  <option value="">Nenhuma unidade ativa</option>
+                ) : (
+                  unidadesAtivas.map(u => (
+                    <option key={u.id} value={u.id}>{u.nome}</option>
+                  ))
+                )}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                <ChevronDown size={18} />
+              </div>
             </div>
           </div>
         </div>
@@ -239,11 +284,11 @@ export default function Comunicacao() {
                   <p className="text-xs text-gray-600 mb-4">Mensagem geral focada na unidade selecionada.</p>
                   
                   <div className="bg-green-50 p-3 rounded-xl text-xs text-gray-800 font-medium whitespace-pre-wrap border border-green-100 mb-3 shadow-inner">
-                    {msgPadrao}
+                    {msgPronta}
                   </div>
 
                   <button 
-                    onClick={() => handleEnviarWhatsAppGeral(msgPadrao)}
+                    onClick={() => handleEnviarWhatsAppGeral(msgPronta)}
                     className={`w-full font-bold py-2.5 rounded-xl transition-all flex justify-center items-center gap-2 shadow-sm text-sm ${copiado === 'geral' ? 'bg-green-200 text-green-900 scale-95' : 'bg-green-600 text-white hover:bg-green-700'}`}
                   >
                     {copiado === 'geral' ? <><CheckCircle2 size={16}/> Copiado! Abrindo...</> : <><Send size={16}/> Enviar para o Grupo</>}
@@ -275,7 +320,7 @@ export default function Comunicacao() {
                               <span className="text-[10px] text-gray-500 line-clamp-1">Deve: {tarefasTexto}</span>
                             </div>
                             <button 
-                              onClick={() => handleEnviarWhatsAppIndividual(msgPadrao, pend.aluno, idCopia)}
+                              onClick={() => handleEnviarWhatsAppIndividual(msgPronta, pend.aluno, idCopia)}
                               className={`w-full py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1.5 transition-all ${copiado === idCopia ? 'bg-green-600 text-white scale-95' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}
                             >
                               {copiado === idCopia ? <><CheckCircle2 size={14}/> Abrindo...</> : <><Send size={14}/> Enviar Zap</>} 
@@ -329,10 +374,10 @@ export default function Comunicacao() {
                                     ))}
                                   </div>
                                   
-                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgPadrao}"</p>
+                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgPronta}"</p>
                                 </div>
                                 <button 
-                                  onClick={() => handleCopiar(msgPadrao, idCopia)}
+                                  onClick={() => handleCopiar(msgPronta, idCopia)}
                                   className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${copiado === idCopia ? 'bg-red-600 text-white scale-95 shadow-inner' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'}`}
                                 >
                                   {copiado === idCopia ? <><CheckCircle2 size={18}/> Copiado!</> : <><Copy size={18}/> Copiar Texto Padrão</>} 
@@ -369,10 +414,10 @@ export default function Comunicacao() {
                                     ))}
                                   </div>
 
-                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgPadrao}"</p>
+                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgPronta}"</p>
                                 </div>
                                 <button 
-                                  onClick={() => handleCopiar(msgPadrao, idCopia)}
+                                  onClick={() => handleCopiar(msgPronta, idCopia)}
                                   className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${copiado === idCopia ? 'bg-yellow-500 text-white scale-95 shadow-inner' : 'bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100'}`}
                                 >
                                   {copiado === idCopia ? <><CheckCircle2 size={18}/> Copiado!</> : <><Copy size={18}/> Copiar Texto Padrão</>} 
