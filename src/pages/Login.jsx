@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Lock, Mail } from 'lucide-react';
+import { GraduationCap, LogIn } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -18,73 +17,63 @@ export default function Login() {
       setError('');
       setLoading(true);
       await login(email, password);
-      // Se der certo, manda para o Dashboard (página inicial)
-      navigate('/'); 
+      navigate('/');
     } catch (err) {
       setError('Falha ao fazer login. Verifique seu e-mail e senha.');
-      console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-800">Mais Médicos</h2>
-          <p className="text-gray-500 mt-2">Sistema de Feedbacks UFPI</p>
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+        
+        <div className="flex flex-col items-center mb-8">
+          <div className="bg-indigo-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
+            <GraduationCap size={40} />
+          </div>
+          <h1 className="text-2xl font-black text-indigo-900">Plataforma do Professor</h1>
+          <p className="text-gray-500 text-sm mt-1">Acesse seu painel de gestão docente</p>
         </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-center">
+          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold text-center mb-6 border border-red-100">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Mail className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="email"
-                required
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Seu e-mail"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">E-mail de Acesso</label>
+            <input 
+              type="email" 
+              required 
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              placeholder="seu@email.com"
+            />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Lock className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="password"
-                required
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Sua senha"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Senha</label>
+            <input 
+              type="password" 
+              required 
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              placeholder="••••••••"
+            />
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+          <button 
+            disabled={loading} 
+            className="w-full bg-indigo-600 text-white font-black py-3 rounded-lg hover:bg-indigo-700 transition-colors flex justify-center items-center gap-2 mt-2 disabled:opacity-50"
           >
-            {loading ? 'Entrando...' : 'Entrar'}
+            <LogIn size={20} /> {loading ? 'Entrando...' : 'Entrar na Plataforma'}
           </button>
         </form>
+        
       </div>
     </div>
   );
