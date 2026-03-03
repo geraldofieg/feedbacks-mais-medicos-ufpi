@@ -1,7 +1,14 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db } from '../services/firebase';
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  createUserWithEmailAndPassword, 
+  updateProfile, 
+  sendEmailVerification 
+} from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -11,7 +18,6 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
   function login(email, password) {
@@ -22,36 +28,45 @@ export function AuthProvider({ children }) {
     return signOut(auth);
   }
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      
-      if (user) {
-        try {
-          const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
-          if (userDoc.exists()) {
-            setUserRole(userDoc.data().role);
-          } else {
-            // Garantia para você não ficar trancado fora do sistema no início
-            setUserRole('admin'); 
-          }
-        } catch (error) {
-          console.error("Erro ao buscar permissões:", error);
-        }
-      } else {
-        setUserRole(null);
-      }
-      
-      setLoading(false);
+  // NOVA FUNÇÃO: Cadastro completo (SaaS)
+  async function signup(email, password, nome, whatsapp) {
+    // 1. Cria a conta no cofre de senhas do Google
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // 2. Coloca o nome no perfil do Google
+    await updateProfile(user, { displayName: nome });
+
+    // 3. Dispara o e-mail de verificação de segurança
+    await sendEmailVerification(user);
+
+    // 4. Salva o WhatsApp e os dados no nosso banco de dados (Firestore)
+    await setDoc(doc(db, 'usuarios', user.uid), {
+      nome: nome,
+      email: email,
+      whatsapp: whatsapp,
+      role: 'professor',
+      dataCadastro: serverTimestamp()
     });
 
+    // 5. Desloga o usuário imediatamente para obrigá-lo a verificar o e-mail
+    await signOut(auth);
+
+    return user;
+  }
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, user => {
+      setCurrentUser(user);
+      setLoading(false);
+    });
     return unsubscribe;
   }, []);
 
   const value = {
     currentUser,
-    userRole,
     login,
+    signup, // Função exportada para a tela de Login usar
     logout
   };
 
