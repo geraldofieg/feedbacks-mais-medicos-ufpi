@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, addDoc, deleteDoc, doc, updateDoc, query, onSnapshot, serverTimestamp, orderBy, where, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Building2, Users, CheckCircle, BookOpen, Layers, Hand } from 'lucide-react'; // <-- A mãozinha causadora do erro está importada!
+import { ArrowLeft, Plus, Trash2, Settings, Building2, Users, CheckCircle, BookOpen, Layers, Hand } from 'lucide-react';
 
 export default function Configuracoes() {
   const [instituicoes, setInstituicoes] = useState([]);
@@ -14,7 +14,9 @@ export default function Configuracoes() {
   
   // Estados de Formulários Rápidos
   const [novaTarefa, setNovaTarefa] = useState({ nome: '', enunciado: '' });
-  const [novoNomeSubtarefa, setNovoNomeSubtarefa] = useState({});
+  
+  // CORREÇÃO APLICADA AQUI: O nome correto que o resto do sistema espera ler
+  const [subtarefaNomes, setSubtarefaNomes] = useState({}); 
   const [novaInstNome, setNovaInstNome] = useState('');
   
   // Modal de Criação Rápida (On The Fly)
@@ -38,7 +40,6 @@ export default function Configuracoes() {
     const qTarefas = query(collection(db, 'saas_tarefas'), where('idTurma', '==', turmaAtiva));
     const unsub = onSnapshot(qTarefas, (snap) => {
       let dados = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Ordenação feita de forma blindada para evitar tela cinza no carregamento
       dados.sort((a, b) => {
         const timeA = (a.dataCriacao && a.dataCriacao.seconds) ? a.dataCriacao.seconds : 0;
         const timeB = (b.dataCriacao && b.dataCriacao.seconds) ? b.dataCriacao.seconds : 0;
