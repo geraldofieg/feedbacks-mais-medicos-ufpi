@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, addDoc, deleteDoc, doc, query, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Archive, Calendar, CheckCircle, Eraser } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Settings, Archive, Calendar, CheckCircle, Stethoscope } from 'lucide-react';
+import { cronogramaAssincrono } from '../data/cronogramaData'; // Puxando o calendário oficial
 
 export default function Configuracoes() {
   const [modulos, setModulos] = useState([]);
@@ -25,51 +26,6 @@ export default function Configuracoes() {
   const modulosAtivos = modulos.filter(m => m.status !== 'arquivado').sort((a, b) => (b.dataCriacao?.toMillis?.() || 0) - (a.dataCriacao?.toMillis?.() || 0));
   const modulosArquivados = modulos.filter(m => m.status === 'arquivado').sort((a, b) => (b.dataCriacao?.toMillis?.() || 0) - (a.dataCriacao?.toMillis?.() || 0));
 
-  // ==========================================
-  // FERRAMENTA DE FAXINA (MERGE DE DUPLICATAS)
-  // ==========================================
-  const handleFaxinaDuplicatas = async () => {
-    if (!window.confirm("Isso vai mesclar as tarefas dos Módulos 1 ao 8 antigos para os novos, e apagar os antigos. Confirma?")) return;
-    setSalvando(true);
-    
-    try {
-      const promessas = [];
-
-      // Faz a varredura do 1 ao 10
-      for (let i = 1; i <= 10; i++) {
-        const prefixoVelho = `Módulo ${i}`;
-        const prefixoNovo = `Módulo ${i} -`; // O novo gerado pelo cronograma tem o " - "
-
-        const modVelho = modulos.find(m => m.nome.trim().toLowerCase() === prefixoVelho.toLowerCase());
-        const modNovo = modulos.find(m => m.nome.trim().toLowerCase().startsWith(prefixoNovo.toLowerCase()));
-
-        if (modVelho && modNovo) {
-          // 1. Pega as tarefas do velho e junta com o novo (se houver)
-          const tarefasVelhas = modVelho.tarefas || [];
-          const tarefasNovas = modNovo.tarefas || [];
-          const tarefasMescladas = Array.from(new Set([...tarefasNovas, ...tarefasVelhas]));
-
-          // 2. Atualiza o novo com as tarefas resgatadas
-          promessas.push(updateDoc(doc(db, 'modulos', modNovo.id), { tarefas: tarefasMescladas }));
-          
-          // 3. Deleta o módulo velho e duplicado
-          promessas.push(deleteDoc(doc(db, 'modulos', modVelho.id)));
-        }
-      }
-
-      await Promise.all(promessas);
-      setFaxinaConcluida(true);
-    } catch (error) {
-      console.error("Erro na faxina:", error);
-      alert("Erro ao limpar duplicatas.");
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  // ==========================================
-  // CRUD MANUAL
-  // ==========================================
   const criarDataFirestore = (dataStr, isFim) => {
     if (!dataStr) return null;
     const [ano, mes, dia] = dataStr.split('-');
@@ -79,6 +35,41 @@ export default function Configuracoes() {
     return d;
   };
 
+  // ==========================================
+  // FERRAMENTA CIRÚRGICA: RESTAURADOR DE DATAS
+  // ==========================================
+  const handleRestaurarDatas = async () => {
+    if (!window.confirm("Isso vai injetar as datas oficiais da UFPI nos Módulos que você salvou manualmente. Confirma?")) return;
+    setSalvando(true);
+    
+    try {
+      const promessas = [];
+
+      // Procura pelos módulos que começam com "Módulo X" e injeta as datas
+      cronogramaAssincrono.forEach(item => {
+        const prefixo = item.modulo.split(' - ')[0].trim().toLowerCase(); // Extrai apenas "módulo 8"
+        const modSalvo = modulos.find(m => m.nome.trim().toLowerCase().startsWith(prefixo));
+
+        if (modSalvo) {
+          const dInicio = criarDataFirestore(item.inicio, false);
+          const dFim = criarDataFirestore(item.fim, true);
+          promessas.push(updateDoc(doc(db, 'modulos', modSalvo.id), { dataInicio: dInicio, dataFim: dFim }));
+        }
+      });
+
+      await Promise.all(promessas);
+      setFaxinaConcluida(true);
+    } catch (error) {
+      console.error("Erro ao restaurar datas:", error);
+      alert("Erro ao aplicar as datas.");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // ==========================================
+  // CRUD MANUAL
+  // ==========================================
   async function handleAddModulo(e) {
     e.preventDefault();
     if (salvando || !novoModulo.trim()) return;
@@ -253,23 +244,23 @@ export default function Configuracoes() {
           )}
         </div>
 
-        {/* FERRAMENTA DE FAXINA (RODAPÉ) */}
-        <div className="bg-orange-50 p-6 rounded-2xl shadow-sm border border-orange-200">
+        {/* FERRAMENTA CIRÚRGICA (RODAPÉ) */}
+        <div className="bg-teal-50 p-6 rounded-2xl shadow-sm border border-teal-200">
           <div className="flex items-center gap-3 mb-4">
-            <Eraser className="text-orange-600" size={28} />
+            <Stethoscope className="text-teal-600" size={28} />
             <div>
-              <h3 className="text-lg font-black text-orange-900">Faxina de Duplicatas</h3>
-              <p className="text-sm font-medium text-orange-700">Mescla os módulos velhos com os oficiais e limpa a tela.</p>
+              <h3 className="text-lg font-black text-teal-900">Restaurador de Datas</h3>
+              <p className="text-sm font-medium text-teal-700">Injeta os prazos oficiais da UFPI nos módulos que você manteve (Módulo 1 ao 8).</p>
             </div>
           </div>
 
           {!faxinaConcluida ? (
-            <button onClick={handleFaxinaDuplicatas} disabled={salvando} className="bg-orange-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-orange-700 transition-all disabled:opacity-50 flex items-center gap-2">
-              <Eraser size={20} /> {salvando ? 'Limpando...' : 'Rodar Faxina'}
+            <button onClick={handleRestaurarDatas} disabled={salvando} className="bg-teal-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-teal-700 transition-all disabled:opacity-50 flex items-center gap-2">
+              <Stethoscope size={20} /> {salvando ? 'Injetando...' : 'Aplicar Prazos nos Módulos'}
             </button>
           ) : (
             <div className="bg-green-100 text-green-800 p-4 rounded-xl font-bold flex items-center gap-2 border border-green-200">
-              <CheckCircle size={24} /> Duplicatas removidas e tarefas resgatadas com sucesso!
+              <CheckCircle size={24} /> Datas restauradas com sucesso!
             </div>
           )}
         </div>
