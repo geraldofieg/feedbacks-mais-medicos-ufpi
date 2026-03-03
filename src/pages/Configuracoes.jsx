@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, addDoc, deleteDoc, doc, query, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Archive, Calendar, CheckCircle, Stethoscope } from 'lucide-react';
-import { cronogramaAssincrono } from '../data/cronogramaData'; // Puxando o calendário oficial
+import { ArrowLeft, Plus, Trash2, Settings, Archive, Calendar } from 'lucide-react';
 
 export default function Configuracoes() {
   const [modulos, setModulos] = useState([]);
@@ -13,7 +12,6 @@ export default function Configuracoes() {
   
   const [salvando, setSalvando] = useState(false);
   const [novaTarefaModulo, setNovaTarefaModulo] = useState({}); 
-  const [faxinaConcluida, setFaxinaConcluida] = useState(false);
 
   useEffect(() => {
     const qModulos = query(collection(db, 'modulos'));
@@ -33,38 +31,6 @@ export default function Configuracoes() {
     if (isFim) d.setHours(23, 59, 59, 999); 
     else d.setHours(0, 0, 0, 0); 
     return d;
-  };
-
-  // ==========================================
-  // FERRAMENTA CIRÚRGICA: RESTAURADOR DE DATAS
-  // ==========================================
-  const handleRestaurarDatas = async () => {
-    if (!window.confirm("Isso vai injetar as datas oficiais da UFPI nos Módulos que você salvou manualmente. Confirma?")) return;
-    setSalvando(true);
-    
-    try {
-      const promessas = [];
-
-      // Procura pelos módulos que começam com "Módulo X" e injeta as datas
-      cronogramaAssincrono.forEach(item => {
-        const prefixo = item.modulo.split(' - ')[0].trim().toLowerCase(); // Extrai apenas "módulo 8"
-        const modSalvo = modulos.find(m => m.nome.trim().toLowerCase().startsWith(prefixo));
-
-        if (modSalvo) {
-          const dInicio = criarDataFirestore(item.inicio, false);
-          const dFim = criarDataFirestore(item.fim, true);
-          promessas.push(updateDoc(doc(db, 'modulos', modSalvo.id), { dataInicio: dInicio, dataFim: dFim }));
-        }
-      });
-
-      await Promise.all(promessas);
-      setFaxinaConcluida(true);
-    } catch (error) {
-      console.error("Erro ao restaurar datas:", error);
-      alert("Erro ao aplicar as datas.");
-    } finally {
-      setSalvando(false);
-    }
   };
 
   // ==========================================
@@ -243,28 +209,6 @@ export default function Configuracoes() {
             </div>
           )}
         </div>
-
-        {/* FERRAMENTA CIRÚRGICA (RODAPÉ) */}
-        <div className="bg-teal-50 p-6 rounded-2xl shadow-sm border border-teal-200">
-          <div className="flex items-center gap-3 mb-4">
-            <Stethoscope className="text-teal-600" size={28} />
-            <div>
-              <h3 className="text-lg font-black text-teal-900">Restaurador de Datas</h3>
-              <p className="text-sm font-medium text-teal-700">Injeta os prazos oficiais da UFPI nos módulos que você manteve (Módulo 1 ao 8).</p>
-            </div>
-          </div>
-
-          {!faxinaConcluida ? (
-            <button onClick={handleRestaurarDatas} disabled={salvando} className="bg-teal-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-teal-700 transition-all disabled:opacity-50 flex items-center gap-2">
-              <Stethoscope size={20} /> {salvando ? 'Injetando...' : 'Aplicar Prazos nos Módulos'}
-            </button>
-          ) : (
-            <div className="bg-green-100 text-green-800 p-4 rounded-xl font-bold flex items-center gap-2 border border-green-200">
-              <CheckCircle size={24} /> Datas restauradas com sucesso!
-            </div>
-          )}
-        </div>
-
       </div>
     </div>
   );
