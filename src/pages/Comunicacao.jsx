@@ -51,13 +51,14 @@ export default function Comunicacao() {
         setUnidadesAtivas(ativas);
 
         // ==========================================
-        // AUTO-SELEÇÃO PELA DATA VIGENTE
+        // LÓGICA DE AUTO-SELEÇÃO PELA URGÊNCIA
         // ==========================================
         if (ativas.length > 0) {
           const hoje = new Date();
           hoje.setHours(0, 0, 0, 0);
 
-          let unidadeDestaque = ativas.find(mod => {
+          // Pega TODAS as unidades que estão rodando EXATAMENTE hoje
+          const rodandoHoje = ativas.filter(mod => {
             if (!mod.dataInicio || !mod.dataFim) return false;
             const inicio = mod.dataInicio.toDate();
             inicio.setHours(0, 0, 0, 0);
@@ -66,7 +67,14 @@ export default function Comunicacao() {
             return hoje >= inicio && hoje <= fim;
           });
 
-          if (!unidadeDestaque) {
+          let unidadeDestaque;
+
+          if (rodandoHoje.length > 0) {
+            // Se houver mais de uma (empate), ordena pela que vence primeiro
+            rodandoHoje.sort((a, b) => a.dataFim.toDate() - b.dataFim.toDate());
+            unidadeDestaque = rodandoHoje[0];
+          } else {
+            // Se não tiver nenhuma rodando hoje, acha a próxima no futuro
             const futuros = ativas.filter(mod => mod.dataInicio && mod.dataInicio.toDate() > hoje)
                                   .sort((a, b) => a.dataInicio.toDate() - b.dataInicio.toDate());
             unidadeDestaque = futuros.length > 0 ? futuros[0] : ativas[0];
@@ -234,7 +242,7 @@ export default function Comunicacao() {
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 mb-8 flex flex-col md:flex-row items-center gap-4 justify-between">
           <div>
             <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Unidade em Foco</h3>
-            <p className="text-xs text-gray-400">Seleção automática pela data vigente.</p>
+            <p className="text-xs text-gray-400">Seleção automática pela urgência e data vigente.</p>
           </div>
           <div className="flex-1 w-full md:w-auto flex flex-col md:flex-row items-center gap-3 justify-end">
             
