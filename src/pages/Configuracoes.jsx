@@ -2,13 +2,18 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, addDoc, deleteDoc, doc, query, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Archive } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Settings, Archive, Calendar, DatabaseZap, CheckCircle } from 'lucide-react';
+import { cronogramaAssincrono, cronogramaSincrono } from '../data/cronogramaData'; // Importando o calendário oficial!
 
 export default function Configuracoes() {
   const [modulos, setModulos] = useState([]);
   const [novoModulo, setNovoModulo] = useState('');
+  const [novoDataInicio, setNovoDataInicio] = useState('');
+  const [novoDataFim, setNovoDataFim] = useState('');
+  
   const [salvando, setSalvando] = useState(false);
   const [novaTarefaModulo, setNovaTarefaModulo] = useState({}); 
+  const [sincronizacaoConcluida, setSincronizacaoConcluida] = useState(false);
 
   useEffect(() => {
     const qModulos = query(collection(db, 'modulos'));
@@ -18,28 +23,77 @@ export default function Configuracoes() {
     return () => unsubModulos();
   }, []);
 
-  // ==========================================
-  // LÓGICA DE ORDENAÇÃO E SEPARAÇÃO
-  // ==========================================
-  const modulosAtivos = modulos
-    .filter(m => m.status !== 'arquivado')
-    .sort((a, b) => {
-      const timeA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
-      const timeB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
-      return timeB - timeA; 
-    });
-
-  const modulosArquivados = modulos
-    .filter(m => m.status === 'arquivado')
-    .sort((a, b) => {
-      const timeA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
-      const timeB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
-      return timeB - timeA; 
-    });
-
+  const modulosAtivos = modulos.filter(m => m.status !== 'arquivado').sort((a, b) => (b.dataCriacao?.toMillis?.() || 0) - (a.dataCriacao?.toMillis?.() || 0));
+  const modulosArquivados = modulos.filter(m => m.status === 'arquivado').sort((a, b) => (b.dataCriacao?.toMillis?.() || 0) - (a.dataCriacao?.toMillis?.() || 0));
 
   // ==========================================
-  // CRUD DE UNIDADES
+  // FERRAMENTA DE UPSERT (SINCRONIZAÇÃO INTELIGENTE)
+  // ==========================================
+  const criarDataFirestore = (dataStr, isFim) => {
+    if (!dataStr) return null;
+    const [ano, mes, dia] = dataStr.split('-');
+    const d = new Date(ano, mes - 1, dia);
+    if (isFim) d.setHours(23, 59, 59, 999); // Fim do dia
+    else d.setHours(0, 0, 0, 0); // Início do dia
+    return d;
+  };
+
+  const handleSincronizarCronograma = async () => {
+    if (!window.confirm("Isso vai atualizar os módulos existentes com as datas oficiais e criar os que faltam. Confirma?")) return;
+    setSalvando(true);
+    
+    try {
+      const promessas = [];
+
+      // 1. Varre o Assíncrono
+      cronogramaAssincrono.forEach(item => {
+        const existente = modulos.find(m => m.nome.toLowerCase() === item.modulo.toLowerCase());
+        const dInicio = criarDataFirestore(item.inicio, false);
+        const dFim = criarDataFirestore(item.fim, true);
+
+        if (existente) {
+          // Apenas injeta as datas, não mexe nas tarefas
+          promessas.push(updateDoc(doc(db, 'modulos', existente.id), { dataInicio: dInicio, dataFim: dFim }));
+        } else {
+          // Cria o módulo novo
+          promessas.push(addDoc(collection(db, 'modulos'), {
+            nome: item.modulo, tarefas: [], status: 'ativo', dataCriacao: serverTimestamp(),
+            dataInicio: dInicio, dataFim: dFim
+          }));
+        }
+      });
+
+      // 2. Varre o Síncrono
+      cronogramaSincrono.forEach(item => {
+        const nomeSemana = `Semana ${item.semana}`;
+        const existente = modulos.find(m => m.nome.toLowerCase() === nomeSemana.toLowerCase());
+        const dInicio = criarDataFirestore(item.inicio, false);
+        const dFim = criarDataFirestore(item.fim, true);
+        const tarefasSync = [item.tema1, item.tema2].filter(Boolean); // Ignora vazios
+
+        if (existente) {
+          promessas.push(updateDoc(doc(db, 'modulos', existente.id), { dataInicio: dInicio, dataFim: dFim }));
+        } else {
+          promessas.push(addDoc(collection(db, 'modulos'), {
+            nome: nomeSemana, tarefas: tarefasSync, status: 'ativo', dataCriacao: serverTimestamp(),
+            dataInicio: dInicio, dataFim: dFim
+          }));
+        }
+      });
+
+      await Promise.all(promessas);
+      setSincronizacaoConcluida(true);
+      setTimeout(() => setSincronizacaoConcluida(false), 5000);
+    } catch (error) {
+      console.error("Erro na sincronização:", error);
+      alert("Erro ao sincronizar o cronograma.");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // ==========================================
+  // CRUD MANUAL
   // ==========================================
   async function handleAddModulo(e) {
     e.preventDefault();
@@ -50,15 +104,19 @@ export default function Configuracoes() {
         nome: novoModulo.trim(),
         tarefas: [], 
         status: 'ativo', 
-        dataCriacao: serverTimestamp() 
+        dataCriacao: serverTimestamp(),
+        dataInicio: novoDataInicio ? criarDataFirestore(novoDataInicio, false) : null,
+        dataFim: novoDataFim ? criarDataFirestore(novoDataFim, true) : null
       });
       setNovoModulo('');
+      setNovoDataInicio('');
+      setNovoDataFim('');
     } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
   }
 
   async function handleExcluirModulo(id) {
     if (salvando) return;
-    if (window.confirm('Tem certeza que deseja excluir esta Unidade e todas as tarefas dela?')) {
+    if (window.confirm('Excluir esta Unidade e todas as tarefas dela?')) {
       setSalvando(true);
       try { await deleteDoc(doc(db, 'modulos', id)); } finally { setSalvando(false); }
     }
@@ -73,13 +131,9 @@ export default function Configuracoes() {
     } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
   }
 
-  // ==========================================
-  // CRUD DE TAREFAS ANINHADAS
-  // ==========================================
   async function handleAddTarefaNoModulo(moduloId, listaAtual) {
     const nomeTarefa = novaTarefaModulo[moduloId];
     if (salvando || !nomeTarefa || !nomeTarefa.trim()) return;
-    
     setSalvando(true);
     try {
       const novaLista = [...(listaAtual || []), nomeTarefa.trim()];
@@ -99,71 +153,95 @@ export default function Configuracoes() {
     }
   }
 
-  const renderModuloCard = (mod, isAtivo) => (
-    <div key={mod.id} className={`rounded-xl border overflow-hidden shadow-sm flex flex-col transition-all ${isAtivo ? 'bg-gray-50 border-gray-200' : 'bg-gray-100 border-gray-300 opacity-75'}`}>
-      <div className={`p-4 flex justify-between items-center text-white ${isAtivo ? 'bg-gray-800' : 'bg-gray-400'}`}>
-        <div className="flex items-center gap-2">
-          <span className="font-bold">{mod.nome}</span>
-          {!isAtivo && <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase tracking-wider">Arquivado</span>}
+  const formatarDataLocal = (timestamp) => {
+    if (!timestamp || !timestamp.toDate) return null;
+    return timestamp.toDate().toLocaleDateString('pt-BR');
+  };
+
+  const renderModuloCard = (mod, isAtivo) => {
+    const dataFimFormatada = formatarDataLocal(mod.dataFim);
+    
+    return (
+      <div key={mod.id} className={`rounded-xl border overflow-hidden shadow-sm flex flex-col transition-all ${isAtivo ? 'bg-gray-50 border-gray-200' : 'bg-gray-100 border-gray-300 opacity-75'}`}>
+        <div className={`p-4 flex justify-between items-center text-white ${isAtivo ? 'bg-gray-800' : 'bg-gray-400'}`}>
+          <div className="flex items-center gap-2">
+            <span className="font-bold">{mod.nome}</span>
+            {!isAtivo && <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase tracking-wider">Arquivado</span>}
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={() => handleToggleStatus(mod.id, mod.status)} disabled={salvando} title={isAtivo ? "Arquivar Unidade" : "Desarquivar Unidade"} className="hover:text-yellow-400 transition-colors">
+              <Archive size={18} />
+            </button>
+            <button onClick={() => handleExcluirModulo(mod.id)} disabled={salvando} className="hover:text-red-400 transition-colors"><Trash2 size={18} /></button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => handleToggleStatus(mod.id, mod.status)} disabled={salvando} title={isAtivo ? "Arquivar Unidade" : "Desarquivar Unidade"} className="hover:text-yellow-400 transition-colors">
-            <Archive size={18} />
-          </button>
-          <button onClick={() => handleExcluirModulo(mod.id)} disabled={salvando} className="hover:text-red-400 transition-colors"><Trash2 size={18} /></button>
+        
+        <div className="bg-white px-4 py-2 border-b border-gray-100 flex items-center gap-2 text-xs font-medium text-gray-500">
+          <Calendar size={14} className={dataFimFormatada ? "text-blue-500" : "text-gray-400"} />
+          {dataFimFormatada ? `Prazo Final: ${dataFimFormatada}` : 'Sem prazo definido (Opcional)'}
         </div>
+
+        <div className="p-4 flex-1">
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Tarefas:</h4>
+          <ul className="space-y-2 mb-4">
+            {(!mod.tarefas || mod.tarefas.length === 0) && <li className="text-sm text-gray-400 italic">Nenhuma tarefa.</li>}
+            {mod.tarefas?.map((tar, idx) => (
+              <li key={idx} className={`border p-2 rounded-lg flex justify-between items-center text-sm ${isAtivo ? 'bg-white border-gray-100 text-gray-700' : 'bg-transparent border-gray-200 text-gray-500'}`}>
+                <span className="font-medium">{tar}</span>
+                <button onClick={() => handleExcluirTarefaDoModulo(mod.id, tar, mod.tarefas)} disabled={salvando || !isAtivo} className="text-red-300 hover:text-red-500 disabled:opacity-0"><Trash2 size={16}/></button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        
+        {isAtivo && (
+          <div className="p-3 bg-white border-t border-gray-100 flex gap-2">
+            <input type="text" placeholder="Nova tarefa..." className="flex-grow p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+              value={novaTarefaModulo[mod.id] || ''} 
+              onChange={e => setNovaTarefaModulo(prev => ({ ...prev, [mod.id]: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleAddTarefaNoModulo(mod.id, mod.tarefas)}
+            />
+            <button onClick={() => handleAddTarefaNoModulo(mod.id, mod.tarefas)} disabled={salvando} className="bg-gray-800 text-white px-3 py-2 rounded-md hover:bg-black transition-colors">
+              <Plus size={16} />
+            </button>
+          </div>
+        )}
       </div>
-      
-      <div className="p-4 flex-1">
-        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Tarefas:</h4>
-        <ul className="space-y-2 mb-4">
-          {(!mod.tarefas || mod.tarefas.length === 0) && <li className="text-sm text-gray-400 italic">Nenhuma tarefa.</li>}
-          {mod.tarefas?.map((tar, idx) => (
-            <li key={idx} className={`border p-2 rounded-lg flex justify-between items-center text-sm ${isAtivo ? 'bg-white border-gray-100 text-gray-700' : 'bg-transparent border-gray-200 text-gray-500'}`}>
-              <span className="font-medium">{tar}</span>
-              <button onClick={() => handleExcluirTarefaDoModulo(mod.id, tar, mod.tarefas)} disabled={salvando || !isAtivo} className="text-red-300 hover:text-red-500 disabled:opacity-0"><Trash2 size={16}/></button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      
-      {isAtivo && (
-        <div className="p-3 bg-white border-t border-gray-100 flex gap-2">
-          <input type="text" placeholder="Nova tarefa..." className="flex-grow p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-            value={novaTarefaModulo[mod.id] || ''} 
-            onChange={e => setNovaTarefaModulo(prev => ({ ...prev, [mod.id]: e.target.value }))}
-            onKeyDown={e => e.key === 'Enter' && handleAddTarefaNoModulo(mod.id, mod.tarefas)}
-          />
-          <button onClick={() => handleAddTarefaNoModulo(mod.id, mod.tarefas)} disabled={salvando} className="bg-gray-800 text-white px-3 py-2 rounded-md hover:bg-black transition-colors">
-            <Plus size={16} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-8">
         
         <div className="flex items-center gap-4 mb-8">
-          <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors">
-            <ArrowLeft size={24} />
-          </Link>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <Settings className="text-blue-600" />
-            Configurações do Sistema
-          </h2>
+          <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors"><ArrowLeft size={24} /></Link>
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><Settings className="text-blue-600" /> Configurações do Sistema</h2>
         </div>
 
         <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Gerenciamento Estrutural (Unidades de Ensino)</h3>
           
-          <form onSubmit={handleAddModulo} className="flex gap-2 mb-8 bg-blue-50 p-4 rounded-xl border border-blue-100">
-            <input required type="text" placeholder="Criar nova Unidade (Ex: Módulo 9, Semana 3...)" className="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={novoModulo} onChange={e => setNovoModulo(e.target.value)} />
-            <button type="submit" disabled={salvando} className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-bold disabled:opacity-50">
-              Criar Unidade
-            </button>
+          <form onSubmit={handleAddModulo} className="mb-8 bg-blue-50 p-5 rounded-xl border border-blue-100 space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Nome da Unidade *</label>
+              <input required type="text" placeholder="Ex: Módulo 9, Semana 3..." className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={novoModulo} onChange={e => setNovoModulo(e.target.value)} />
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Data Início (Opcional)</label>
+                <input type="date" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-600" value={novoDataInicio} onChange={e => setNovoDataInicio(e.target.value)} />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Data Fim (Opcional)</label>
+                <input type="date" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-600" value={novoDataFim} onChange={e => setNovoDataFim(e.target.value)} />
+              </div>
+            </div>
+            <div className="pt-2">
+              <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-bold disabled:opacity-50">
+                Criar Unidade
+              </button>
+            </div>
           </form>
 
           {/* SESSÃO DE ATIVOS */}
@@ -173,9 +251,7 @@ export default function Configuracoes() {
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {modulosAtivos.length === 0 ? (
-                <div className="col-span-2 text-center text-gray-500 py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                  Nenhuma unidade ativa no momento.
-                </div>
+                <div className="col-span-2 text-center text-gray-500 py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">Nenhuma unidade ativa no momento.</div>
               ) : (
                 modulosAtivos.map(mod => renderModuloCard(mod, true))
               )}
@@ -193,8 +269,29 @@ export default function Configuracoes() {
               </div>
             </div>
           )}
-
         </div>
+
+        {/* FERRAMENTA DE UPSERT (RODAPÉ) */}
+        <div className="bg-purple-50 p-6 rounded-2xl shadow-sm border border-purple-200">
+          <div className="flex items-center gap-3 mb-4">
+            <DatabaseZap className="text-purple-600" size={28} />
+            <div>
+              <h3 className="text-lg font-black text-purple-900">Importador Automático de Cronograma</h3>
+              <p className="text-sm font-medium text-purple-700">Injeta as datas oficiais nas unidades existentes e cria os módulos futuros automaticamente.</p>
+            </div>
+          </div>
+
+          {!sincronizacaoConcluida ? (
+            <button onClick={handleSincronizarCronograma} disabled={salvando} className="bg-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-purple-700 transition-all disabled:opacity-50 flex items-center gap-2">
+              <DatabaseZap size={20} /> {salvando ? 'Injetando dados...' : 'Sincronizar Cronograma da UFPI'}
+            </button>
+          ) : (
+            <div className="bg-green-100 text-green-800 p-4 rounded-xl font-bold flex items-center gap-2 border border-green-200">
+              <CheckCircle size={24} /> Cronograma injetado no banco de dados com sucesso!
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );
