@@ -9,34 +9,32 @@ export default function Configuracoes() {
   const [turmas, setTurmas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
   
-  // Estados de Criação Principal
   const [turmaAtiva, setTurmaAtiva] = useState('');
   
-  // Estados de Formulários Rápidos
   const [novaTarefa, setNovaTarefa] = useState({ nome: '', enunciado: '' });
-  
-  // CORREÇÃO APLICADA AQUI: O nome correto que o resto do sistema espera ler
   const [subtarefaNomes, setSubtarefaNomes] = useState({}); 
   const [novaInstNome, setNovaInstNome] = useState('');
   
-  // Modal de Criação Rápida (On The Fly)
   const [modalTurmaRapida, setModalTurmaRapida] = useState(false);
   const [novaTurmaRapida, setNovaTurmaRapida] = useState({ nome: '', idInst: '' });
 
   const [salvando, setSalvando] = useState(false);
-  const [mensagem, setMensagem] = useState('');
+  
+  // Mensagens locais (Contextuais)
+  const [msgInst, setMsgInst] = useState('');
+  const [msgTurma, setMsgTurma] = useState('');
+  const [msgTarefa, setMsgTarefa] = useState('');
 
-  // 1. Buscas (Nível 1 e 2)
+  // Busca Nível 1
   useEffect(() => {
     const unsubInst = onSnapshot(query(collection(db, 'saas_instituicoes'), orderBy('nome', 'asc')), (snap) => setInstituicoes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
     const unsubTurmas = onSnapshot(query(collection(db, 'saas_turmas'), orderBy('nome', 'asc')), (snap) => setTurmas(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
     return () => { unsubInst(); unsubTurmas(); };
   }, []);
 
-  // 2. Busca de Tarefas (Nível 3)
+  // Busca Nível 3
   useEffect(() => {
     if (!turmaAtiva) { setTarefas([]); return; }
-    
     const qTarefas = query(collection(db, 'saas_tarefas'), where('idTurma', '==', turmaAtiva));
     const unsub = onSnapshot(qTarefas, (snap) => {
       let dados = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -50,12 +48,16 @@ export default function Configuracoes() {
     return () => unsub();
   }, [turmaAtiva]);
 
-  const mostrarMensagem = (msg) => { setMensagem(msg); setTimeout(() => setMensagem(''), 3000); };
+  // Função genérica para piscar a mensagem por 5 segundos no lugar certo
+  const mostrarMsg = (setter, texto) => {
+    setter(texto);
+    setTimeout(() => setter(''), 5000);
+  };
 
   // --- AÇÕES NÍVEL 1 ---
   async function handleAddInstituicao(e) {
     e.preventDefault(); if (salvando || !novaInstNome.trim()) return; setSalvando(true);
-    try { await addDoc(collection(db, 'saas_instituicoes'), { nome: novaInstNome.trim(), dataCriacao: serverTimestamp() }); setNovaInstNome(''); mostrarMensagem('Instituição adicionada!'); } finally { setSalvando(false); }
+    try { await addDoc(collection(db, 'saas_instituicoes'), { nome: novaInstNome.trim(), dataCriacao: serverTimestamp() }); setNovaInstNome(''); mostrarMsg(setMsgInst, 'Instituição adicionada!'); } finally { setSalvando(false); }
   }
   async function handleExcluirInstituicao(id) {
     if (window.confirm('Excluir Instituição?')) { try { await deleteDoc(doc(db, 'saas_instituicoes', id)); } catch(e){console.error(e)} }
@@ -69,7 +71,7 @@ export default function Configuracoes() {
       setTurmaAtiva(docRef.id); 
       setModalTurmaRapida(false);
       setNovaTurmaRapida({ nome: '', idInst: '' });
-      mostrarMensagem('Turma criada e selecionada!');
+      mostrarMsg(setMsgTurma, 'Turma criada e selecionada!');
     } finally { setSalvando(false); }
   }
   async function handleExcluirTurma(id) {
@@ -93,10 +95,10 @@ export default function Configuracoes() {
         dataCriacao: serverTimestamp() 
       });
       setNovaTarefa({ nome: '', enunciado: '' });
-      mostrarMensagem('Tarefa criada com sucesso!');
+      mostrarMsg(setMsgTarefa, 'Tarefa criada com sucesso!');
     } catch (error) {
       console.error(error);
-      mostrarMensagem('Erro ao criar tarefa.');
+      mostrarMsg(setMsgTarefa, 'Erro ao criar tarefa.');
     } finally { 
       setSalvando(false); 
     }
@@ -128,11 +130,6 @@ export default function Configuracoes() {
             <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors"><ArrowLeft size={24} /></Link>
             <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><Settings className="text-blue-600" /> Gestão da Estrutura</h2>
           </div>
-          {mensagem && (
-            <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold flex items-center gap-2 animate-in fade-in shadow-sm">
-              <CheckCircle size={18} /> {mensagem}
-            </div>
-          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -141,6 +138,14 @@ export default function Configuracoes() {
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
               <h3 className="text-lg font-black text-indigo-900 mb-4 flex items-center gap-2 border-b pb-3"><Building2 size={20} /> Instituições</h3>
+              
+              {/* Feedback Local: Instituição */}
+              {msgInst && (
+                <div className="mb-3 p-2 bg-green-100 text-green-800 border border-green-200 rounded text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+                  <CheckCircle size={14} /> {msgInst}
+                </div>
+              )}
+
               <form onSubmit={handleAddInstituicao} className="flex gap-2 mb-4">
                 <input required type="text" placeholder="Nova (Ex: UFPI)" className="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500" value={novaInstNome} onChange={e => setNovaInstNome(e.target.value)} />
                 <button type="submit" disabled={salvando} className="bg-indigo-600 text-white px-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors"><Plus size={18} /></button>
@@ -200,6 +205,13 @@ export default function Configuracoes() {
                 </select>
               </div>
 
+              {/* Feedback Local: Turma Rápida */}
+              {msgTurma && (
+                <div className="mb-6 p-3 bg-green-100 text-green-800 border border-green-200 rounded-lg text-sm font-bold flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle size={18} /> {msgTurma}
+                </div>
+              )}
+
               {modalTurmaRapida && (
                 <div className="mb-6 p-5 border-2 border-dashed border-orange-300 bg-orange-50/50 rounded-xl animate-in fade-in">
                   <h4 className="font-bold text-orange-800 mb-3 flex items-center gap-2"><Plus size={18}/> Criação Rápida de Turma</h4>
@@ -235,6 +247,14 @@ export default function Configuracoes() {
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">ENUNCIADO</label>
                         <textarea rows="2" placeholder="Descreva aqui o que o aluno deve fazer..." className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
                       </div>
+                      
+                      {/* Feedback Local: Tarefa (Agora colado no botão de Lançar Tarefa) */}
+                      {msgTarefa && (
+                        <div className="p-3 bg-green-100 text-green-800 border border-green-200 rounded-lg text-sm font-bold flex items-center gap-2 animate-in fade-in">
+                          <CheckCircle size={18} /> {msgTarefa}
+                        </div>
+                      )}
+
                       <button type="submit" disabled={salvando} className="w-full bg-orange-600 text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 hover:bg-orange-700 transition-colors"><Plus size={20} /> Lançar Tarefa</button>
                     </div>
                   </form>
