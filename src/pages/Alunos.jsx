@@ -1,86 +1,68 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, addDoc, deleteDoc, doc, updateDoc, query, onSnapshot, serverTimestamp, orderBy, where, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, query, onSnapshot, serverTimestamp, orderBy, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Building2, Users, Layers, MonitorPlay } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Users, MonitorPlay, MessageCircle, Mail } from 'lucide-react';
 
-export default function Configuracoes() {
-  const [instituicoes, setInstituicoes] = useState([]);
-  const [novaInstituicao, setNovaInstituicao] = useState('');
+export default function Alunos() {
+  // Agora a tela Ouve as mudanças do menu em tempo real
+  const [turmaSelecionada, setTurmaSelecionada] = useState(localStorage.getItem('saas_turma'));
 
-  const [turmas, setTurmas] = useState([]);
-  const [novaTurma, setNovaTurma] = useState('');
-  const [instituicaoSelecionadaParaTurma, setInstituicaoSelecionadaParaTurma] = useState('');
-  
-  // NÍVEL 3: Módulos e Tarefas (Amarrados à Turma do Menu)
-  const [turmaSelecionadaGlobal, setTurmaSelecionadaGlobal] = useState(localStorage.getItem('saas_turma'));
-  const [modulosDaTurma, setModulosDaTurma] = useState([]);
-  const [novoModuloNome, setNovoModuloNome] = useState('');
-  const [tarefaNomes, setTarefaNomes] = useState({}); // Controla os inputs de nova tarefa por módulo
-  
-  const [salvando, setSalvando] = useState(false);
-
-  // Escuta o menu superior
   useEffect(() => {
-    const atualizaWorkspace = () => setTurmaSelecionadaGlobal(localStorage.getItem('saas_turma'));
+    const atualizaWorkspace = () => setTurmaSelecionada(localStorage.getItem('saas_turma'));
     window.addEventListener('workspaceChanged', atualizaWorkspace);
     return () => window.removeEventListener('workspaceChanged', atualizaWorkspace);
   }, []);
 
-  // Busca Nível 1
+  const [alunos, setAlunos] = useState([]);
+  const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [mensagem, setMensagem] = useState('');
+
+  // Busca os Alunos da Turma
   useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, 'saas_instituicoes'), orderBy('nome', 'asc')), (snap) => setInstituicoes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-    return () => unsub();
-  }, []);
+    if (!turmaSelecionada) return;
+    const qAlunos = query(collection(db, 'saas_alunos'), where('idTurma', '==', turmaSelecionada), orderBy('nome', 'asc'));
+    const unsubAlunos = onSnapshot(qAlunos, (snap) => {
+      setAlunos(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => console.error("Erro ao buscar alunos: ", error));
+    return () => unsubAlunos();
+  }, [turmaSelecionada]);
 
-  // Busca Nível 2
-  useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, 'saas_turmas'), orderBy('nome', 'asc')), (snap) => setTurmas(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-    return () => unsub();
-  }, []);
+  const formatarZap = (numero) => numero ? numero.replace(/\D/g, '') : '';
 
-  // Busca Nível 3 (Apenas da turma selecionada no Menu)
-  useEffect(() => {
-    if (!turmaSelecionadaGlobal) { setModulosDaTurma([]); return; }
-    const qMod = query(collection(db, 'saas_modulos'), where('idTurma', '==', turmaSelecionadaGlobal), orderBy('dataCriacao', 'asc'));
-    const unsub = onSnapshot(qMod, (snap) => setModulosDaTurma(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-    return () => unsub();
-  }, [turmaSelecionadaGlobal]);
-
-
-  // --- Ações Instituição ---
-  async function handleAddInstituicao(e) {
-    e.preventDefault(); if (salvando || !novaInstituicao.trim()) return; setSalvando(true);
-    try { await addDoc(collection(db, 'saas_instituicoes'), { nome: novaInstituicao.trim(), dataCriacao: serverTimestamp() }); setNovaInstituicao(''); } finally { setSalvando(false); }
-  }
-  async function handleExcluirInstituicao(id) {
-    if (window.confirm('Excluir Instituição?')) { setSalvando(true); try { await deleteDoc(doc(db, 'saas_instituicoes', id)); } finally { setSalvando(false); } }
+  async function handleAddAluno(e) {
+    e.preventDefault();
+    if (salvando || !nome.trim() || !turmaSelecionada) return;
+    setSalvando(true);
+    try {
+      await addDoc(collection(db, 'saas_alunos'), { 
+        idTurma: turmaSelecionada, nome: nome.trim(), email: email.trim() || '', whatsapp: whatsapp.trim() || '', status: 'ativo', dataCriacao: serverTimestamp()
+      });
+      setNome(''); setEmail(''); setWhatsapp('');
+      setMensagem('Aluno cadastrado!'); setTimeout(() => setMensagem(''), 3000);
+    } catch (error) { console.error(error); setMensagem('Erro ao cadastrar.'); } finally { setSalvando(false); }
   }
 
-  // --- Ações Turma ---
-  async function handleAddTurma(e) {
-    e.preventDefault(); if (salvando || !novaTurma.trim() || !instituicaoSelecionadaParaTurma) return; setSalvando(true);
-    try { await addDoc(collection(db, 'saas_turmas'), { idInstituicao: instituicaoSelecionadaParaTurma, nome: novaTurma.trim(), dataCriacao: serverTimestamp() }); setNovaTurma(''); } finally { setSalvando(false); }
-  }
-  async function handleExcluirTurma(id) {
-    if (window.confirm('Excluir Turma?')) { setSalvando(true); try { await deleteDoc(doc(db, 'saas_turmas', id)); } finally { setSalvando(false); } }
+  async function handleExcluirAluno(id) {
+    if (window.confirm('Remover aluno?')) {
+      setSalvando(true);
+      try { await deleteDoc(doc(db, 'saas_alunos', id)); } finally { setSalvando(false); }
+    }
   }
 
-  // --- Ações Módulos e Tarefas (SaaS) ---
-  async function handleAddModulo(e) {
-    e.preventDefault(); if (salvando || !novoModuloNome.trim() || !turmaSelecionadaGlobal) return; setSalvando(true);
-    try { await addDoc(collection(db, 'saas_modulos'), { idTurma: turmaSelecionadaGlobal, nome: novoModuloNome.trim(), tarefas: [], dataCriacao: serverTimestamp() }); setNovoModuloNome(''); } finally { setSalvando(false); }
-  }
-  async function handleExcluirModulo(id) {
-    if (window.confirm('Excluir Módulo inteiro?')) { setSalvando(true); try { await deleteDoc(doc(db, 'saas_modulos', id)); } finally { setSalvando(false); } }
-  }
-  async function handleAddTarefa(idModulo) {
-    const nomeTarefa = tarefaNomes[idModulo];
-    if (salvando || !nomeTarefa?.trim()) return; setSalvando(true);
-    try { await updateDoc(doc(db, 'saas_modulos', idModulo), { tarefas: arrayUnion(nomeTarefa.trim()) }); setTarefaNomes({ ...tarefaNomes, [idModulo]: '' }); } finally { setSalvando(false); }
-  }
-  async function handleExcluirTarefa(idModulo, nomeTarefa) {
-    if (window.confirm(`Remover tarefa '${nomeTarefa}'?`)) { setSalvando(true); try { await updateDoc(doc(db, 'saas_modulos', idModulo), { tarefas: arrayRemove(nomeTarefa) }); } finally { setSalvando(false); } }
+  if (!turmaSelecionada) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white max-w-lg w-full p-10 rounded-3xl shadow-sm border border-gray-200 text-center flex flex-col items-center">
+          <div className="bg-indigo-50 text-indigo-500 w-20 h-20 rounded-full flex items-center justify-center mb-6"><MonitorPlay size={40} /></div>
+          <h2 className="text-2xl font-black text-gray-800 mb-2">Central de Alunos Bloqueada</h2>
+          <p className="text-gray-500">Para gerenciar matrículas, por favor, <b>selecione uma Instituição e uma Turma no menu superior</b>.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -88,52 +70,44 @@ export default function Configuracoes() {
       <div className="max-w-5xl mx-auto space-y-8">
         
         <div className="flex items-center gap-4 mb-8">
-          <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors"><ArrowLeft size={24} /></Link>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><Settings className="text-blue-600" /> Configurações de Estrutura</h2>
+          <Link to="/" className="text-gray-500 hover:text-indigo-600"><ArrowLeft size={24} /></Link>
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-indigo-600" /> Gestão de Alunos</h2>
         </div>
 
-        {/* NÍVEL 1 */}
-        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
-          <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-2 border-b pb-4"><Building2 size={24} /> Nível 1: Instituições</h3>
-          <form onSubmit={handleAddInstituicao} className="mb-6 flex gap-2"><input required type="text" placeholder="Nome da Instituição (Ex: UFPI)" className="flex-1 p-3 border rounded-lg" value={novaInstituicao} onChange={e => setNovaInstituicao(e.target.value)} /><button type="submit" disabled={salvando} className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold">Adicionar</button></form>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{instituicoes.map(inst => <div key={inst.id} className="bg-indigo-50 p-4 rounded-xl flex justify-between items-center"><span className="font-bold text-indigo-900">{inst.nome}</span><button onClick={() => handleExcluirInstituicao(inst.id)} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button></div>)}</div>
-        </div>
+        {mensagem && <div className="p-4 rounded-lg bg-green-100 text-green-800 font-bold text-center border border-green-200">{mensagem}</div>}
 
-        {/* NÍVEL 2 */}
-        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
-          <h3 className="text-xl font-black text-teal-900 mb-6 flex items-center gap-2 border-b pb-4"><Users size={24} /> Nível 2: Turmas</h3>
-          <form onSubmit={handleAddTurma} className="mb-6 space-y-4 bg-teal-50 p-5 rounded-xl border border-teal-100">
-            <select required className="w-full p-3 border rounded-lg bg-white" value={instituicaoSelecionadaParaTurma} onChange={e => setInstituicaoSelecionadaParaTurma(e.target.value)}><option value="">Selecione a Instituição...</option>{instituicoes.map(inst => <option key={inst.id} value={inst.id}>{inst.nome}</option>)}</select>
-            <div className="flex gap-2"><input required type="text" placeholder="Nome da Turma" className="flex-1 p-3 border rounded-lg" value={novaTurma} onChange={e => setNovaTurma(e.target.value)} disabled={!instituicaoSelecionadaParaTurma} /><button type="submit" disabled={salvando || !instituicaoSelecionadaParaTurma} className="bg-teal-600 text-white px-6 py-3 rounded-lg font-bold">Criar Turma</button></div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <h3 className="text-lg font-black text-indigo-900 mb-6 border-b pb-4">Matricular Novo Aluno</h3>
+          <form onSubmit={handleAddAluno} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div><label className="block text-xs font-bold text-gray-600 uppercase mb-2">Nome *</label><input required type="text" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={nome} onChange={e => setNome(e.target.value)} /></div>
+            <div><label className="block text-xs font-bold text-gray-600 uppercase mb-2">E-mail</label><input type="email" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={email} onChange={e => setEmail(e.target.value)} /></div>
+            <div><label className="block text-xs font-bold text-gray-600 uppercase mb-2">WhatsApp</label><input type="tel" className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} /></div>
+            <button type="submit" disabled={salvando} className="w-full bg-indigo-600 text-white px-4 py-3 rounded-lg hover:bg-indigo-700 font-bold disabled:opacity-50 flex items-center justify-center gap-2"><Plus size={20} /> Adicionar</button>
           </form>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{turmas.map(turma => { const instPai = instituicoes.find(i => i.id === turma.idInstituicao); return (<div key={turma.id} className="border p-4 rounded-xl flex justify-between items-center"><div><span className="text-[10px] font-bold text-teal-600 uppercase block mb-1">{instPai ? instPai.nome : ''}</span><span className="font-bold">{turma.nome}</span></div><button onClick={() => handleExcluirTurma(turma.id)} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button></div>)})}</div>
         </div>
 
-        {/* NÍVEL 3 (BLOQUEADO SE NÃO TIVER TURMA NO MENU) */}
-        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
-          <h3 className="text-xl font-black text-orange-900 mb-6 flex items-center gap-2 border-b pb-4"><Layers size={24} /> Nível 3: Módulos e Tarefas da Turma</h3>
-          
-          {!turmaSelecionadaGlobal ? (
-            <div className="bg-orange-50 p-6 rounded-xl text-center border border-orange-100"><MonitorPlay className="mx-auto text-orange-400 mb-2" size={32} /><p className="text-orange-800 font-bold">Selecione uma Turma no Menu Superior para criar as atividades dela.</p></div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <div className="flex justify-between items-center mb-6 border-b pb-4"><h3 className="text-lg font-black text-gray-800">Alunos Matriculados</h3><span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-1 rounded-full">{alunos.length}</span></div>
+          {alunos.length === 0 ? (
+            <div className="text-center py-10 bg-gray-50 rounded-xl border border-gray-100"><p className="text-gray-500 font-medium">Nenhum aluno matriculado.</p></div>
           ) : (
-            <>
-              <form onSubmit={handleAddModulo} className="mb-8 flex gap-2"><input required type="text" placeholder="Nome do Módulo (Ex: Módulo 1 - Ética)" className="flex-1 p-3 border border-orange-200 rounded-lg" value={novoModuloNome} onChange={e => setNovoModuloNome(e.target.value)} /><button type="submit" disabled={salvando} className="bg-orange-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2"><Plus size={20} /> Criar Módulo</button></form>
-              <div className="space-y-6">
-                {modulosDaTurma.length === 0 && <p className="text-sm text-gray-400 italic text-center">Nenhum módulo criado para esta turma ainda.</p>}
-                {modulosDaTurma.map(mod => (
-                  <div key={mod.id} className="border border-orange-100 bg-orange-50/30 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-orange-100 p-4 flex justify-between items-center"><h4 className="font-black text-orange-900">{mod.nome}</h4><button onClick={() => handleExcluirModulo(mod.id)} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button></div>
-                    <div className="p-4 bg-white">
-                      <div className="flex gap-2 mb-4"><input type="text" placeholder="Nova Tarefa (Ex: Desafio 1)" className="flex-1 p-2 border border-gray-200 rounded text-sm outline-none focus:border-orange-400" value={tarefaNomes[mod.id] || ''} onChange={e => setTarefaNomes({...tarefaNomes, [mod.id]: e.target.value})} /><button onClick={() => handleAddTarefa(mod.id)} disabled={salvando || !tarefaNomes[mod.id]?.trim()} className="bg-orange-500 text-white px-4 py-2 rounded text-sm font-bold disabled:opacity-50">Adicionar Tarefa</button></div>
-                      <div className="space-y-2">
-                        {(!mod.tarefas || mod.tarefas.length === 0) && <p className="text-xs text-gray-400 italic">Sem tarefas cadastradas.</p>}
-                        {mod.tarefas?.map((tar, idx) => (<div key={idx} className="flex justify-between items-center bg-gray-50 border border-gray-100 p-2 rounded text-sm"><span className="font-medium text-gray-700">{tar}</span><button onClick={() => handleExcluirTarefa(mod.id, tar)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>))}
-                      </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {alunos.map(aluno => (
+                <div key={aluno.id} className="border border-gray-200 bg-white p-4 rounded-xl shadow-sm flex flex-col justify-between hover:border-indigo-300">
+                  <div className="mb-4">
+                    <span className="font-black text-gray-800 block text-lg">{aluno.nome}</span>
+                    <div className="flex flex-col gap-1 mt-2">
+                      {aluno.email && <span className="text-xs text-gray-500 flex items-center gap-1.5"><Mail size={14} className="text-gray-400"/> {aluno.email}</span>}
+                      {aluno.whatsapp && <span className="text-xs text-gray-500 flex items-center gap-1.5"><MessageCircle size={14} className="text-green-500"/> {aluno.whatsapp}</span>}
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
+                  <div className="flex justify-between items-center pt-3 border-t border-gray-100 mt-auto">
+                    {aluno.whatsapp ? <a href={`https://wa.me/55${formatarZap(aluno.whatsapp)}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-green-600 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg flex items-center gap-1">Chamar</a> : <span className="text-xs text-gray-300 italic">Sem WhatsApp</span>}
+                    <button onClick={() => handleExcluirAluno(aluno.id)} disabled={salvando} className="text-red-400 hover:text-red-600 bg-red-50 p-1.5 rounded"><Trash2 size={16}/></button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
