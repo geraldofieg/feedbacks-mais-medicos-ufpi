@@ -4,9 +4,6 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Send, AlertCircle, Users, User, ChevronDown, CalendarClock } from 'lucide-react';
 
-// ==========================================
-// 📖 DICIONÁRIO DE CONTATOS (WHATSAPP)
-// ==========================================
 const contatosWhatsApp = {
   "Guilherme": "556291203480",
   "Antônio Gabriel": "556499622132",
@@ -34,14 +31,12 @@ export default function Comunicacao() {
     async function fetchComunicacao() {
       setLoading(true);
       try {
-        // 1. Busca os Alunos
         const alunosSnap = await getDocs(collection(db, 'alunos'));
         const alunosLista = alunosSnap.docs.map(d => d.data().nome);
         setAlunosAtivos(alunosLista);
 
         if (alunosLista.length === 0) return;
 
-        // 2. Busca as Unidades Ativas no Banco (NOVA ARQUITETURA)
         const modulosSnap = await getDocs(collection(db, 'modulos'));
         const modulosDB = modulosSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
@@ -54,8 +49,30 @@ export default function Comunicacao() {
           });
 
         setUnidadesAtivas(ativas);
+
+        // ==========================================
+        // AUTO-SELEÇÃO PELA DATA VIGENTE
+        // ==========================================
         if (ativas.length > 0) {
-          setUnidadeSelecionadaId(ativas[0].id); // Seleciona a mais recente por padrão
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+
+          let unidadeDestaque = ativas.find(mod => {
+            if (!mod.dataInicio || !mod.dataFim) return false;
+            const inicio = mod.dataInicio.toDate();
+            inicio.setHours(0, 0, 0, 0);
+            const fim = mod.dataFim.toDate();
+            fim.setHours(23, 59, 59, 999);
+            return hoje >= inicio && hoje <= fim;
+          });
+
+          if (!unidadeDestaque) {
+            const futuros = ativas.filter(mod => mod.dataInicio && mod.dataInicio.toDate() > hoje)
+                                  .sort((a, b) => a.dataInicio.toDate() - b.dataInicio.toDate());
+            unidadeDestaque = futuros.length > 0 ? futuros[0] : ativas[0];
+          }
+
+          setUnidadeSelecionadaId(unidadeDestaque.id);
         }
 
       } catch (error) {
@@ -67,7 +84,6 @@ export default function Comunicacao() {
     fetchComunicacao();
   }, []);
 
-  // Recalcula as pendências sempre que mudar a unidade selecionada
   useEffect(() => {
     async function calcularPendencias() {
       if (!unidadeSelecionadaId || alunosAtivos.length === 0) return;
@@ -111,7 +127,7 @@ export default function Comunicacao() {
 
         setPendenciasDaUnidade(Object.values(mapaDevedores));
       } catch (error) {
-        console.error("Erro ao calcular pendências da unidade:", error);
+        console.error("Erro ao calcular pendências:", error);
       } finally {
         setLoading(false);
       }
@@ -119,9 +135,6 @@ export default function Comunicacao() {
     calcularPendencias();
   }, [unidadeSelecionadaId, unidadesAtivas, alunosAtivos]);
 
-  // ==========================================
-  // INTELIGÊNCIA DE DATAS E MENSAGENS (A MÁGICA HÍBRIDA)
-  // ==========================================
   const getDiasRestantes = (timestampFim) => {
     if (!timestampFim || !timestampFim.toDate) return null;
     const hoje = new Date();
@@ -136,7 +149,6 @@ export default function Comunicacao() {
     const diasRestantes = getDiasRestantes(unidadeObj.dataFim);
 
     if (diasRestantes !== null) {
-      // Inteligência ativada (Com data limite)
       if (diasRestantes < 0) {
         return `Olá! O prazo oficial para as atividades do(a) ${unidadeObj.nome} foi encerrado. Notei pendências no sistema. Por favor, regularize a sua entrega imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
       }
@@ -148,11 +160,9 @@ export default function Comunicacao() {
       }
       return `Olá, colegas! 🚨 Passando para alertar que entramos na reta final do(a) ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Solicitamos a regularização das tarefas pendentes o quanto antes para que ninguém fique prejudicado.`;
     } else {
-      // Mensagem genérica (Sem data limite)
       return `Olá! Passando para lembrar do nosso acompanhamento sobre o(a) ${unidadeObj.nome}. O cronograma está avançando! Solicitamos a regularização das tarefas pendentes o quanto antes para não acumular. Desejo excelentes estudos!`;
     }
   };
-
 
   const formatarListaTarefas = (lista) => {
     if (lista.length === 1) return lista[0];
@@ -198,6 +208,7 @@ export default function Comunicacao() {
   const unidadeAtualObj = unidadesAtivas.find(u => u.id === unidadeSelecionadaId);
   const msgPronta = unidadeAtualObj ? gerarMensagem(unidadeAtualObj) : '';
   const diasRestantesVisual = unidadeAtualObj ? getDiasRestantes(unidadeAtualObj.dataFim) : null;
+  const temTarefasCadastradas = unidadeAtualObj && unidadeAtualObj.tarefas && unidadeAtualObj.tarefas.length > 0;
 
   const multiplas = pendenciasDaUnidade.filter(p => p.tarefas.length > 1);
   const unicas = pendenciasDaUnidade.filter(p => p.tarefas.length === 1);
@@ -220,15 +231,13 @@ export default function Comunicacao() {
           </h2>
         </div>
 
-        {/* NOVO SELETOR DE UNIDADE ATIVA */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 mb-8 flex flex-col md:flex-row items-center gap-4 justify-between">
           <div>
             <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Unidade em Foco</h3>
-            <p className="text-xs text-gray-400">Selecione qual atividade deseja cobrar agora.</p>
+            <p className="text-xs text-gray-400">Seleção automática pela data vigente.</p>
           </div>
           <div className="flex-1 w-full md:w-auto flex flex-col md:flex-row items-center gap-3 justify-end">
             
-            {/* Tag de Status de Prazo */}
             {diasRestantesVisual !== null && (
               <div className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap ${diasRestantesVisual < 0 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
                 <CalendarClock size={16} /> 
@@ -304,7 +313,11 @@ export default function Comunicacao() {
                   <p className="text-xs text-gray-600 mb-4">Envie mensagens privadas para o WhatsApp de cada aluno.</p>
 
                   <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
-                    {listaIndividualZap.length === 0 ? (
+                    {!temTarefasCadastradas ? (
+                      <div className="text-center py-6 text-orange-600 font-bold bg-orange-50 rounded-xl text-sm border border-orange-200 leading-relaxed">
+                        ⚠️ Atenção: Esta unidade não possui tarefas cadastradas.<br/><br/>Vá em <b>Configurações</b> e adicione as tarefas para o sistema identificar quem está devendo.
+                      </div>
+                    ) : listaIndividualZap.length === 0 ? (
                       <div className="text-center py-6 text-green-600 font-bold bg-green-50 rounded-xl text-sm border border-green-100">
                         Ninguém devendo esta unidade! 🎉
                       </div>
@@ -342,7 +355,11 @@ export default function Comunicacao() {
                 </h3>
                 <p className="text-sm text-gray-600 mb-6">Alunos agrupados por pendências. Copie a mensagem e envie pela plataforma do governo.</p>
 
-                {pendenciasDaUnidade.length === 0 ? (
+                {!temTarefasCadastradas ? (
+                  <div className="text-center py-10 text-orange-600 font-bold bg-orange-50 rounded-xl border border-dashed border-orange-300">
+                    Aguardando cadastro de tarefas nas Configurações.
+                  </div>
+                ) : pendenciasDaUnidade.length === 0 ? (
                   <div className="text-center py-10 text-blue-600 font-bold bg-blue-50 rounded-xl border border-blue-200">
                     Uau! Todos os alunos já entregaram as tarefas desta unidade.
                   </div>
