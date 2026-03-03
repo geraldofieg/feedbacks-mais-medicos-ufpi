@@ -19,11 +19,11 @@ export default function Navbar() {
     }
   }
 
-  // Lista dos botões principais
+  // Lista dos botões principais (Padronizado 'Comunicação')
   const navLinks = [
     { path: '/', icon: <Home size={18} />, label: 'Início' },
     { path: '/cronograma', icon: <CalendarRange size={18} />, label: 'Datas' },
-    { path: '/comunicacao', icon: <Megaphone size={18} />, label: 'Avisos' },
+    { path: '/comunicacao', icon: <Megaphone size={18} />, label: 'Comunicação' },
     { path: '/pendencias', icon: <AlertTriangle size={18} />, label: 'Pendências' },
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
   ];
