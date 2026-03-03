@@ -11,8 +11,6 @@ export default function Configuracoes() {
   const [novaTarefaModulo, setNovaTarefaModulo] = useState({}); 
 
   useEffect(() => {
-    // Busca todos os módulos sem ordenação prévia do Firebase, 
-    // pois faremos a separação e ordenação inteligente no JavaScript.
     const qModulos = query(collection(db, 'modulos'));
     const unsubModulos = onSnapshot(qModulos, (snap) => {
       setModulos(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -21,14 +19,14 @@ export default function Configuracoes() {
   }, []);
 
   // ==========================================
-  // LÓGICA DE ORDENAÇÃO E SEPARAÇÃO (A SUA IDEIA!)
+  // LÓGICA DE ORDENAÇÃO E SEPARAÇÃO
   // ==========================================
   const modulosAtivos = modulos
     .filter(m => m.status !== 'arquivado')
     .sort((a, b) => {
       const timeA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
       const timeB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
-      return timeB - timeA; // Do mais novo pro mais velho
+      return timeB - timeA; 
     });
 
   const modulosArquivados = modulos
@@ -36,7 +34,7 @@ export default function Configuracoes() {
     .sort((a, b) => {
       const timeA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
       const timeB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
-      return timeB - timeA; // Do mais novo pro mais velho
+      return timeB - timeA; 
     });
 
 
@@ -101,7 +99,6 @@ export default function Configuracoes() {
     }
   }
 
-  // Função auxiliar para desenhar o Card do Módulo e evitar código repetido
   const renderModuloCard = (mod, isAtivo) => (
     <div key={mod.id} className={`rounded-xl border overflow-hidden shadow-sm flex flex-col transition-all ${isAtivo ? 'bg-gray-50 border-gray-200' : 'bg-gray-100 border-gray-300 opacity-75'}`}>
       <div className={`p-4 flex justify-between items-center text-white ${isAtivo ? 'bg-gray-800' : 'bg-gray-400'}`}>
@@ -172,4 +169,33 @@ export default function Configuracoes() {
           {/* SESSÃO DE ATIVOS */}
           <div className="mb-12">
             <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-              <span className="w-
+              <span className="w-2 h-2 rounded-full bg-green-500"></span> Unidades Ativas
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {modulosAtivos.length === 0 ? (
+                <div className="col-span-2 text-center text-gray-500 py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  Nenhuma unidade ativa no momento.
+                </div>
+              ) : (
+                modulosAtivos.map(mod => renderModuloCard(mod, true))
+              )}
+            </div>
+          </div>
+
+          {/* SESSÃO DE ARQUIVADOS */}
+          {modulosArquivados.length > 0 && (
+            <div>
+              <h4 className="text-lg font-bold text-gray-500 mb-4 border-b pb-2 flex items-center gap-2">
+                <Archive size={18} /> Histórico de Unidades Arquivadas
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {modulosArquivados.map(mod => renderModuloCard(mod, false))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
