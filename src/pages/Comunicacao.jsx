@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
-import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Send, User, ChevronDown, CalendarClock, MonitorSmartphone } from 'lucide-react';
+import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Send, User, ChevronDown, CalendarClock, MonitorSmartphone, Target } from 'lucide-react';
 
 const contatosWhatsApp = {
   "Guilherme": "556291203480",
@@ -26,6 +26,21 @@ export default function Comunicacao() {
   const [pendenciasDaUnidade, setPendenciasDaUnidade] = useState([]);
   const [copiado, setCopiado] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Calcula proativamente quais módulos estão vigentes HOJE para criar as Tabs
+  const unidadesRodandoHoje = useMemo(() => {
+    if (!unidadesAtivas || unidadesAtivas.length === 0) return [];
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    return unidadesAtivas.filter(mod => {
+      if (!mod.dataInicio || !mod.dataFim) return false;
+      const inicio = mod.dataInicio.toDate();
+      inicio.setHours(0, 0, 0, 0);
+      const fim = mod.dataFim.toDate();
+      fim.setHours(23, 59, 59, 999);
+      return hoje >= inicio && hoje <= fim;
+    }).sort((a, b) => a.dataFim.toDate() - b.dataFim.toDate());
+  }, [unidadesAtivas]);
 
   useEffect(() => {
     async function fetchComunicacao() {
@@ -229,7 +244,6 @@ export default function Comunicacao() {
   const diasRestantesVisual = unidadeAtualObj ? getDiasRestantes(unidadeAtualObj.dataFim) : null;
   const temTarefasCadastradas = unidadeAtualObj && unidadeAtualObj.tarefas && unidadeAtualObj.tarefas.length > 0;
 
-  // Cria uma lista única e plana (alfabética) com todos os devedores da unidade selecionada
   const listaIndividualZap = [];
   pendenciasDaUnidade.forEach(grupo => {
     grupo.devedores.forEach(aluno => {
@@ -248,44 +262,69 @@ export default function Comunicacao() {
           </h2>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 mb-8 flex flex-col md:flex-row items-center gap-4 justify-between">
+        {/* NOVA ÁREA DE SELEÇÃO: SMART TABS + DROPDOWN */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mb-8 flex flex-col gap-5">
           <div>
-            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Unidade em Foco</h3>
-            <p className="text-xs text-gray-400">Seleção automática pela urgência e data vigente.</p>
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2">
+              <Target size={16} /> Tarefa em Foco
+            </h3>
+            <p className="text-xs text-gray-400">Selecione abaixo a tarefa ou módulo que você deseja gerenciar e cobrar neste momento.</p>
           </div>
-          <div className="flex-1 w-full md:w-auto flex flex-col md:flex-row items-center gap-3 justify-end">
-            
+
+          {unidadesRodandoHoje.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {unidadesRodandoHoje.map(u => (
+                <button
+                  key={u.id}
+                  onClick={() => setUnidadeSelecionadaId(u.id)}
+                  className={`px-5 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 border ${
+                    unidadeSelecionadaId === u.id
+                      ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${unidadeSelecionadaId === u.id ? 'bg-white' : 'bg-green-500 animate-pulse'}`}></span>
+                  {u.nome}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between pt-4 border-t border-gray-100 mt-2">
+            <div className="relative w-full md:w-96">
+              <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Explorar histórico ou tarefas futuras</label>
+              <div className="relative">
+                <select 
+                  className="w-full appearance-none bg-gray-50 border border-gray-200 text-gray-600 text-sm rounded-xl focus:ring-green-500 focus:border-green-500 block p-2.5 pr-10 font-semibold"
+                  value={unidadeSelecionadaId}
+                  onChange={(e) => setUnidadeSelecionadaId(e.target.value)}
+                  disabled={unidadesAtivas.length === 0}
+                >
+                  {unidadesAtivas.length === 0 ? (
+                    <option value="">Nenhuma unidade ativa</option>
+                  ) : (
+                    unidadesAtivas.map(u => (
+                      <option key={u.id} value={u.id}>{u.nome}</option>
+                    ))
+                  )}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                  <ChevronDown size={16} />
+                </div>
+              </div>
+            </div>
+
             {diasRestantesVisual !== null && (
-              <div className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap ${diasRestantesVisual < 0 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+              <div className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap shadow-sm ${diasRestantesVisual < 0 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
                 <CalendarClock size={16} /> 
                 {diasRestantesVisual < 0 ? 'Prazo Encerrado' : `Faltam ${diasRestantesVisual} dias`}
               </div>
             )}
             {diasRestantesVisual === null && unidadeAtualObj && (
-              <div className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap bg-gray-100 text-gray-500">
+              <div className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap bg-gray-50 text-gray-500 border border-gray-200">
                 <CalendarClock size={16} /> Sem prazo definido
               </div>
             )}
-
-            <div className="relative w-full md:w-96">
-              <select 
-                className="w-full appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-green-500 focus:border-green-500 block p-3 pr-10 font-bold"
-                value={unidadeSelecionadaId}
-                onChange={(e) => setUnidadeSelecionadaId(e.target.value)}
-                disabled={unidadesAtivas.length === 0}
-              >
-                {unidadesAtivas.length === 0 ? (
-                  <option value="">Nenhuma unidade ativa</option>
-                ) : (
-                  unidadesAtivas.map(u => (
-                    <option key={u.id} value={u.id}>{u.nome}</option>
-                  ))
-                )}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-                <ChevronDown size={18} />
-              </div>
-            </div>
           </div>
         </div>
 
