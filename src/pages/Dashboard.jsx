@@ -19,7 +19,7 @@ export const isModuloValido = (nome) => {
   return true;
 };
 
-// Função auxiliar para extrair apenas o número do módulo com segurança
+// Extrai o número do módulo com segurança
 const extractNum = (nome) => {
   if (!nome) return 0;
   const match = nome.match(/\d+/);
@@ -39,42 +39,39 @@ export default function Dashboard() {
 
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
-  // Mantemos para exibir no painel azul superior
+  // Puxa o status do Cronograma Oficial
   const moduloAtualIndex = cronogramaAssincrono.findIndex(m => getStatusData(m.inicio, m.fim) === 'atual');
   const moduloAtual = moduloAtualIndex !== -1 ? cronogramaAssincrono[moduloAtualIndex] : null;
   const semanaAtual = cronogramaSincrono.find(s => getStatusData(s.inicio, s.fim) === 'atual');
 
   useEffect(() => {
     async function fetchData() {
-      // 1. Ouvinte de Alunos
+      // 1. Alunos
       const alunosSnap = await getDocs(collection(db, 'alunos'));
       const alunosAtuais = alunosSnap.docs.map(d => d.data().nome);
       setAlunosAtivos(alunosAtuais);
 
-      // 2. Busca de atividades dos últimos 90 dias
+      // 2. Atividades (90 dias)
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() - 90);
       const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
       const atividadesSnap = await getDocs(qAtividades);
       const docs = atividadesSnap.docs.map(doc => doc.data());
 
-      // Busca na coleção de enunciados (caso exista) para garantir que acha o módulo recém-criado
       let enunciadosDocs = [];
       try {
         const enunciadosSnap = await getDocs(collection(db, 'enunciados'));
         enunciadosDocs = enunciadosSnap.docs.map(doc => doc.data());
-      } catch (e) { console.log('Coleção de enunciados não encontrada, seguindo...'); }
+      } catch (e) { console.log('Coleção de enunciados não encontrada.'); }
       
       let contRevisao = 0; let contPostar = 0; let contFinalizado = 0;
       const atividadesProcessadas = []; 
-
-      // 3. Descobre qual é o MAIOR módulo que a Patrícia já mexeu (em atividades ou enunciados)
-      let maxNum = 0;
+      let maxNumDB = 0; // Maior número encontrado no BD
 
       docs.forEach(d => {
         if (isModuloValido(d.modulo)) {
           const num = extractNum(d.modulo);
-          if (num > maxNum) maxNum = num;
+          if (num > maxNumDB) maxNumDB = num;
         }
 
         const isFinalizado = !!d.dataPostagem || d.postado === true || d.status === 'postado';
@@ -88,7 +85,7 @@ export default function Dashboard() {
       enunciadosDocs.forEach(e => {
         if (isModuloValido(e.modulo)) {
           const num = extractNum(e.modulo);
-          if (num > maxNum) maxNum = num;
+          if (num > maxNumDB) maxNumDB = num;
         }
       });
 
@@ -98,15 +95,25 @@ export default function Dashboard() {
       const taxa = atividadesProcessadas.length > 0 ? Math.round((originais / atividadesProcessadas.length) * 100) : 0;
       setIaStats({ total: atividadesProcessadas.length, originais, taxa });
 
-      // 4. A MÁGICA DE PENDÊNCIAS: Foco nos dois maiores módulos
-      setNumReferenciaAtual(maxNum);
-      const numsAlvo = [maxNum, maxNum - 1].filter(n => n >= 7); // Ex: Se max for 8, alvos = [8, 7]
+      // 3. A NOVA REGRA (CALENDÁRIO PRIMEIRO, BANCO DEPOIS)
+      let numeroAlvoPrincipal = 0;
+      
+      if (moduloAtual) {
+        // Se o calendário diz que tem módulo rolando hoje, a palavra dele é a lei!
+        numeroAlvoPrincipal = extractNum(moduloAtual.modulo);
+      } else {
+        // Se o calendário está num buraco, o alvo é o maior módulo do banco de dados
+        numeroAlvoPrincipal = maxNumDB;
+      }
+
+      setNumReferenciaAtual(numeroAlvoPrincipal);
+      
+      // Monta os alvos: o Atual e o Imediatamente Anterior (Limitando do Módulo 7 pra cima)
+      const numsAlvo = [numeroAlvoPrincipal, numeroAlvoPrincipal - 1].filter(n => n >= 7);
 
       if (alunosAtuais.length > 0 && numsAlvo.length > 0) {
-        // Registra tudo o que os alunos já entregaram
         const entregas = new Set();
         docs.forEach(a => {
-          // Ignora documentos que são apenas o "Enunciado" genérico
           if (isModuloValido(a.modulo) && a.aluno && a.aluno.toLowerCase() !== 'enunciado') {
             const num = extractNum(a.modulo);
             entregas.add(`${a.aluno}-${num}-${a.tarefa}`);
@@ -115,15 +122,12 @@ export default function Dashboard() {
 
         const resultado = [];
 
-        // Monta a tela cruzando o Módulo alvo com o Cronograma Oficial
         numsAlvo.forEach(numAlvo => {
           const cronoMod = cronogramaAssincrono.find(m => extractNum(m.modulo) === numAlvo);
-          // Fallback de segurança se o módulo não existir no cronograma
           const tarefasDoModulo = cronoMod?.tarefas || [`M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Desafio`, `M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Fórum`]; 
           const nomeModuloLabel = cronoMod ? cronoMod.modulo : `Módulo ${numAlvo}`;
 
           tarefasDoModulo.forEach(tar => {
-            // Se o aluno NÃO está na lista de entregas desse módulo/tarefa, ele deve!
             const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${numAlvo}-${tar}`));
             if (devedores.length > 0) {
               resultado.push({ 
@@ -141,7 +145,7 @@ export default function Dashboard() {
         setPendenciasGerais([]);
       }
 
-      // 5. Última Sincronização
+      // 4. Última Sincronização
       const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
       const ultimaSnap = await getDocs(qUltima);
       if (!ultimaSnap.empty) {
@@ -151,7 +155,7 @@ export default function Dashboard() {
     }
 
     fetchData();
-  }, []); // Sem dependências complexas para evitar loops
+  }, [moduloAtual]);
 
   async function handleLogout() { try { await logout(); navigate('/login'); } catch (e) { console.error(e); } }
 
