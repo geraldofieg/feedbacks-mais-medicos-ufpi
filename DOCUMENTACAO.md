@@ -71,11 +71,11 @@ Na tela `RevisarAtividade.jsx`, a professora avalia o feedback gerado pela IA (`
 9. Módulo de Comunicação
 A tela `Comunicacao.jsx` automatiza a cobrança de alunos inadimplentes, cruzando dados da lista ativa com o histórico de atividades (últimos 90 dias) e gerando textos totalmente personalizados.
 * **Seleção de Unidade em Foco:** O sistema seleciona automaticamente o módulo ativo do dia (baseado em `dataInicio` e `dataFim`).
-* **Cruzamento (Matriz de Pendências):** O sistema varre as atividades entregues e gera um `Set` (`aluno-modulo-tarefa`). Depois, filtra quem da lista oficial não consta nesse `Set`.
+* **Matriz de Pendências Unificada:** O sistema varre as atividades entregues e gera um `Set` (`aluno-modulo-tarefa`). Em seguida, filtra quem da lista oficial não consta nesse `Set`. Diferente de versões anteriores que dividiam os alunos por "quantidade de tarefas devidas", a interface atual consolida tudo em uma única lista plana e alfabética (`listaIndividualZap`) para facilitar o fluxo de trabalho "um-para-um" do preceptor.
 * **Motor de Personalização e Neutralidade:** O sistema abandonou textos em lote para a plataforma, operando com 2 templates principais:
   1. **Mensagem Geral (Grupo WhatsApp):** Texto amplo que não cita nomes nem tarefas específicas.
   2. **Mensagem Individualizada (Zap ou Plataforma):** Utiliza a função `getPrimeiroNome` para extrair o primeiro nome do aluno ("ANNY FRANCIELLY" vira "Anny") e injeta a lista exata de tarefas devidas por aquela pessoa no corpo do texto (ex: "Notei pendência para: M07-Desafio e M07-Fórum").
-* Tanto no envio via API do WhatsApp quanto na cópia para a área de transferência (Plataforma Oficial), o texto gerado é 100% focado no aluno (1 para 1).
+* Na área de "Copiar para a Plataforma", o preceptor possui uma visão clara (preview) da mensagem individual gerada antes de clicar no botão para copiar para a área de transferência.
 * **Redação Neutra:** Todos os templates foram projetados sem determinantes de gênero ou artigos (ex: "prazo de Módulo 7") e substituem jargões punitivos por abordagens construtivas (ex: "para evitarmos problemas com a aprovação"), garantindo adequação para qualquer aluno.
 
 10. Mapa de Entregas (Gestão Visual)
