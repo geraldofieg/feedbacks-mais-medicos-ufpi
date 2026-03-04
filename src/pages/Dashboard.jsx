@@ -31,76 +31,87 @@ export default function Dashboard() {
 
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
-  // --- LÓGICA DO NOVO FOCO: ATUAL E ANTERIOR ---
+  // --- LÓGICA DO CRONOGRAMA OFICIAL ---
   const moduloAtualIndex = cronogramaAssincrono.findIndex(m => getStatusData(m.inicio, m.fim) === 'atual');
   const moduloAtual = moduloAtualIndex !== -1 ? cronogramaAssincrono[moduloAtualIndex] : null;
   const moduloAnterior = (moduloAtualIndex > 0) ? cronogramaAssincrono[moduloAtualIndex - 1] : null;
-  
+
   const semanaAtual = cronogramaSincrono.find(s => getStatusData(s.inicio, s.fim) === 'atual');
+
+  // Variáveis seguras para o useEffect
+  const nomeAtual = moduloAtual ? moduloAtual.modulo : null;
+  const nomeAnterior = moduloAnterior ? moduloAnterior.modulo : null;
 
   useEffect(() => {
     async function fetchData() {
-      // 1. Busca Alunos Ativos
+      // 1. Ouvinte de Alunos
       const alunosSnap = await getDocs(collection(db, 'alunos'));
       const alunosAtuais = alunosSnap.docs.map(d => d.data().nome);
       setAlunosAtivos(alunosAtuais);
 
-      // 2. Busca Atividades dos últimos 90 dias
+      // 2. Busca de atividades dos últimos 90 dias
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() - 90);
+
       const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
       const atividadesSnap = await getDocs(qAtividades);
       const docs = atividadesSnap.docs.map(doc => doc.data());
       
-      // Cálculo de Status
-      let contRevisao = 0; let contPostar = 0; let contFinalizado = 0;
-      const atividadesProcessadas = [];
+      let contRevisao = 0;
+      let contPostar = 0;
+      let contFinalizado = 0;
+      const atividadesProcessadas = []; 
 
       docs.forEach(d => {
         const isFinalizado = !!d.dataPostagem || d.postado === true || d.status === 'postado';
         const isAprovado = !!d.dataAprovacao || d.status === 'aprovado';
 
-        if (isFinalizado) { contFinalizado++; atividadesProcessadas.push(d); } 
-        else if (isAprovado) { contPostar++; atividadesProcessadas.push(d); } 
-        else { contRevisao++; }
+        if (isFinalizado) {
+          contFinalizado++;
+          atividadesProcessadas.push(d);
+        } else if (isAprovado) {
+          contPostar++;
+          atividadesProcessadas.push(d); 
+        } else {
+          contRevisao++;
+        }
       });
 
       setStats({ revisao: contRevisao, postar: contPostar, finalizados: contFinalizado });
 
-      // Cálculo Termômetro IA
       const originais = atividadesProcessadas.filter(d => d.feedbackFinal?.trim() === d.feedbackSugerido?.trim()).length;
       const taxa = atividadesProcessadas.length > 0 ? Math.round((originais / atividadesProcessadas.length) * 100) : 0;
       setIaStats({ total: atividadesProcessadas.length, originais, taxa });
 
-      // 3. O NOVO CÁLCULO DE PENDÊNCIAS (Foco no Atual e Anterior)
+      // 3. A NOVA MÁGICA DE PENDÊNCIAS (Filtro Cirúrgico)
       if (alunosAtuais.length > 0) {
         const validAtiv = docs.filter(a => isModuloValido(a.modulo));
         const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
 
-        const resultado = [];
-
-        // Monta a lista de módulos a exibir: Atual primeiro, Anterior depois.
-        const modulosFoco = [];
-        if (moduloAtual) modulosFoco.push(moduloAtual);
-        if (moduloAnterior) modulosFoco.push(moduloAnterior);
-
-        // Se não tiver nenhum dos dois (ex: período de férias), mantém vazio para limpar a tela
-        modulosFoco.forEach(modFoco => {
-            // Garante que o módulo tenha as tarefas listadas no cronograma oficial
-            if (modFoco.tarefas && Array.isArray(modFoco.tarefas)) {
-                modFoco.tarefas.forEach(tarefaCronograma => {
-                    const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${modFoco.modulo}-${tarefaCronograma}`));
-                    if (devedores.length > 0) {
-                        resultado.push({ modulo: modFoco.modulo, tarefa: tarefaCronograma, devedores });
-                    }
-                });
-            }
+        // Garimpa TODAS as tarefas do banco de dados primeiro
+        const modulosMap = {};
+        validAtiv.forEach(a => {
+          if(!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
+          if(a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
+          modulosMap[a.modulo].tarefas.add(a.tarefa);
         });
 
+        // Aplica o "Filtro Geraldo": Mantém APENAS o Módulo Atual e o Módulo Anterior!
+        const listaMod = Object.values(modulosMap).filter(mod => {
+          return mod.nome === nomeAtual || mod.nome === nomeAnterior;
+        }).sort((a,b) => b.data - a.data); // Mantém o atual no topo
+
+        const resultado = [];
+        listaMod.forEach(mod => {
+          mod.tarefas.forEach(tar => {
+            const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
+            if(devedores.length > 0) resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
+          });
+        });
         setPendenciasGerais(resultado);
       }
 
-      // 4. Busca da Última Sincronização
+      // 4. Última Sincronização
       const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
       const ultimaSnap = await getDocs(qUltima);
       if (!ultimaSnap.empty) {
@@ -110,7 +121,7 @@ export default function Dashboard() {
     }
 
     fetchData();
-  }, [moduloAtual, moduloAnterior]);
+  }, [nomeAtual, nomeAnterior]);
 
   async function handleLogout() { try { await logout(); navigate('/login'); } catch (e) { console.error(e); } }
 
@@ -162,8 +173,6 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* ... (O restante da tela com Termômetro e Botões continua idêntico) ... */}
-        
         <div className="mb-6 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-white/20 p-3 rounded-xl"><Sparkles size={28} /></div>
@@ -233,26 +242,29 @@ export default function Dashboard() {
               <AlertTriangle className="text-orange-500" /> Gestão à Vista: Foco Atual
             </h3>
             <div className="space-y-4">
-              {pendenciasGerais.map((item, idx) => (
-                <div key={idx} className={`p-4 rounded-xl border ${item.modulo === moduloAtual?.modulo ? 'bg-orange-50/80 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`font-bold ${item.modulo === moduloAtual?.modulo ? 'text-orange-900' : 'text-gray-700'}`}>
-                      {item.modulo} {item.modulo === moduloAtual?.modulo ? '(Atual)' : '(Anterior)'}
-                    </span>
-                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${item.modulo === moduloAtual?.modulo ? 'text-orange-600 bg-orange-100' : 'text-gray-600 bg-gray-200'}`}>
-                      {item.devedores.length} pendências
-                    </span>
-                  </div>
-                  <p className={`text-sm font-medium mb-3 ${item.modulo === moduloAtual?.modulo ? 'text-orange-800' : 'text-gray-600'}`}>{item.tarefa}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {item.devedores.map((aluno, i) => (
-                      <span key={i} className="text-xs font-bold text-gray-600 bg-white px-2 py-1 rounded border border-gray-200 flex items-center gap-1">
-                        <User size={12}/> {aluno}
+              {pendenciasGerais.map((item, idx) => {
+                const isAtual = item.modulo === nomeAtual;
+                return (
+                  <div key={idx} className={`p-4 rounded-xl border ${isAtual ? 'bg-orange-50/80 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`font-bold ${isAtual ? 'text-orange-900' : 'text-gray-700'}`}>
+                        {item.modulo} {isAtual ? '(Atual)' : '(Anterior)'}
                       </span>
-                    ))}
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${isAtual ? 'text-orange-600 bg-orange-100' : 'text-gray-600 bg-gray-200'}`}>
+                        {item.devedores.length} pendências
+                      </span>
+                    </div>
+                    <p className={`text-sm font-medium mb-3 ${isAtual ? 'text-orange-800' : 'text-gray-600'}`}>{item.tarefa}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {item.devedores.map((aluno, i) => (
+                        <span key={i} className="text-xs font-bold text-gray-600 bg-white px-2 py-1 rounded border border-gray-200 flex items-center gap-1">
+                          <User size={12}/> {aluno}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
