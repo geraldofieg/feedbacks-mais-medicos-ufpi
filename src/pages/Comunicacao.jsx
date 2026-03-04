@@ -50,14 +50,11 @@ export default function Comunicacao() {
 
         setUnidadesAtivas(ativas);
 
-        // ==========================================
-        // LÓGICA DE AUTO-SELEÇÃO PELA URGÊNCIA
-        // ==========================================
+        // Auto-seleção pela urgência
         if (ativas.length > 0) {
           const hoje = new Date();
           hoje.setHours(0, 0, 0, 0);
 
-          // Pega TODAS as unidades que estão rodando EXATAMENTE hoje
           const rodandoHoje = ativas.filter(mod => {
             if (!mod.dataInicio || !mod.dataFim) return false;
             const inicio = mod.dataInicio.toDate();
@@ -70,11 +67,9 @@ export default function Comunicacao() {
           let unidadeDestaque;
 
           if (rodandoHoje.length > 0) {
-            // Se houver mais de uma (empate), ordena pela que vence primeiro
             rodandoHoje.sort((a, b) => a.dataFim.toDate() - b.dataFim.toDate());
             unidadeDestaque = rodandoHoje[0];
           } else {
-            // Se não tiver nenhuma rodando hoje, acha a próxima no futuro
             const futuros = ativas.filter(mod => mod.dataInicio && mod.dataInicio.toDate() > hoje)
                                   .sort((a, b) => a.dataInicio.toDate() - b.dataInicio.toDate());
             unidadeDestaque = futuros.length > 0 ? futuros[0] : ativas[0];
@@ -152,33 +147,65 @@ export default function Comunicacao() {
     return Math.ceil(diferencaTime / (1000 * 3600 * 24));
   };
 
-  const gerarMensagem = (unidadeObj) => {
-    if (!unidadeObj) return '';
-    const diasRestantes = getDiasRestantes(unidadeObj.dataFim);
-
-    if (diasRestantes !== null) {
-      if (diasRestantes < 0) {
-        return `Olá! O prazo oficial para as atividades do(a) ${unidadeObj.nome} foi encerrado. Notei pendências no sistema. Por favor, regularize a sua entrega imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
-      }
-      if (diasRestantes >= 20) {
-        return `Olá! 🌟 Passando para avisar que o(a) ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento, então temos um bom tempo. Quem já quiser ir adiantando as atividades, desejo excelentes estudos!`;
-      }
-      if (diasRestantes >= 8) {
-        return `Olá, pessoal! Nosso lembrete de acompanhamento sobre o(a) ${unidadeObj.nome}. O cronograma está avançando e entramos na fase intermediária da nossa atividade. Faltam ${diasRestantes} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia!`;
-      }
-      return `Olá, colegas! 🚨 Passando para alertar que entramos na reta final do(a) ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Solicitamos a regularização das tarefas pendentes o quanto antes para que ninguém fique prejudicado.`;
-    } else {
-      return `Olá! Passando para lembrar do nosso acompanhamento sobre o(a) ${unidadeObj.nome}. O cronograma está avançando! Solicitamos a regularização das tarefas pendentes o quanto antes para não acumular. Desejo excelentes estudos!`;
-    }
-  };
-
   const formatarListaTarefas = (lista) => {
     if (lista.length === 1) return lista[0];
     if (lista.length === 2) return `${lista[0]} e ${lista[1]}`;
     return lista.slice(0, -1).join(', ') + ' e ' + lista[lista.length - 1];
   };
 
+  const getPrimeiroNome = (nomeCompleto) => {
+    if (!nomeCompleto) return '';
+    const partes = nomeCompleto.trim().split(' ');
+    const primeiro = partes[0];
+    return primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
+  };
+
   const removerAcentos = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // --- GERADORES DE MENSAGENS NEUTRAS E ESPECÍFICAS ---
+
+  // 1. Mensagem para o Grupo do WhatsApp (Geral)
+  const gerarMensagemGeral = (unidadeObj) => {
+    if (!unidadeObj) return '';
+    const diasRestantes = getDiasRestantes(unidadeObj.dataFim);
+
+    if (diasRestantes !== null) {
+      if (diasRestantes < 0) return `Olá, pessoal! O prazo oficial de ${unidadeObj.nome} foi encerrado. Notei algumas pendências no sistema. Por favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
+      if (diasRestantes >= 20) return `Olá, pessoal! 🌟 Passando para avisar que a etapa de ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento. Quem já quiser ir adiantando as atividades, desejo excelentes estudos!`;
+      if (diasRestantes >= 8) return `Olá, pessoal! Nosso lembrete de acompanhamento sobre ${unidadeObj.nome}. Entramos na fase intermediária e faltam ${diasRestantes} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia!`;
+      return `Olá, colegas! 🚨 Passando para alertar que entramos na reta final de ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Solicitamos a regularização das tarefas pendentes o quanto antes para evitarmos problemas.`;
+    }
+    return `Olá, pessoal! Passando para lembrar do nosso acompanhamento sobre ${unidadeObj.nome}. Solicitamos a regularização das tarefas pendentes o quanto antes para não acumular. Desejo excelentes estudos!`;
+  };
+
+  // 2. Mensagem para Colar na Plataforma (Específica por tarefas, mas genérica no nome)
+  const gerarMensagemPlataforma = (unidadeObj, tarefasTexto) => {
+    if (!unidadeObj) return '';
+    const diasRestantes = getDiasRestantes(unidadeObj.dataFim);
+
+    if (diasRestantes !== null) {
+      if (diasRestantes < 0) return `Olá! Tudo bem? O prazo oficial de ${unidadeObj.nome} foi encerrado. Notei no sistema que ainda consta pendência para a entrega de: ${tarefasTexto}. Por favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação. Fico no aguardo!`;
+      if (diasRestantes >= 20) return `Olá! Tudo bem? 🌟 Passando para avisar que a etapa de ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento. Notei pendência para a entrega de: ${tarefasTexto}. Quem já quiser ir adiantando, desejo excelentes estudos!`;
+      if (diasRestantes >= 8) return `Olá! Tudo bem? Nosso lembrete de acompanhamento sobre ${unidadeObj.nome}. Faltam ${diasRestantes} dias para o encerramento. Notei no sistema que ainda consta pendência para: ${tarefasTexto}. Vamos aproveitar os próximos dias para colocar tudo em dia!`;
+      return `Olá! Tudo bem? 🚨 Passando para alertar que entramos na reta final de ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Notei pendência para a entrega de: ${tarefasTexto}. Peço que regularize o quanto antes para não haver problemas com a aprovação.`;
+    }
+    return `Olá! Tudo bem? Passando para lembrar do nosso acompanhamento sobre ${unidadeObj.nome}. Notei pendência para a entrega de: ${tarefasTexto}. Solicito a regularização o quanto antes para não acumular. Desejo excelentes estudos!`;
+  };
+
+  // 3. Mensagem Individual para WhatsApp (Com Nome e Tarefas Específicas)
+  const gerarMensagemIndividual = (unidadeObj, nomeAluno, tarefasTexto) => {
+    if (!unidadeObj) return '';
+    const diasRestantes = getDiasRestantes(unidadeObj.dataFim);
+    const primeiroNome = getPrimeiroNome(nomeAluno);
+
+    if (diasRestantes !== null) {
+      if (diasRestantes < 0) return `Olá, ${primeiroNome}! Tudo bem? O prazo oficial de ${unidadeObj.nome} foi encerrado. Notei no sistema que ainda consta pendência para a entrega de: ${tarefasTexto}. Por favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação. Fico no aguardo!`;
+      if (diasRestantes >= 20) return `Olá, ${primeiroNome}! Tudo bem? 🌟 Passando para avisar que a etapa de ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento. Notei pendência para a entrega de: ${tarefasTexto}. Quem já quiser ir adiantando, desejo excelentes estudos!`;
+      if (diasRestantes >= 8) return `Olá, ${primeiroNome}! Tudo bem? Nosso lembrete de acompanhamento sobre ${unidadeObj.nome}. Faltam ${diasRestantes} dias para o encerramento. Notei no sistema que ainda consta pendência para: ${tarefasTexto}. Vamos aproveitar os próximos dias para colocar tudo em dia!`;
+      return `Olá, ${primeiroNome}! Tudo bem? 🚨 Passando para alertar que entramos na reta final de ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Notei pendência para a entrega de: ${tarefasTexto}. Peço que regularize o quanto antes para não haver problemas com a aprovação.`;
+    }
+    return `Olá, ${primeiroNome}! Tudo bem? Passando para lembrar do nosso acompanhamento sobre ${unidadeObj.nome}. Notei pendência para a entrega de: ${tarefasTexto}. Solicito a regularização o quanto antes para não acumular. Desejo excelentes estudos!`;
+  };
 
   const aplicarFeedback = (idCopia, acaoAposFeedback) => {
     setCopiado(idCopia);
@@ -200,21 +227,22 @@ export default function Comunicacao() {
     });
   };
 
-  const handleEnviarWhatsAppIndividual = (texto, nomeAluno, idCopia) => {
-    navigator.clipboard.writeText(texto);
+  const handleEnviarWhatsAppIndividual = (unidadeObj, nomeAluno, tarefasTexto, idCopia) => {
+    const textoFinal = gerarMensagemIndividual(unidadeObj, nomeAluno, tarefasTexto);
+    navigator.clipboard.writeText(textoFinal);
     
     const nomeLimpo = removerAcentos(nomeAluno.toLowerCase());
     const chavesOrdenadas = Object.keys(contatosWhatsApp).sort((a, b) => b.length - a.length);
     const chaveEncontrada = chavesOrdenadas.find(chave => nomeLimpo.includes(removerAcentos(chave.toLowerCase())));
     const numero = chaveEncontrada ? contatosWhatsApp[chaveEncontrada] : "";
-    const textoCodificado = encodeURIComponent(texto);
+    const textoCodificado = encodeURIComponent(textoFinal);
     const url = numero ? `https://wa.me/${numero}?text=${textoCodificado}` : `https://wa.me/?text=${textoCodificado}`;
       
     aplicarFeedback(idCopia, () => window.open(url, '_blank'));
   };
 
   const unidadeAtualObj = unidadesAtivas.find(u => u.id === unidadeSelecionadaId);
-  const msgPronta = unidadeAtualObj ? gerarMensagem(unidadeAtualObj) : '';
+  const msgGeralPronta = unidadeAtualObj ? gerarMensagemGeral(unidadeAtualObj) : '';
   const diasRestantesVisual = unidadeAtualObj ? getDiasRestantes(unidadeAtualObj.dataFim) : null;
   const temTarefasCadastradas = unidadeAtualObj && unidadeAtualObj.tarefas && unidadeAtualObj.tarefas.length > 0;
 
@@ -301,11 +329,11 @@ export default function Comunicacao() {
                   <p className="text-xs text-gray-600 mb-4">Mensagem geral focada na unidade selecionada.</p>
                   
                   <div className="bg-green-50 p-3 rounded-xl text-xs text-gray-800 font-medium whitespace-pre-wrap border border-green-100 mb-3 shadow-inner">
-                    {msgPronta}
+                    {msgGeralPronta}
                   </div>
 
                   <button 
-                    onClick={() => handleEnviarWhatsAppGeral(msgPronta)}
+                    onClick={() => handleEnviarWhatsAppGeral(msgGeralPronta)}
                     className={`w-full font-bold py-2.5 rounded-xl transition-all flex justify-center items-center gap-2 shadow-sm text-sm ${copiado === 'geral' ? 'bg-green-200 text-green-900 scale-95' : 'bg-green-600 text-white hover:bg-green-700'}`}
                   >
                     {copiado === 'geral' ? <><CheckCircle2 size={16}/> Copiado! Abrindo...</> : <><Send size={16}/> Enviar para o Grupo</>}
@@ -341,7 +369,7 @@ export default function Comunicacao() {
                               <span className="text-[10px] text-gray-500 line-clamp-1">Deve: {tarefasTexto}</span>
                             </div>
                             <button 
-                              onClick={() => handleEnviarWhatsAppIndividual(msgPronta, pend.aluno, idCopia)}
+                              onClick={() => handleEnviarWhatsAppIndividual(unidadeAtualObj, pend.aluno, tarefasTexto, idCopia)}
                               className={`w-full py-1.5 rounded-lg text-xs font-bold flex justify-center items-center gap-1.5 transition-all ${copiado === idCopia ? 'bg-green-600 text-white scale-95' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}
                             >
                               {copiado === idCopia ? <><CheckCircle2 size={14}/> Abrindo...</> : <><Send size={14}/> Enviar Zap</>} 
@@ -383,6 +411,7 @@ export default function Comunicacao() {
                           {multiplas.map((grupo, i) => {
                             const idCopia = `multi-${i}`;
                             const tarefasTexto = formatarListaTarefas(grupo.tarefas);
+                            const msgPlataforma = gerarMensagemPlataforma(unidadeAtualObj, tarefasTexto);
                             
                             return (
                               <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-red-100 hover:border-red-300 transition-colors shadow-sm">
@@ -399,10 +428,10 @@ export default function Comunicacao() {
                                     ))}
                                   </div>
                                   
-                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgPronta}"</p>
+                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgPlataforma}"</p>
                                 </div>
                                 <button 
-                                  onClick={() => handleCopiar(msgPronta, idCopia)}
+                                  onClick={() => handleCopiar(msgPlataforma, idCopia)}
                                   className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${copiado === idCopia ? 'bg-red-600 text-white scale-95 shadow-inner' : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'}`}
                                 >
                                   {copiado === idCopia ? <><CheckCircle2 size={18}/> Copiado!</> : <><Copy size={18}/> Copiar Texto Padrão</>} 
@@ -423,6 +452,7 @@ export default function Comunicacao() {
                           {unicas.map((grupo, i) => {
                             const idCopia = `unica-${i}`;
                             const tarefasTexto = formatarListaTarefas(grupo.tarefas);
+                            const msgPlataforma = gerarMensagemPlataforma(unidadeAtualObj, tarefasTexto);
                             
                             return (
                               <div key={i} className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-xl border-2 border-yellow-100 hover:border-yellow-300 transition-colors shadow-sm">
@@ -439,10 +469,10 @@ export default function Comunicacao() {
                                     ))}
                                   </div>
 
-                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgPronta}"</p>
+                                  <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 italic">"{msgPlataforma}"</p>
                                 </div>
                                 <button 
-                                  onClick={() => handleCopiar(msgPronta, idCopia)}
+                                  onClick={() => handleCopiar(msgPlataforma, idCopia)}
                                   className={`shrink-0 self-start md:self-center px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${copiado === idCopia ? 'bg-yellow-500 text-white scale-95 shadow-inner' : 'bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100'}`}
                                 >
                                   {copiado === idCopia ? <><CheckCircle2 size={18}/> Copiado!</> : <><Copy size={18}/> Copiar Texto Padrão</>} 
