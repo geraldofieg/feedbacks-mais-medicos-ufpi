@@ -69,11 +69,15 @@ O ciclo de vida de uma atividade passa por três status principais em um funil l
 Na tela `RevisarAtividade.jsx`, a professora avalia o feedback gerado pela IA (`feedbackSugerido`). Ao clicar em "Aprovar e Salvar", o sistema grava o texto possivelmente modificado no campo `feedbackFinal`, atualiza o `status` para `'aprovado'`, e registra a `dataAprovacao`. A diferença entre `feedbackSugerido` e `feedbackFinal` é utilizada posteriormente no Dashboard para o Termômetro da IA: se `feedbackFinal.trim() !== feedbackSugerido.trim()`, a atividade conta como alterada humanamente.
 
 9. Módulo de Comunicação
-A tela `Comunicacao.jsx` automatiza a cobrança de alunos inadimplentes cruzando dados de alunos ativos com o histórico de atividades dos últimos 90 dias.
+A tela `Comunicacao.jsx` automatiza a cobrança de alunos inadimplentes cruzando dados de alunos ativos com o histórico de atividades dos últimos 90 dias, e implementa uma forte personalização de texto baseada no contexto.
 * **Seleção de Unidade em Foco:** O sistema seleciona automaticamente o módulo ativo que está rodando no dia de hoje (baseado em `dataInicio` e `dataFim`).
-* **Cruzamento (Matriz de Pendências):** O sistema mapeia todas as atividades entregues em um `Set` de strings no formato `aluno-modulo-tarefa`. Para cada tarefa do módulo em foco, ele verifica quais alunos da lista oficial (`alunosAtivos`) não constam no `Set`.
-* **Mensagens e Templates:** Alunos que possuem as mesmas pendências são agrupados. O sistema gera uma mensagem padrão cujo tom de cobrança varia de acordo com os dias restantes para o fim do módulo (calculado subtraindo a data atual da `dataFim` do módulo).
-* O envio é realizado via links diretos da API do WhatsApp (`wa.me`), utilizando um dicionário estático (hardcoded) de números de telefone que cruza o nome do aluno via `.includes()`, ou abre o WhatsApp Web genérico.
+* **Cruzamento (Matriz de Pendências):** O sistema mapeia todas as atividades entregues em um `Set` de strings no formato `aluno-modulo-tarefa`. Para cada tarefa do módulo em foco, ele verifica quais alunos da lista oficial não constam no `Set`.
+* **Motor de Personalização e Neutralidade:** O sistema gera 3 tipos distintos de templates de mensagem dependendo de *onde* o texto será usado:
+  1. **Geral (Para o Grupo):** Texto amplo que não cita nomes nem tarefas específicas (ex: "Olá, pessoal! O prazo de Módulo 7...").
+  2. **Plataforma (Envio em Lote):** Omissão do nome do aluno (pois será enviado para vários em BCC na plataforma), mas inclui as tarefas exatas devidas por aquele grupo específico (ex: "Olá! Tudo bem? Notei pendência para a entrega de: M07-Desafio e M07-Fórum.").
+  3. **Individual (WhatsApp):** Utiliza a função `getPrimeiroNome` para extrair o primeiro nome do aluno do banco (transformando "ANTONIO GABRIEL" em "Antonio"), e lista as tarefas específicas no corpo do texto (ex: "Olá, Antonio! Tudo bem? Notei pendência para a entrega de: M07-Desafio.").
+* **Redação Neutra:** Todos os templates foram projetados sem a utilização de determinantes de gênero ou artigos antes dos módulos (ex: "de Módulo 7" em vez de "do(a) Módulo 7") e termos sensíveis (usa "para evitarmos problemas com a aprovação" no lugar de "prejudicado(a)"), garantindo polidez independentemente de quem receba a mensagem.
+* O envio é realizado via links diretos da API do WhatsApp (`wa.me`), cruzando um dicionário estático de telefones, ou salva o texto final processado na área de transferência (Clipboard) para uso na plataforma oficial do governo.
 
 10. Mapa de Entregas (Gestão Visual)
 A tela `MapaEntregas.jsx` renderiza uma matriz cruzada para visualização rápida do status da turma, focada de forma proativa nos módulos vigentes:
