@@ -76,10 +76,11 @@ A tela `Comunicacao.jsx` automatiza a cobrança de alunos inadimplentes cruzando
 * O envio é realizado via links diretos da API do WhatsApp (`wa.me`), utilizando um dicionário estático (hardcoded) de números de telefone que cruza o nome do aluno via `.includes()`, ou abre o WhatsApp Web genérico.
 
 10. Mapa de Entregas (Gestão Visual)
-A tela `MapaEntregas.jsx` renderiza uma tabela cruzada para visualização rápida das entregas recentes (últimos 90 dias):
+A tela `MapaEntregas.jsx` renderiza uma matriz cruzada para visualização rápida do status da turma, focada de forma proativa nos módulos vigentes:
 * **Linhas:** Alunos ativos cadastrados no sistema, listados em ordem alfabética através de um `onSnapshot` da coleção `alunos`.
-* **Colunas:** Tarefas dinâmicas extraídas das atividades já postadas (filtradas por `isModuloValido`), ordenadas da entrega mais recente para a mais antiga.
-* **Lógica de Preenchimento:** O sistema constrói um `Set` (`entregas`) formatando uma chave única (`aluno-modulo-tarefa`) para cada entrega existente. Durante a renderização da tabela, se a chave gerada pela interseção (linha do aluno + coluna do módulo/tarefa) existir no `Set`, exibe-se um ícone de "Check" (Entregue). Caso contrário, exibe-se um ícone "X" vermelho (Pendente).
+* **Colunas (Injeção via Cronograma Oficial):** A renderização das colunas não depende da existência prévia de atividades no banco de dados. O sistema consulta o arquivo de cronograma local (`cronogramaData.js`), identifica o **Módulo Atual** e o **Anterior** (mesma regra de alvo do Dashboard), e injeta as tarefas oficiais (ex: Desafio e Fórum) diretamente na tabela. Atividades mais antigas (últimos 90 dias) com notas no banco também são preservadas e renderizadas.
+* **Normalização Numérica (Filtro Blindado):** Para evitar falhas de cruzamento por nomenclatura textual (ex: "Módulo 07" vs "Módulo 7"), o sistema utiliza uma função auxiliar (`extractNum`) que converte o nome do módulo em um número inteiro puro antes de processar os dados.
+* **Lógica de Preenchimento:** O sistema constrói um `Set` (`entregas`) formatando uma chave padronizada e única (`aluno-numeroModulo-tarefa`) para cada entrega existente no banco de dados. Durante a renderização da matriz, se a chave gerada pela interseção (linha do aluno + coluna da tarefa) existir no `Set`, exibe-se um ícone de "Check" verde (Entregue). Caso contrário, exibe-se um ícone "X" vermelho (Pendente), garantindo que as pendências do módulo atual sejam exibidas mesmo que nenhum aluno tenha entregado a tarefa ainda.
 
 11. Inauguração de Módulos (NovaAtividade / Configurações)
 O sistema permite cadastrar módulos antecipadamente sem exigir a avaliação imediata de um aluno:
