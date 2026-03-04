@@ -184,11 +184,11 @@ export default function Comunicacao() {
 
     if (diasRestantes !== null) {
       if (diasRestantes < 0) return `Olá, pessoal! O prazo oficial de ${unidadeObj.nome} foi encerrado. Notei algumas pendências no sistema. Por favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
-      if (diasRestantes >= 20) return `Olá, pessoal! 🌟 Passando para avisar que a etapa de ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento. Quem já quiser ir adiantando as atividades, desejo excelentes estudos!`;
-      if (diasRestantes >= 8) return `Olá, pessoal! Nosso lembrete de acompanhamento sobre ${unidadeObj.nome}. Entramos na fase intermediária e faltam ${diasRestantes} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia!`;
-      return `Olá, colegas! 🚨 Passando para alertar que entramos na reta final de ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Solicitamos a regularização das tarefas pendentes o quanto antes para evitarmos problemas.`;
+      if (diasRestantes >= 20) return `Olá, pessoal! 🌟 Passando para avisar que a etapa de ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento. Quem já quiser ir adiantando as atividades, desejo excelentes estudos! Qualquer coisa, podem contar comigo.`;
+      if (diasRestantes >= 8) return `Olá, pessoal! Nosso lembrete de acompanhamento sobre ${unidadeObj.nome}. Entramos na fase intermediária e faltam ${diasRestantes} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, estou à disposição.`;
+      return `Olá, colegas! 🚨 Passando para alertar que entramos na reta final de ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Peço a regularização das tarefas pendentes o quanto antes para evitarmos problemas.`;
     }
-    return `Olá, pessoal! Passando para lembrar do nosso acompanhamento sobre ${unidadeObj.nome}. Solicitamos a regularização das tarefas pendentes o quanto antes para não acumular. Desejo excelentes estudos!`;
+    return `Olá, pessoal! Passando para lembrar do nosso acompanhamento sobre ${unidadeObj.nome}. Peço a regularização das tarefas pendentes o quanto antes para não acumular. Qualquer dúvida, estou por aqui!`;
   };
 
   const gerarMensagemIndividual = (unidadeObj, nomeAluno, tarefasTexto) => {
@@ -198,11 +198,11 @@ export default function Comunicacao() {
 
     if (diasRestantes !== null) {
       if (diasRestantes < 0) return `Olá, ${primeiroNome}! Tudo bem? O prazo oficial de ${unidadeObj.nome} foi encerrado. Notei no sistema que ainda consta pendência para a entrega de: ${tarefasTexto}. Por favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação. Fico no aguardo!`;
-      if (diasRestantes >= 20) return `Olá, ${primeiroNome}! Tudo bem? 🌟 Passando para avisar que a etapa de ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento. Notei pendência para a entrega de: ${tarefasTexto}. Quem já quiser ir adiantando, desejo excelentes estudos!`;
-      if (diasRestantes >= 8) return `Olá, ${primeiroNome}! Tudo bem? Nosso lembrete de acompanhamento sobre ${unidadeObj.nome}. Faltam ${diasRestantes} dias para o encerramento. Notei no sistema que ainda consta pendência para: ${tarefasTexto}. Vamos aproveitar os próximos dias para colocar tudo em dia!`;
-      return `Olá, ${primeiroNome}! Tudo bem? 🚨 Passando para alertar que entramos na reta final de ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Notei pendência para a entrega de: ${tarefasTexto}. Peço que regularize o quanto antes para não haver problemas com a aprovação.`;
+      if (diasRestantes >= 20) return `Olá, ${primeiroNome}! Tudo bem? 🌟 Passando para avisar que a etapa de ${unidadeObj.nome} já está em andamento. Faltam ${diasRestantes} dias para o encerramento. Notei pendência para a entrega de: ${tarefasTexto}. Recomendo adiantar a execução, pra não ficar para a última hora. Qualquer coisa, pode contar comigo!`;
+      if (diasRestantes >= 8) return `Olá, ${primeiroNome}! Tudo bem? Nosso lembrete de acompanhamento sobre ${unidadeObj.nome}. Faltam ${diasRestantes} dias para o encerramento. Notei no sistema que ainda consta pendência para a entrega de: ${tarefasTexto}. Vamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, pode me chamar.`;
+      return `Olá, ${primeiroNome}! Tudo bem? 🚨 Passando para alertar que entramos na reta final de ${unidadeObj.nome}. Faltam apenas ${diasRestantes} dias para o encerramento! Notei pendência para a entrega de: ${tarefasTexto}. Recomendo que regularize o quanto antes para não acumular nem termos problemas com a aprovação. Qualquer coisa, me chame.`;
     }
-    return `Olá, ${primeiroNome}! Tudo bem? Passando para lembrar do nosso acompanhamento sobre ${unidadeObj.nome}. Notei pendência para a entrega de: ${tarefasTexto}. Solicito a regularização o quanto antes para não acumular. Desejo excelentes estudos!`;
+    return `Olá, ${primeiroNome}! Tudo bem? Passando para lembrar do nosso acompanhamento sobre ${unidadeObj.nome}. Notei pendência para a entrega de: ${tarefasTexto}. Recomendo a regularização o quanto antes para não acumular. Qualquer dúvida, pode contar comigo!`;
   };
 
   const aplicarFeedback = (idCopia, acaoAposFeedback) => {
