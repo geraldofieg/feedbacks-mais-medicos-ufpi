@@ -19,6 +19,13 @@ export const isModuloValido = (nome) => {
   return true;
 };
 
+// Função auxiliar para extrair apenas o número do módulo com segurança
+const extractNum = (nome) => {
+  if (!nome) return 0;
+  const match = nome.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+};
+
 export default function Dashboard() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -28,19 +35,14 @@ export default function Dashboard() {
   
   const [alunosAtivos, setAlunosAtivos] = useState([]);
   const [pendenciasGerais, setPendenciasGerais] = useState([]);
+  const [numReferenciaAtual, setNumReferenciaAtual] = useState(0); 
 
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
-  // --- LÓGICA DO CRONOGRAMA OFICIAL ---
+  // Mantemos para exibir no painel azul superior
   const moduloAtualIndex = cronogramaAssincrono.findIndex(m => getStatusData(m.inicio, m.fim) === 'atual');
   const moduloAtual = moduloAtualIndex !== -1 ? cronogramaAssincrono[moduloAtualIndex] : null;
-  const moduloAnterior = (moduloAtualIndex > 0) ? cronogramaAssincrono[moduloAtualIndex - 1] : null;
-
   const semanaAtual = cronogramaSincrono.find(s => getStatusData(s.inicio, s.fim) === 'atual');
-
-  // Variáveis seguras para o useEffect
-  const nomeAtual = moduloAtual ? moduloAtual.modulo : null;
-  const nomeAnterior = moduloAnterior ? moduloAnterior.modulo : null;
 
   useEffect(() => {
     async function fetchData() {
@@ -52,28 +54,41 @@ export default function Dashboard() {
       // 2. Busca de atividades dos últimos 90 dias
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() - 90);
-
       const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
       const atividadesSnap = await getDocs(qAtividades);
       const docs = atividadesSnap.docs.map(doc => doc.data());
+
+      // Busca na coleção de enunciados (caso exista) para garantir que acha o módulo recém-criado
+      let enunciadosDocs = [];
+      try {
+        const enunciadosSnap = await getDocs(collection(db, 'enunciados'));
+        enunciadosDocs = enunciadosSnap.docs.map(doc => doc.data());
+      } catch (e) { console.log('Coleção de enunciados não encontrada, seguindo...'); }
       
-      let contRevisao = 0;
-      let contPostar = 0;
-      let contFinalizado = 0;
+      let contRevisao = 0; let contPostar = 0; let contFinalizado = 0;
       const atividadesProcessadas = []; 
 
+      // 3. Descobre qual é o MAIOR módulo que a Patrícia já mexeu (em atividades ou enunciados)
+      let maxNum = 0;
+
       docs.forEach(d => {
+        if (isModuloValido(d.modulo)) {
+          const num = extractNum(d.modulo);
+          if (num > maxNum) maxNum = num;
+        }
+
         const isFinalizado = !!d.dataPostagem || d.postado === true || d.status === 'postado';
         const isAprovado = !!d.dataAprovacao || d.status === 'aprovado';
 
-        if (isFinalizado) {
-          contFinalizado++;
-          atividadesProcessadas.push(d);
-        } else if (isAprovado) {
-          contPostar++;
-          atividadesProcessadas.push(d); 
-        } else {
-          contRevisao++;
+        if (isFinalizado) { contFinalizado++; atividadesProcessadas.push(d); } 
+        else if (isAprovado) { contPostar++; atividadesProcessadas.push(d); } 
+        else { contRevisao++; }
+      });
+
+      enunciadosDocs.forEach(e => {
+        if (isModuloValido(e.modulo)) {
+          const num = extractNum(e.modulo);
+          if (num > maxNum) maxNum = num;
         }
       });
 
@@ -83,35 +98,50 @@ export default function Dashboard() {
       const taxa = atividadesProcessadas.length > 0 ? Math.round((originais / atividadesProcessadas.length) * 100) : 0;
       setIaStats({ total: atividadesProcessadas.length, originais, taxa });
 
-      // 3. A NOVA MÁGICA DE PENDÊNCIAS (Filtro Cirúrgico)
-      if (alunosAtuais.length > 0) {
-        const validAtiv = docs.filter(a => isModuloValido(a.modulo));
-        const entregas = new Set(validAtiv.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
+      // 4. A MÁGICA DE PENDÊNCIAS: Foco nos dois maiores módulos
+      setNumReferenciaAtual(maxNum);
+      const numsAlvo = [maxNum, maxNum - 1].filter(n => n >= 7); // Ex: Se max for 8, alvos = [8, 7]
 
-        // Garimpa TODAS as tarefas do banco de dados primeiro
-        const modulosMap = {};
-        validAtiv.forEach(a => {
-          if(!modulosMap[a.modulo]) modulosMap[a.modulo] = { nome: a.modulo, data: 0, tarefas: new Set() };
-          if(a.dataCriacao?.seconds > modulosMap[a.modulo].data) modulosMap[a.modulo].data = a.dataCriacao.seconds;
-          modulosMap[a.modulo].tarefas.add(a.tarefa);
+      if (alunosAtuais.length > 0 && numsAlvo.length > 0) {
+        // Registra tudo o que os alunos já entregaram
+        const entregas = new Set();
+        docs.forEach(a => {
+          // Ignora documentos que são apenas o "Enunciado" genérico
+          if (isModuloValido(a.modulo) && a.aluno && a.aluno.toLowerCase() !== 'enunciado') {
+            const num = extractNum(a.modulo);
+            entregas.add(`${a.aluno}-${num}-${a.tarefa}`);
+          }
         });
-
-        // Aplica o "Filtro Geraldo": Mantém APENAS o Módulo Atual e o Módulo Anterior!
-        const listaMod = Object.values(modulosMap).filter(mod => {
-          return mod.nome === nomeAtual || mod.nome === nomeAnterior;
-        }).sort((a,b) => b.data - a.data); // Mantém o atual no topo
 
         const resultado = [];
-        listaMod.forEach(mod => {
-          mod.tarefas.forEach(tar => {
-            const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
-            if(devedores.length > 0) resultado.push({ modulo: mod.nome, tarefa: tar, devedores });
+
+        // Monta a tela cruzando o Módulo alvo com o Cronograma Oficial
+        numsAlvo.forEach(numAlvo => {
+          const cronoMod = cronogramaAssincrono.find(m => extractNum(m.modulo) === numAlvo);
+          // Fallback de segurança se o módulo não existir no cronograma
+          const tarefasDoModulo = cronoMod?.tarefas || [`M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Desafio`, `M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Fórum`]; 
+          const nomeModuloLabel = cronoMod ? cronoMod.modulo : `Módulo ${numAlvo}`;
+
+          tarefasDoModulo.forEach(tar => {
+            // Se o aluno NÃO está na lista de entregas desse módulo/tarefa, ele deve!
+            const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${numAlvo}-${tar}`));
+            if (devedores.length > 0) {
+              resultado.push({ 
+                modulo: nomeModuloLabel, 
+                numeroModulo: numAlvo,
+                tarefa: tar, 
+                devedores 
+              });
+            }
           });
         });
+
         setPendenciasGerais(resultado);
+      } else {
+        setPendenciasGerais([]);
       }
 
-      // 4. Última Sincronização
+      // 5. Última Sincronização
       const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
       const ultimaSnap = await getDocs(qUltima);
       if (!ultimaSnap.empty) {
@@ -121,7 +151,7 @@ export default function Dashboard() {
     }
 
     fetchData();
-  }, [nomeAtual, nomeAnterior]);
+  }, []); // Sem dependências complexas para evitar loops
 
   async function handleLogout() { try { await logout(); navigate('/login'); } catch (e) { console.error(e); } }
 
@@ -243,7 +273,8 @@ export default function Dashboard() {
             </h3>
             <div className="space-y-4">
               {pendenciasGerais.map((item, idx) => {
-                const isAtual = item.modulo === nomeAtual;
+                const isAtual = item.numeroModulo === numReferenciaAtual;
+                
                 return (
                   <div key={idx} className={`p-4 rounded-xl border ${isAtual ? 'bg-orange-50/80 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
                     <div className="flex items-center justify-between mb-2">
