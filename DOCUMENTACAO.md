@@ -70,13 +70,24 @@ Na tela `RevisarAtividade.jsx`, a professora avalia o feedback gerado pela IA (`
 
 9. Módulo de Comunicação
 A tela `Comunicacao.jsx` automatiza a cobrança de alunos inadimplentes, cruzando dados da lista ativa com o histórico de atividades (últimos 90 dias) e gerando textos totalmente personalizados.
-* **Seleção de Unidade em Foco:** O sistema seleciona automaticamente o módulo ativo do dia (baseado em `dataInicio` e `dataFim`).
-* **Matriz de Pendências Unificada:** O sistema varre as atividades entregues e gera um `Set` (`aluno-modulo-tarefa`). Em seguida, filtra quem da lista oficial não consta nesse `Set`. Diferente de versões anteriores que dividiam os alunos por "quantidade de tarefas devidas", a interface atual consolida tudo em uma única lista plana e alfabética (`listaIndividualZap`) para facilitar o fluxo de trabalho "um-para-um" do preceptor.
-* **Motor de Personalização e Neutralidade:** O sistema abandonou textos em lote para a plataforma, operando com 2 templates principais:
-  1. **Mensagem Geral (Grupo WhatsApp):** Texto amplo que não cita nomes nem tarefas específicas.
-  2. **Mensagem Individualizada (Zap ou Plataforma):** Utiliza a função `getPrimeiroNome` para extrair o primeiro nome do aluno ("ANNY FRANCIELLY" vira "Anny") e injeta a lista exata de tarefas devidas por aquela pessoa no corpo do texto (ex: "Notei pendência para: M07-Desafio e M07-Fórum").
-* Na área de "Copiar para a Plataforma", o preceptor possui uma visão clara (preview) da mensagem individual gerada antes de clicar no botão para copiar para a área de transferência.
-* **Redação Neutra:** Todos os templates foram projetados sem determinantes de gênero ou artigos (ex: "prazo de Módulo 7") e substituem jargões punitivos por abordagens construtivas (ex: "para evitarmos problemas com a aprovação"), garantindo adequação para qualquer aluno.
+* **Smart Tabs (UX de Seleção):** Para resolver problemas de "cegueira de interface" (onde módulos ativos ficavam ocultos em dropdowns), o sistema identifica proativamente quais módulos estão ativos na data de hoje e os exibe como botões de acesso rápido (Tabs) no topo da tela. Um menu dropdown secundário (select) é mantido apenas para explorar o histórico ou módulos futuros. O sistema usa a nomenclatura "Tarefa em Foco" orientando o preceptor de forma direta.
+* **Matriz de Pendências Unificada:** O sistema varre as atividades entregues e gera um `Set` (`aluno-modulo-tarefa`). Em seguida, filtra quem da lista oficial não consta nesse `Set`. A interface atual consolida tudo em uma única lista plana e alfabética (`listaIndividualZap`) para facilitar o fluxo de trabalho "um-para-um" do preceptor.
+* **Redação de Mentoria e Apoio (Os Templates Exatos):** O sistema abandona o tom punitivo e adota uma postura de "apoio pedagógico". Para evitar desvios no código futuro, a matriz exata de mensagens geradas pela aplicação (variando conforme os dias restantes até a `dataFim`) é a seguinte:
+
+  **1. Templates para o Grupo Geral da Turma:**
+  * **Vencido (< 0 dias):** "Olá, pessoal! O prazo oficial de {modulo} foi encerrado. Notei algumas pendências no sistema. Por favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo."
+  * **Início (>= 20 dias):** "Olá, pessoal! 🌟 Passando para avisar que a etapa de {modulo} já está em andamento. Faltam {dias} dias para o encerramento. Quem já quiser ir adiantando as atividades, desejo excelentes estudos! Qualquer coisa, podem contar comigo."
+  * **Meio (>= 8 dias):** "Olá, pessoal! Nosso lembrete de acompanhamento sobre {modulo}. Entramos na fase intermediária e faltam {dias} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, estou à disposição."
+  * **Reta Final (< 8 dias):** "Olá, colegas! 🚨 Passando para alertar que entramos na reta final de {modulo}. Faltam apenas {dias} dias para o encerramento! Peço a regularização das tarefas pendentes o quanto antes para evitarmos problemas."
+  * **Sem Prazo (null):** "Olá, pessoal! Passando para lembrar do nosso acompanhamento sobre {modulo}. Peço a regularização das tarefas pendentes o quanto antes para não acumular. Qualquer dúvida, estou por aqui!"
+
+  **2. Templates Individuais (WhatsApp e Plataforma):**
+  *(Utiliza a função `getPrimeiroNome` para o nome do aluno)*
+  * **Vencido (< 0 dias):** "Olá, {Nome}! Tudo bem? O prazo oficial de {modulo} foi encerrado. Notei no sistema que ainda consta pendência para a entrega de: {tarefas}. Por favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação. Fico no aguardo!"
+  * **Início (>= 20 dias):** "Olá, {Nome}! Tudo bem? 🌟 Passando para avisar que a etapa de {modulo} já está em andamento. Faltam {dias} dias para o encerramento. Notei pendência para a entrega de: {tarefas}. Recomendo adiantar a execução, pra não ficar para a última hora. Qualquer coisa, pode contar comigo!"
+  * **Meio (>= 8 dias):** "Olá, {Nome}! Tudo bem? Nosso lembrete de acompanhamento sobre {modulo}. Faltam {dias} dias para o encerramento. Notei no sistema que ainda consta pendência para a entrega de: {tarefas}. Vamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, pode me chamar."
+  * **Reta Final (< 8 dias):** "Olá, {Nome}! Tudo bem? 🚨 Passando para alertar que entramos na reta final de {modulo}. Faltam apenas {dias} dias para o encerramento! Notei pendência para a entrega de: {tarefas}. Recomendo que regularize o quanto antes para não acumular nem termos problemas com a aprovação. Qualquer coisa, me chame."
+  * **Sem Prazo (null):** "Olá, {Nome}! Tudo bem? Passando para lembrar do nosso acompanhamento sobre {modulo}. Notei pendência para a entrega de: {tarefas}. Recomendo a regularização o quanto antes para não acumular. Qualquer dúvida, pode contar comigo!"
 
 10. Mapa de Entregas (Gestão Visual)
 A tela `MapaEntregas.jsx` renderiza uma matriz cruzada para visualização rápida do status da turma, focada de forma proativa nos módulos vigentes:
