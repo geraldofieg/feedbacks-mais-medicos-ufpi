@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
-import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Send, AlertCircle, User, ChevronDown, CalendarClock, MonitorSmartphone } from 'lucide-react';
+import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Send, User, ChevronDown, CalendarClock, MonitorSmartphone } from 'lucide-react';
 
 const contatosWhatsApp = {
   "Guilherme": "556291203480",
@@ -229,9 +229,7 @@ export default function Comunicacao() {
   const diasRestantesVisual = unidadeAtualObj ? getDiasRestantes(unidadeAtualObj.dataFim) : null;
   const temTarefasCadastradas = unidadeAtualObj && unidadeAtualObj.tarefas && unidadeAtualObj.tarefas.length > 0;
 
-  const multiplas = pendenciasDaUnidade.filter(p => p.tarefas.length > 1);
-  const unicas = pendenciasDaUnidade.filter(p => p.tarefas.length === 1);
-
+  // Cria uma lista única e plana (alfabética) com todos os devedores da unidade selecionada
   const listaIndividualZap = [];
   pendenciasDaUnidade.forEach(grupo => {
     grupo.devedores.forEach(aluno => {
@@ -383,88 +381,34 @@ export default function Comunicacao() {
                     Uau! Todos os alunos já entregaram as tarefas desta unidade.
                   </div>
                 ) : (
-                  <div className="space-y-8">
-                    
-                    {multiplas.length > 0 && (
-                      <div>
-                        <h4 className="font-black text-red-800 mb-3 flex items-center gap-2 bg-red-50 px-3 py-2 rounded-lg border border-red-100">
-                          <AlertCircle size={18} className="text-red-500"/> Alunos que devem MÚLTIPLAS tarefas
-                        </h4>
-                        <div className="grid gap-4">
-                          {multiplas.map((grupo) => {
-                            const tarefasTexto = formatarListaTarefas(grupo.tarefas);
-                            
-                            return (
-                              <div key={grupo.tarefas.join('')} className="bg-white p-4 rounded-xl border border-red-200 shadow-sm">
-                                <span className="text-xs font-black uppercase text-red-500 tracking-wider mb-3 block">
-                                  Pendência exata: {tarefasTexto}
-                                </span>
-                                
-                                <div className="flex flex-col gap-2">
-                                  {grupo.devedores.map((aluno, idx) => {
-                                    const idCopia = `plat-multi-${grupo.tarefas.join('')}-${idx}`;
-                                    const msgIndividualizada = gerarMensagemIndividual(unidadeAtualObj, aluno, tarefasTexto);
-                                    
-                                    return (
-                                      <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-red-50/50 p-3 rounded-lg border border-red-100 hover:bg-red-50 transition-colors">
-                                        <span className="font-bold text-red-900 text-sm">{aluno}</span>
-                                        <button 
-                                          onClick={() => handleCopiar(msgIndividualizada, idCopia)}
-                                          className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${copiado === idCopia ? 'bg-red-600 text-white scale-95' : 'bg-white text-red-600 border border-red-200 hover:bg-red-100'}`}
-                                        >
-                                          {copiado === idCopia ? <><CheckCircle2 size={14}/> Copiado!</> : <><Copy size={14}/> Copiar Texto Pessoal</>} 
-                                        </button>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
+                  <div className="space-y-4">
+                    {listaIndividualZap.map((pend, idx) => {
+                      const tarefasTexto = formatarListaTarefas(pend.tarefas);
+                      const idCopia = `plat-${idx}`;
+                      const msgIndividualizada = gerarMensagemIndividual(unidadeAtualObj, pend.aluno, tarefasTexto);
+                      
+                      return (
+                        <div key={idx} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:border-blue-300 transition-colors">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                            <div>
+                              <span className="font-bold text-gray-900 text-sm block">{pend.aluno}</span>
+                              <span className="text-xs font-bold text-red-500 uppercase tracking-wider">
+                                Deve: {tarefasTexto}
+                              </span>
+                            </div>
+                            <button 
+                              onClick={() => handleCopiar(msgIndividualizada, idCopia)}
+                              className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${copiado === idCopia ? 'bg-blue-600 text-white scale-95' : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'}`}
+                            >
+                              {copiado === idCopia ? <><CheckCircle2 size={14}/> Copiado!</> : <><Copy size={14}/> Copiar Mensagem</>} 
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
+                            "{msgIndividualizada}"
+                          </p>
                         </div>
-                      </div>
-                    )}
-
-                    {unicas.length > 0 && (
-                      <div>
-                        <h4 className="font-black text-yellow-800 mb-3 flex items-center gap-2 bg-yellow-50 px-3 py-2 rounded-lg border border-yellow-100">
-                          <AlertCircle size={18} className="text-yellow-500"/> Alunos que devem 1 ÚNICA tarefa
-                        </h4>
-                        <div className="grid gap-4">
-                          {unicas.map((grupo) => {
-                            const tarefasTexto = formatarListaTarefas(grupo.tarefas);
-                            
-                            return (
-                              <div key={grupo.tarefas.join('')} className="bg-white p-4 rounded-xl border border-yellow-200 shadow-sm">
-                                <span className="text-xs font-black uppercase text-yellow-600 tracking-wider mb-3 block">
-                                  Pendência exata: {tarefasTexto}
-                                </span>
-                                
-                                <div className="flex flex-col gap-2">
-                                  {grupo.devedores.map((aluno, idx) => {
-                                    const idCopia = `plat-unica-${grupo.tarefas.join('')}-${idx}`;
-                                    const msgIndividualizada = gerarMensagemIndividual(unidadeAtualObj, aluno, tarefasTexto);
-                                    
-                                    return (
-                                      <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-yellow-50/50 p-3 rounded-lg border border-yellow-100 hover:bg-yellow-50 transition-colors">
-                                        <span className="font-bold text-yellow-900 text-sm">{aluno}</span>
-                                        <button 
-                                          onClick={() => handleCopiar(msgIndividualizada, idCopia)}
-                                          className={`shrink-0 px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${copiado === idCopia ? 'bg-yellow-500 text-white scale-95' : 'bg-white text-yellow-700 border border-yellow-200 hover:bg-yellow-100'}`}
-                                        >
-                                          {copiado === idCopia ? <><CheckCircle2 size={14}/> Copiado!</> : <><Copy size={14}/> Copiar Texto Pessoal</>} 
-                                        </button>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
+                      );
+                    })}
                   </div>
                 )}
               </div>
