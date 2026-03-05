@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Navbar from './components/Navbar'; // NOVO: Importação do nosso menu
+import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import NovaAtividade from './pages/NovaAtividade';
@@ -15,6 +15,7 @@ import ListaAtividades from './pages/ListaAtividades';
 import Pendencias from './pages/Pendencias';
 import Cronograma from './pages/Cronograma';
 import Comunicacao from './pages/Comunicacao';
+import AuditoriaBanco from './pages/AuditoriaBanco'; // NOVO: Importação do script de Auditoria
 
 function PrivateRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -48,7 +49,7 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        {/* NOVO: A Navbar fica solta aqui, aparecendo no topo de todas as rotas */}
+        {/* A Navbar fica solta aqui, aparecendo no topo de todas as rotas */}
         <Navbar /> 
         
         <Routes>
@@ -64,6 +65,9 @@ function App() {
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
           <Route path="/lista/:status" element={<PrivateRoute><ListaAtividades /></PrivateRoute>} />
           <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
+          
+          {/* NOVO: Rota temporária de Auditoria (Protegida) */}
+          <Route path="/auditoria" element={<PrivateRoute><AuditoriaBanco /></PrivateRoute>} />
           
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
