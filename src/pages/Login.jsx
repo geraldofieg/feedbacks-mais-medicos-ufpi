@@ -6,7 +6,7 @@ import { Lock, Mail, GraduationCap } from 'lucide-react';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [instituicao, setInstituicao] = useState(''); 
+  const [instituicao, setInstituicao] = useState(''); // Agora é texto livre!
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -15,13 +15,15 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!instituicao) { return setError('Por favor, selecione uma instituição ou programa.'); }
+    if (!instituicao.trim()) { return setError('Por favor, digite o nome da sua instituição ou programa.'); }
 
     try {
       setError('');
       setLoading(true);
       await login(email, password);
-      setEscolaSelecionada(instituicao); 
+      
+      // Salva o nome exato que o professor digitou na memória do sistema
+      setEscolaSelecionada(instituicao.trim()); 
       navigate('/'); 
     } catch (err) {
       setError('Falha ao fazer login. Verifique seu e-mail e senha.');
@@ -50,24 +52,31 @@ export default function Login() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          
+          {/* AQUI ESTÁ A CORREÇÃO: Virou um campo de texto livre onde ele digita o que quiser */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Instituição / Programa</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Nome da Instituição / Programa</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><GraduationCap className="h-5 w-5 text-gray-400" /></div>
-              <select required className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-400 rounded-xl focus:ring-2 focus:ring-blue-500 appearance-none" value={instituicao} onChange={(e) => setInstituicao(e.target.value)}>
-                <option value="" disabled>Ex: Mais Médicos, USP...</option>
-                <option value="Mais Médicos" className="text-gray-800">Mais Médicos (Programa Nacional)</option>
-                <option value="USP" className="text-gray-800">USP - Universidade de São Paulo</option>
-                <option value="UFPI" className="text-gray-800">UFPI - Universidade Federal do Piauí</option>
-                <option value="Outra" className="text-gray-800">Outra Instituição...</option>
-              </select>
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <GraduationCap className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                required
+                className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+                placeholder="Ex: Mais Médicos, USP, Meu Cursinho..."
+                value={instituicao}
+                onChange={(e) => setInstituicao(e.target.value)}
+              />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">E-mail Profissional</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Mail className="h-5 w-5 text-gray-400" /></div>
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Mail className="h-5 w-5 text-gray-400" />
+              </div>
               <input type="email" required className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="nome@instituicao.com.br" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
           </div>
@@ -75,7 +84,9 @@ export default function Login() {
           <div>
             <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Senha de Acesso</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-gray-400" /></div>
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Lock className="h-5 w-5 text-gray-400" />
+              </div>
               <input type="password" required className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
           </div>
