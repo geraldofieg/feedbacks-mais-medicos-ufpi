@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Shuffle } from 'lucide-react';
+import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Shuffle, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -12,7 +12,7 @@ export default function Dashboard() {
   const [novaInstituicao, setNovaInstituicao] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // A CORREÇÃO DO "PULO" (Sempre rola a tela para o topo quando entra no Dashboard)
+  // Força o scroll para o topo ao carregar a tela
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [escolaSelecionada]);
@@ -63,21 +63,22 @@ export default function Dashboard() {
   // ==========================================
   if (!escolaSelecionada) {
     return (
-      // A CORREÇÃO DE LAYOUT: justify-start (topo) no celular, e padding (pt-8)
-      <div className="min-h-[80vh] flex flex-col items-center justify-start sm:justify-center p-4 pt-8 sm:pt-4">
-        <div className="max-w-4xl w-full">
+      <div className="min-h-screen flex flex-col items-center justify-start md:justify-center p-4 pt-12 md:pt-4">
+        <div className="max-w-4xl w-full mt-4 md:mt-0">
+          
           <div className="text-center mb-8">
             <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <Building2 size={32} />
+              {/* O ÍCONE CORRIGIDO PARA O CHAPÉU: */}
+              <GraduationCap size={32} /> 
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
-            <p className="text-gray-500 mt-2 text-base sm:text-lg">Selecione seu espaço de trabalho ou crie um novo.</p>
+            <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
+            <p className="text-gray-500 mt-2 text-base md:text-lg px-2">Selecione seu espaço de trabalho ou crie um novo.</p>
           </div>
 
-          {/* A CORREÇÃO DA GRADE: grid-cols-1 trava para ficar um em cima do outro no celular */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+          <div className="flex flex-col md:flex-row gap-6 w-full">
             
-            <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
+            {/* Bloco 1: Criar Instituição */}
+            <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 w-full md:w-1/2">
               <h2 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                 <Plus className="text-blue-600"/> Criar Nova Instituição
               </h2>
@@ -95,12 +96,13 @@ export default function Dashboard() {
                   />
                 </div>
                 <button type="submit" className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 transition-all shadow-md flex justify-center items-center gap-2">
-                  Acessar Novo Espaço <ArrowRight size={18}/>
+                  Acessar <ArrowRight size={18}/>
                 </button>
               </form>
             </div>
 
-            <div className="bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200">
+            {/* Bloco 2: Lista de Espaços */}
+            <div className="bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200 w-full md:w-1/2">
               <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">
                 <LayoutDashboard className="text-gray-500"/> Meus Espaços
               </h2>
@@ -119,8 +121,8 @@ export default function Dashboard() {
                       onClick={() => selecionarInstituicao(inst)}
                       className="w-full bg-white border border-gray-200 p-4 rounded-xl flex items-center justify-between hover:border-blue-500 hover:shadow-sm transition-all text-left group"
                     >
-                      <span className="font-bold text-gray-700 group-hover:text-blue-700">{inst}</span>
-                      <ArrowRight size={18} className="text-gray-400 group-hover:text-blue-600" />
+                      <span className="font-bold text-gray-700 group-hover:text-blue-700 truncate mr-2">{inst}</span>
+                      <ArrowRight size={18} className="text-gray-400 group-hover:text-blue-600 flex-shrink-0" />
                     </button>
                   ))}
                 </div>
@@ -196,4 +198,4 @@ export default function Dashboard() {
       </div>
     </div>
   );
-              }
+                }
