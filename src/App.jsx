@@ -5,8 +5,9 @@ import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
-import Signup from './pages/Signup'; // NOVO: Importamos a tela de cadastro
+import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
+import Turmas from './pages/Turmas'; // NOVO: Import da tela de Turmas
 import NovaAtividade from './pages/NovaAtividade';
 import RevisarAtividade from './pages/RevisarAtividade';
 import Alunos from './pages/Alunos';
@@ -41,7 +42,7 @@ function App() {
         .catch((error) => {
           console.warn('Erro ao verificar versão do app:', error);
         });
-    }, 600000); // 10 minutes
+    }, 600000);
 
     return () => clearInterval(intervalId);
   }, []);
@@ -52,12 +53,11 @@ function App() {
         <Navbar /> 
         
         <Routes>
-          {/* Rotas Públicas */}
           <Route path="/login" element={<Login />} />
-          <Route path="/cadastro" element={<Signup />} /> {/* NOVO: A Rota Pública de Cadastro */}
+          <Route path="/cadastro" element={<Signup />} />
           
-          {/* Rotas Privadas */}
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/turmas" element={<PrivateRoute><Turmas /></PrivateRoute>} /> {/* NOVO: Rota de Turmas */}
           <Route path="/cronograma" element={<PrivateRoute><Cronograma /></PrivateRoute>} />
           <Route path="/comunicacao" element={<PrivateRoute><Comunicacao /></PrivateRoute>} />
           <Route path="/nova-atividade" element={<PrivateRoute><NovaAtividade /></PrivateRoute>} />
