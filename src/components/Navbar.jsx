@@ -1,13 +1,12 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut } from 'lucide-react';
+import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users } from 'lucide-react'; // Adicionado ícone Users
 
 export default function Navbar() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, escolaSelecionada } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Só exibe o menu se o usuário estiver logado
   if (!currentUser) return null;
 
   async function handleLogout() {
@@ -19,14 +18,17 @@ export default function Navbar() {
     }
   }
 
-  // Lista dos botões principais (Padronizado 'Comunicação')
+  // NOVO: Adicionado o botão 'Turmas' logo após o 'Início'
   const navLinks = [
     { path: '/', icon: <Home size={18} />, label: 'Início' },
+    { path: '/turmas', icon: <Users size={18} />, label: 'Turmas' }, 
     { path: '/cronograma', icon: <CalendarRange size={18} />, label: 'Datas' },
     { path: '/comunicacao', icon: <Megaphone size={18} />, label: 'Comunicação' },
     { path: '/pendencias', icon: <AlertTriangle size={18} />, label: 'Pendências' },
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
   ];
+
+  const siglaEscola = escolaSelecionada ? escolaSelecionada.split(' ')[0] : 'SaaS';
 
   return (
     <div className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
@@ -34,9 +36,11 @@ export default function Navbar() {
         
         {/* === MODO COMPUTADOR === */}
         <div className="hidden md:flex items-center justify-between h-16">
-          <Link to="/" className="font-black text-blue-900 flex items-center gap-2">
-            <span className="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center text-sm">UFPI</span>
-            <span>Mais Médicos</span>
+          <Link to="/" className="font-black text-blue-900 flex items-center gap-2 transition-transform hover:scale-105">
+            <span className="bg-blue-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm shadow-sm">
+              <GraduationCap size={16} /> {siglaEscola}
+            </span>
+            <span className="text-gray-700 hidden lg:block">Plataforma</span>
           </Link>
 
           <div className="flex items-center gap-6">
@@ -59,12 +63,12 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* === MODO CELULAR (Menu Horizontal com Scroll) === */}
+        {/* === MODO CELULAR === */}
         <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <style dangerouslySetInnerHTML={{__html: `::-webkit-scrollbar { display: none; }`}} />
           
-          <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-900 text-white w-8 h-8 rounded-lg mr-1">
-            <Home size={16} />
+          <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-3 py-2 rounded-lg mr-1 font-bold text-xs gap-1 shadow-sm">
+            <GraduationCap size={16} /> {siglaEscola}
           </Link>
 
           {navLinks.filter(link => link.path !== '/').map(link => (
