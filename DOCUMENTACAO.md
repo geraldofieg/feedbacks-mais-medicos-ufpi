@@ -1,8 +1,8 @@
 # Documentação de Arquitetura - Plataforma do Professor (SaaS V3)
-**Status:** Em Desenvolvimento (Fase 1 Concluída)
+**Status:** Em Desenvolvimento (Fase 1 e Porteiro Concluídos)
 
 ## 1. Visão Geral
-Sistema SaaS (Software as a Service) de dashboard para professores avaliarem e gerenciarem o feedback de alunos. A plataforma possui arquitetura *Multitenant* (múltiplas instituições), permitindo que um mesmo sistema atenda diversas faculdades e programas educacionais de forma isolada, ágil e segura.
+Sistema SaaS (Software as a Service) de dashboard para professores avaliarem e gerenciarem o feedback de alunos. A plataforma possui arquitetura *Multitenant* (múltiplas instituições), permitindo que um mesmo sistema atenda diversas faculdades e programas educacionais de forma isolada, ágil e segura. O professor gerencia seus diferentes contextos de trabalho como "Espaços de Trabalho" independentes.
 
 ## 2. O 'Botão de Pânico' (Regra Crítica de Negócio)
 Devido a incidentes de custo ('abas zumbis' consumindo a cota do Firebase via consultas ininterruptas), o sistema possui um Kill Switch ativo e obrigatório no `App.jsx`.
@@ -14,10 +14,10 @@ Devido a incidentes de custo ('abas zumbis' consumindo a cota do Firebase via co
 Todas as mensagens de commit, descrições de Pull Requests e comentários no código devem ser escritos EXCLUSIVAMENTE em Português do Brasil (PT-BR).
 
 ## 4. Arquitetura Multitenant (A Regra dos 3 Níveis)
-O sistema evoluiu para uma hierarquia plana de 3 níveis, abandonando o engessamento de "Módulos" (pastas) para garantir velocidade de banco:
-1. **Nível 1 (Instituição/Programa):** Definido no Login (Ex: USP, Mais Médicos). Fica blindado no `AuthContext` (localStorage: `@SaaS_EscolaSelecionada`).
-2. **Nível 2 (Turmas):** O agrupador principal de alunos (Ex: "Turma de Odontologia 2026").
-3. **Nível 3 (Atividades/Tarefas):** Avaliações vinculadas diretamente a uma Turma. O nome da tarefa (Ex: "Fórum 01", "Desafio Final") vira o próprio agrupador lógico.
+O sistema opera em uma hierarquia plana de 3 níveis para garantir velocidade de banco e flexibilidade:
+1. **Nível 1 (Instituição/Programa):** O Espaço de Trabalho (Ex: USP, Mais Médicos). Diferente da V1, este nível é selecionado **dentro** da plataforma após o login. O valor fica blindado no `AuthContext` e persistido no `localStorage` sob a chave `@SaaS_EscolaSelecionada`.
+2. **Nível 2 (Turmas):** O agrupador principal de alunos (Ex: "Turma de Odontologia 2026"). Toda turma é obrigatoriamente vinculada a uma Instituição e a um Professor.
+3. **Nível 3 (Atividades/Tarefas):** Avaliações vinculadas diretamente a uma Turma. O nome da tarefa (Ex: "Fórum 01", "Desafio Final") vira o agrupador lógico para cálculos de pendências.
 
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as coleções recebem a chave da `instituicao` para isolamento de dados. **Todas as consultas do sistema devem conter a trava:** `where('instituicao', '==', escolaSelecionada)`.
@@ -27,45 +27,43 @@ Todas as coleções recebem a chave da `instituicao` para isolamento de dados. *
 * **`alunos`**: `id`, `nome`, `turmaId`, `instituicao`, `dataCadastro`.
 * **`atividades`**: `id`, `alunoId`, `turmaId`, `instituicao`, `nomeTarefa`, `enunciado`, `resposta`, `status` ('pendente'|'aprovado'|'devolvido'), `nota` (numérico, opcional), `feedbackSugerido`, `feedbackFinal`, `dataPostagem`, `dataAprovacao`.
 
-## 6. Regras de Negócio e Gestão à Vista (Dashboard)
-* **Lógica de Alvo:** O sistema baseia-se na `Turma` selecionada pelo professor para renderizar os dados. A prioridade de tela sempre foca nas tarefas ativas vinculadas àquela turma.
-* **Cálculo de Pendências:** Calculado em memória. O sistema varre a array de alunos da `Turma X` e cruza com as tarefas exigidas. Cria-se um `Set` combinando `${alunoId}-${nomeTarefa}`. Se a string não existir nas entregas aprovadas, o aluno vai para a matriz de Pendentes.
-* **Termômetro da IA:** Mede a eficiência do prompt. A regra se mantém: uma atividade é 100% original da IA se `feedbackFinal.trim() === feedbackSugerido.trim()`. Qualquer edição do professor diminui a taxa de aproveitamento.
+## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
+* **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada na sessão, o Dashboard exibe a interface de seleção:
+    * **Criar Novo Espaço:** Campo de texto livre (Ex: "Meu Cursinho Particular") que, ao ser enviado, define o contexto atual.
+    * **Meus Espaços:** Lista dinâmica gerada a partir da coleção `turmas`, buscando todos os nomes únicos de `instituicao` vinculados ao `professorUid`.
+* **Cálculo de Pendências:** Calculado em memória. O sistema varre a array de alunos da `TurmaId` ativa e cruza com as tarefas exigidas. Se a combinação `${alunoId}-${nomeTarefa}` não possuir um documento com status 'aprovado' ou 'devolvido', o aluno entra na matriz de Pendentes.
+* **Termômetro da IA:** Mede a eficiência do prompt. Regra: Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é considerada 100% original da IA.
 
 ## 7. Perfis de Acesso (RBAC SaaS)
-* **Perfil Admin (Dono da Plataforma):** Visão global de faturamento, controle de instituições e painel master.
-* **Perfil Professor (Cliente):** Visão isolada. Só enxerga alunos e atividades pertencentes à instituição logada e às turmas que ele administra.
+* **Perfil Admin:** Visão global de faturamento e controle master do sistema.
+* **Perfil Professor:** Visão isolada. Só enxerga alunos e atividades pertencentes à instituição selecionada no "Porteiro" e apenas turmas onde seu `uid` conste como criador.
 
 ## 8. Fluxo de Revisão (Lista de Atividades)
-O ciclo de vida divide-se em 3 funis condicionais exatos nas telas de correção:
-1. **Pendente:** `!dataAprovacao` OU `status === 'pendente'`
-2. **Falta Devolver (Aprovado):** `dataAprovacao` E `status === 'aprovado'` (Correção feita, nota dada, mas ainda não enviada ao aluno).
-3. **Finalizado (Devolvido):** `status === 'devolvido'` (Feedback e Nota liberados).
+O ciclo de vida divide-se em 3 funis condicionais:
+1. **Pendente:** `status === 'pendente'` (Aguardando primeira leitura do professor).
+2. **Falta Devolver (Aprovado):** `status === 'aprovado'` (Professor já corrigiu e deu nota, mas os dados estão ocultos para o aluno).
+3. **Finalizado (Devolvido):** `status === 'devolvido'` (Feedback e Nota liberados para visualização do aluno).
 
 ## 9. Módulo de Comunicação e Cobrança
-A tela de Comunicação automatiza as cobranças cruzando alunos ativos x atividades pendentes da Turma, gerando matrizes unificadas para o WhatsApp.
+Automatização de cobranças cruzando alunos ativos x atividades pendentes da Turma.
 * **Redação de Mentoria e Apoio (Templates Exatos):**
   * **1. Grupo Geral da Turma:**
-    * *< 0 dias:* "Olá, pessoal! O prazo oficial da tarefa {tarefa} foi encerrado. Notei algumas pendências no sistema. Por favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo."
-    * *>= 20 dias:* "Olá, pessoal! 🌟 Passando para avisar que a etapa de {tarefa} já está liberada. Faltam {dias} dias para o encerramento. Quem já quiser ir adiantando as atividades, desejo excelentes estudos! Qualquer coisa, podem contar comigo."
-    * *>= 8 dias:* "Olá, pessoal! Nosso lembrete de acompanhamento sobre a {tarefa}. Entramos na fase intermediária e faltam {dias} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, estou à disposição."
-    * *< 8 dias:* "Olá, colegas! 🚨 Passando para alertar que entramos na reta final da {tarefa}. Faltam apenas {dias} dias para o encerramento! Peço a regularização das tarefas pendentes o quanto antes para evitarmos problemas."
-  * **2. Templates Individuais (WhatsApp e Plataforma):** *(Usa o Primeiro Nome)*
-    * *< 0 dias:* "Olá, {Nome}! Tudo bem? O prazo oficial de {tarefa} foi encerrado. Notei no sistema que ainda consta pendência para a sua entrega. Por favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação. Fico no aguardo!"
-    * *>= 20 dias:* "Olá, {Nome}! Tudo bem? 🌟 Passando para avisar que a etapa de {tarefa} já está em andamento. Faltam {dias} dias para o encerramento. Recomendo adiantar a execução pra não ficar para a última hora. Qualquer coisa, pode contar comigo!"
-    * *>= 8 dias:* "Olá, {Nome}! Tudo bem? Nosso lembrete de acompanhamento sobre {tarefa}. Faltam {dias} dias para o encerramento e ainda consta pendência no sistema. Vamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, pode me chamar."
-    * *< 8 dias:* "Olá, {Nome}! Tudo bem? 🚨 Passando para alertar que entramos na reta final de {tarefa}. Faltam apenas {dias} dias para o encerramento! Recomendo que regularize o quanto antes para não acumular nem termos problemas com as notas. Qualquer coisa, me chame."
+    * *< 0 dias (Vencido):* "Olá, pessoal! O prazo oficial da tarefa {tarefa} foi encerrado. Notei algumas pendências no sistema..."
+    * *>= 20 dias (Início):* "Olá, pessoal! 🌟 Passando para avisar que a etapa de {tarefa} já está liberada..."
+    * *>= 8 dias (Meio):* "Olá, pessoal! Nosso lembrete de acompanhamento sobre a {tarefa}..."
+    * *< 8 dias (Reta Final):* "Olá, colegas! 🚨 Passando para alertar que entramos na reta final da {tarefa}..."
+  * **2. Templates Individuais:** Devem usar o primeiro nome do aluno e listar nominalmente as tarefas em atraso.
 
 ## 10. Mapa de Entregas (Proatividade Visual)
-A tela de Mapa renderiza a tabela injetando as obrigações oficiais atreladas à Turma.
-* **Cruzamento Exato:** Cria a chave de interseção baseada na string `${alunoId}-${nomeTarefa}`. A existência dessa string no banco dita se a célula renderiza o ícone Check Verde (com a Nota) ou X Vermelho (Pendente).
+Renderiza uma tabela dinâmica onde:
+* **Linhas:** Alunos da Turma.
+* **Colunas:** Nomes das tarefas identificadas para aquela Turma.
+* **Células:** Cruzamento exato via `${alunoId}-${nomeTarefa}`. Exibe ícone de Check Verde com a Nota ou X Vermelho.
 
 ## 11. Inauguração de Tarefas (Enunciados Base)
-O professor pode cadastrar a instrução (texto ou anexo) da tarefa na tela de Configurações antes mesmo de um aluno enviar a atividade, garantindo que o sistema saiba quais tarefas existem e podem ser cobradas.
+O professor pode cadastrar o enunciado padrão de uma tarefa em `Configuracoes.jsx`. Isso permite que o Mapa de Entregas e o Módulo de Comunicação saibam que aquela tarefa existe mesmo antes de qualquer aluno enviar a primeira resposta.
 
 ## 12. Gestão de Alunos (Impacto Sistêmico)
-O cadastro de alunos agora exige a vinculação obrigatória a uma `Turma`. 
-* Se um aluno for deletado ou movido de turma, o recálculo em tempo real é acionado. Ele desaparece ou muda instantaneamente de:
-  1. Painel de Pendências (Dashboard)
-  2. Módulo de Comunicação (Cobranças individuais)
-  3. Matriz do Mapa de Entregas.
+O cadastro de alunos exige vinculação a uma `Turma`.
+* **Integridade:** Se um aluno é removido, o sistema recalcula instantaneamente o Dashboard e o Mapa de Entregas daquela Turma para evitar falsos positivos de pendências.
+* **Troca de Contexto:** Ao clicar em "Trocar Espaço" no Dashboard, o sistema limpa o `@SaaS_EscolaSelecionada` e redireciona o professor de volta ao "Porteiro".
