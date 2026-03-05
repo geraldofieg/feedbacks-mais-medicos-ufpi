@@ -15,7 +15,7 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!instituicao) { return setError('Por favor, selecione uma instituição de ensino.'); }
+    if (!instituicao) { return setError('Por favor, selecione uma instituição ou programa.'); }
 
     try {
       setError('');
@@ -51,14 +51,15 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Instituição de Ensino</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Instituição / Programa</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><GraduationCap className="h-5 w-5 text-gray-400" /></div>
-              <select required className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 appearance-none" value={instituicao} onChange={(e) => setInstituicao(e.target.value)}>
-                <option value="" disabled>Selecione onde deseja acessar...</option>
-                <option value="UFPI">UFPI - Universidade Federal do Piauí</option>
-                <option value="FASIPE">FASIPE - Turma de Odontologia</option>
-                <option value="DEMO">Escola de Demonstração (Testes)</option>
+              <select required className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-400 rounded-xl focus:ring-2 focus:ring-blue-500 appearance-none" value={instituicao} onChange={(e) => setInstituicao(e.target.value)}>
+                <option value="" disabled>Ex: Mais Médicos, USP...</option>
+                <option value="Mais Médicos" className="text-gray-800">Mais Médicos (Programa Nacional)</option>
+                <option value="USP" className="text-gray-800">USP - Universidade de São Paulo</option>
+                <option value="UFPI" className="text-gray-800">UFPI - Universidade Federal do Piauí</option>
+                <option value="Outra" className="text-gray-800">Outra Instituição...</option>
               </select>
             </div>
           </div>
