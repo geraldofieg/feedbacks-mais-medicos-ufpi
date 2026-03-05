@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users } from 'lucide-react'; // Adicionado ícone Users
+import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users } from 'lucide-react';
 
 export default function Navbar() {
   const { currentUser, logout, escolaSelecionada } = useAuth();
@@ -18,7 +18,6 @@ export default function Navbar() {
     }
   }
 
-  // NOVO: Adicionado o botão 'Turmas' logo após o 'Início'
   const navLinks = [
     { path: '/', icon: <Home size={18} />, label: 'Início' },
     { path: '/turmas', icon: <Users size={18} />, label: 'Turmas' }, 
@@ -64,8 +63,8 @@ export default function Navbar() {
         </div>
 
         {/* === MODO CELULAR === */}
-        <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <style dangerouslySetInnerHTML={{__html: `::-webkit-scrollbar { display: none; }`}} />
+        {/* A CORREÇÃO ESTÁ AQUI: Removemos o <style> global e adicionamos o [&::-webkit-scrollbar]:hidden */}
+        <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           
           <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-3 py-2 rounded-lg mr-1 font-bold text-xs gap-1 shadow-sm">
             <GraduationCap size={16} /> {siglaEscola}
