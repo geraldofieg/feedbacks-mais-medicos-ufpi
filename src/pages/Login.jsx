@@ -1,24 +1,36 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Lock, Mail } from 'lucide-react';
+import { Lock, Mail, GraduationCap } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [instituicao, setInstituicao] = useState(''); 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { login, setEscolaSelecionada } = useAuth();
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
     e.preventDefault();
+    
+    // Trava de segurança UX
+    if (!instituicao) {
+      setError('Por favor, selecione uma instituição de ensino.');
+      return;
+    }
+
     try {
       setError('');
       setLoading(true);
       await login(email, password);
-      // Se der certo, manda para o Dashboard (página inicial)
+      
+      // Salva a faculdade escolhida na memória do sistema
+      setEscolaSelecionada(instituicao); 
+      
+      // Manda para o Dashboard
       navigate('/'); 
     } catch (err) {
       setError('Falha ao fazer login. Verifique seu e-mail e senha.');
@@ -29,22 +41,47 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+        
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-800">Mais Médicos</h2>
-          <p className="text-gray-500 mt-2">Sistema de Feedbacks UFPI</p>
+          <div className="bg-blue-600 text-white w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-md">
+            <GraduationCap size={32} />
+          </div>
+          <h2 className="text-3xl font-black text-gray-800 tracking-tight">Plataforma do Professor</h2>
+          <p className="text-gray-500 mt-2 font-medium">Gestão Inteligente de Avaliações</p>
         </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-center">
+          <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm font-bold shadow-sm">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Instituição de Ensino</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <GraduationCap className="h-5 w-5 text-gray-400" />
+              </div>
+              <select
+                required
+                className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors font-medium appearance-none"
+                value={instituicao}
+                onChange={(e) => setInstituicao(e.target.value)}
+              >
+                <option value="" disabled>Selecione onde deseja acessar...</option>
+                <option value="UFPI">UFPI - Universidade Federal do Piauí</option>
+                <option value="FASIPE">FASIPE - Turma de Odontologia</option>
+                <option value="DEMO">Escola de Demonstração (Testes)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">E-mail Profissional</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Mail className="h-5 w-5 text-gray-400" />
@@ -52,8 +89,8 @@ export default function Login() {
               <input
                 type="email"
                 required
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Seu e-mail"
+                className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                placeholder="nome@instituicao.com.br"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -61,7 +98,7 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Senha de Acesso</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Lock className="h-5 w-5 text-gray-400" />
@@ -69,8 +106,8 @@ export default function Login() {
               <input
                 type="password"
                 required
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Sua senha"
+                className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -80,11 +117,16 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+            className="w-full bg-blue-600 text-white font-black py-3 px-4 rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/50 disabled:opacity-50 transition-all transform hover:-translate-y-0.5 mt-2 shadow-lg"
           >
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? 'Autenticando...' : 'Acessar Plataforma'}
           </button>
         </form>
+
+      </div>
+      
+      <div className="fixed bottom-4 text-center w-full text-xs font-bold text-gray-400">
+        Plataforma do Professor v3.0 &copy; {new Date().getFullYear()}
       </div>
     </div>
   );
