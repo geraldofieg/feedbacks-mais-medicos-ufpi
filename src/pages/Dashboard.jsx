@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, setDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Shuffle, Building2, UserPlus, FileText, ChevronRight } from 'lucide-react';
+import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Shuffle, Building2, UserPlus, FileText, ChevronRight, Trash2, Pencil, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -13,7 +13,11 @@ export default function Dashboard() {
   const [loadingInst, setLoadingInst] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
-  // Novos estados para armazenar as turmas reais do professor
+  // Estados de Edição da Instituição
+  const [editandoInstId, setEditandoInstId] = useState(null);
+  const [nomeInstEdicao, setNomeInstEdicao] = useState('');
+
+  // Estados do Dashboard Real
   const [minhasTurmas, setMinhasTurmas] = useState([]);
   const [estatisticas, setEstatisticas] = useState({ alunos: 0, pendencias: 0 });
   const [loadingDados, setLoadingDados] = useState(false);
@@ -29,18 +33,18 @@ export default function Dashboard() {
     async function fetchInstituicoes() {
       if (!currentUser) return;
       try {
-        const instSet = new Set();
+        const instList = [];
         const qInst = query(collection(db, 'instituicoes'), where('professorUid', '==', currentUser.uid));
         const snapInst = await getDocs(qInst);
-        snapInst.docs.forEach(d => instSet.add(d.data().nome));
-
-        const qTurmas = query(collection(db, 'turmas'), where('professorUid', '==', currentUser.uid));
-        const snapTurmas = await getDocs(qTurmas);
-        snapTurmas.docs.forEach(d => {
-          if (d.data().instituicao) instSet.add(d.data().instituicao);
-        });
         
-        setInstituicoes(Array.from(instSet).sort());
+        snapInst.docs.forEach(d => {
+          const data = d.data();
+          if (data.status !== 'lixeira') {
+            instList.push({ id: d.id, nome: data.nome });
+          }
+        });
+
+        setInstituicoes(instList.sort((a, b) => a.nome.localeCompare(b.nome)));
       } catch (error) {
         console.error("Erro ao buscar instituições:", error);
       } finally {
@@ -53,32 +57,28 @@ export default function Dashboard() {
     }
   }, [currentUser, escolaSelecionada]);
 
-  // Busca Dados Reais do Dashboard (Turmas e Estatísticas)
+  // Busca Dados Reais do Dashboard (Agora usando o ID da Instituição!)
   useEffect(() => {
     async function fetchDadosDashboard() {
-      if (!currentUser || !escolaSelecionada) return;
+      if (!currentUser || !escolaSelecionada?.id) return;
       setLoadingDados(true);
       try {
-        // 1. Busca as Turmas reais para exibir na tela
-        const qTurmas = query(collection(db, 'turmas'), where('instituicao', '==', escolaSelecionada), where('professorUid', '==', currentUser.uid));
+        // Agora buscamos por instituicaoId em vez do nome
+        const qTurmas = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
         const snapTurmas = await getDocs(qTurmas);
         
-        const turmasData = snapTurmas.docs.map(t => ({ id: t.id, ...t.data() }));
+        const turmasData = snapTurmas.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
         setMinhasTurmas(turmasData);
 
-        // 2. Calcula as estatísticas
         let totalAlunos = 0;
         if (turmasData.length > 0) {
           const turmasIds = turmasData.map(d => d.id);
-          const qAlunos = query(collection(db, 'alunos'), where('instituicao', '==', escolaSelecionada));
+          const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAlunos = await getDocs(qAlunos);
-          totalAlunos = snapAlunos.docs.filter(a => turmasIds.includes(a.data().turmaId)).length;
+          totalAlunos = snapAlunos.docs.filter(a => turmasIds.includes(a.data().turmaId) && a.data().status !== 'lixeira').length;
         }
 
-        setEstatisticas({
-          alunos: totalAlunos,
-          pendencias: 0 
-        });
+        setEstatisticas({ alunos: totalAlunos, pendencias: 0 });
       } catch (error) {
         console.error("Erro ao buscar dados do dashboard:", error);
       } finally {
@@ -91,6 +91,7 @@ export default function Dashboard() {
     }
   }, [currentUser, escolaSelecionada]);
 
+  // Criar Instituição (Agora gera um ID secreto automático)
   async function handleCriarAcessar(e) {
     e.preventDefault();
     const nomeInst = novaInstituicao.trim();
@@ -98,15 +99,16 @@ export default function Dashboard() {
 
     try {
       setSalvando(true);
-      const idSeguro = `${currentUser.uid}_${nomeInst.replace(/\s+/g, '')}`;
       
-      await setDoc(doc(db, 'instituicoes', idSeguro), {
+      const docRef = await addDoc(collection(db, 'instituicoes'), {
         nome: nomeInst,
         professorUid: currentUser.uid,
+        status: 'ativa',
         dataCriacao: serverTimestamp()
-      }, { merge: true });
+      });
 
-      setEscolaSelecionada(nomeInst);
+      // Passa o Objeto completo para a memória do navegador
+      setEscolaSelecionada({ id: docRef.id, nome: nomeInst });
     } catch (error) {
       console.error("Erro ao salvar instituição:", error);
       alert("Ocorreu um erro. Tente novamente.");
@@ -115,8 +117,35 @@ export default function Dashboard() {
     }
   }
 
-  function selecionarInstituicao(nome) {
-    setEscolaSelecionada(nome);
+  // Editar Nome da Instituição
+  async function handleSalvarEdicaoInst(e, id) {
+    e.stopPropagation();
+    if (!nomeInstEdicao.trim()) return;
+    try {
+      await updateDoc(doc(db, 'instituicoes', id), { nome: nomeInstEdicao.trim() });
+      setInstituicoes(instituicoes.map(inst => inst.id === id ? { ...inst, nome: nomeInstEdicao.trim() } : inst));
+      setEditandoInstId(null);
+    } catch (error) {
+      console.error("Erro ao editar instituição:", error);
+    }
+  }
+
+  // Soft Delete de Instituição
+  async function handleLixeiraInstituicao(e, id, nome) {
+    e.stopPropagation(); 
+    if (!window.confirm(`Tem certeza que deseja apagar o espaço "${nome}"?\n\nEle será enviado para a lixeira e você perderá o acesso a todas as turmas cadastradas nele.`)) return;
+
+    try {
+      await updateDoc(doc(db, 'instituicoes', id), { status: 'lixeira' });
+      setInstituicoes(instituicoes.filter(inst => inst.id !== id));
+    } catch (error) {
+      console.error("Erro ao enviar instituição para a lixeira:", error);
+    }
+  }
+
+  function selecionarInstituicao(instObj) {
+    // Passamos o objeto completo
+    setEscolaSelecionada(instObj);
   }
 
   // ==========================================
@@ -165,18 +194,53 @@ export default function Dashboard() {
               <div className="text-gray-500 text-sm font-medium animate-pulse">Buscando cadastros...</div>
             ) : instituicoes.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-gray-500 text-sm font-medium italic">Você ainda não possui nenhuma instituição cadastrada.</p>
+                <p className="text-gray-500 text-sm font-medium italic">Você ainda não possui nenhuma instituição ativa.</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+              <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                 {instituicoes.map(inst => (
-                  <button
-                    key={inst} onClick={() => selecionarInstituicao(inst)}
-                    className="w-full bg-white border border-gray-200 p-4 rounded-xl flex items-center justify-between hover:border-blue-500 hover:shadow-sm transition-all text-left group"
-                  >
-                    <span className="font-bold text-gray-700 group-hover:text-blue-700 truncate mr-2">{inst}</span>
-                    <ArrowRight size={18} className="text-gray-400 group-hover:text-blue-600 flex-shrink-0" />
-                  </button>
+                  <div key={inst.id} className="w-full bg-white border border-gray-200 p-3 pl-4 rounded-xl flex items-center justify-between hover:border-blue-500 hover:shadow-sm transition-all group cursor-pointer" onClick={() => selecionarInstituicao(inst)}>
+                    
+                    {editandoInstId === inst.id ? (
+                      <div className="flex items-center gap-2 w-full pr-2" onClick={e => e.stopPropagation()}>
+                        <input 
+                          type="text" 
+                          value={nomeInstEdicao} 
+                          onChange={(e) => setNomeInstEdicao(e.target.value)} 
+                          className="w-full border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800" 
+                          autoFocus 
+                        />
+                        <button onClick={(e) => handleSalvarEdicaoInst(e, inst.id)} className="bg-green-500 text-white p-1.5 rounded-lg hover:bg-green-600 shadow-sm"><Check size={16}/></button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditandoInstId(null); }} className="bg-gray-200 text-gray-600 p-1.5 rounded-lg hover:bg-gray-300"><X size={16}/></button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="flex-1 text-left font-bold text-gray-700 group-hover:text-blue-700 truncate mr-2">
+                          {inst.nome}
+                        </span>
+                        
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditandoInstId(inst.id); setNomeInstEdicao(inst.nome); }}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Editar Nome"
+                          >
+                            <Pencil size={18} />
+                          </button>
+                          <button
+                            onClick={(e) => handleLixeiraInstituicao(e, inst.id, inst.nome)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Mover Instituição para Lixeira"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                          <div className="p-2 text-gray-400 group-hover:text-blue-600 bg-gray-50 rounded-lg ml-1">
+                            <ArrowRight size={18} />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -192,7 +256,6 @@ export default function Dashboard() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       
-      {/* CABEÇALHO */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8 justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm">
@@ -201,20 +264,19 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-black text-gray-800 leading-tight">Centro de Comando</h1>
             <p className="text-gray-500 text-sm font-medium mt-0.5">
-              Instituição Ativa: <strong className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{escolaSelecionada}</strong>
+              Instituição Ativa: <strong className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{escolaSelecionada.nome}</strong>
             </p>
           </div>
         </div>
         
         <button 
-          onClick={() => setEscolaSelecionada('')}
+          onClick={() => setEscolaSelecionada(null)}
           className="flex w-full sm:w-auto items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 px-4 py-2 rounded-lg shadow-sm hover:shadow transition-all font-bold"
         >
           <Shuffle size={16}/> Trocar Instituição
         </button>
       </div>
 
-      {/* BLOCO 1: AÇÕES RÁPIDAS (O que o professor quer fazer?) */}
       <div className="mb-10">
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Ações Rápidas</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -244,7 +306,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* BLOCO 2: CONTEÚDO REAL (As turmas do professor) */}
       <div className="mb-10">
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
           Minhas Turmas Ativas 
@@ -275,7 +336,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* BLOCO 3: RAIO-X INFORMATIVO (Os números foram reduzidos para o rodapé) */}
       <div className="border-t border-gray-200 pt-8">
         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Visão Geral da Instituição</h2>
         <div className="flex gap-6">
@@ -292,4 +352,4 @@ export default function Dashboard() {
 
     </div>
   );
-}
+                    }
