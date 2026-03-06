@@ -1,16 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, Megaphone, Copy, CheckCircle2, MessageCircle, Send, User, MonitorSmartphone, GraduationCap, RefreshCw, BookOpen, Target, CalendarClock } from 'lucide-react';
+import { Megaphone, Copy, CheckCircle2, MessageCircle, Send, MonitorSmartphone, GraduationCap, RefreshCw, BookOpen, Target, CalendarClock } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Comunicacao() {
   const { currentUser, escolaSelecionada } = useAuth();
   const location = useLocation();
   
-  // Parâmetros vindos de atalhos (Ex: Tela de Pendências)
   const turmaPreSelecionada = location.state?.turmaIdSelecionada || '';
   const alunoAlvo = location.state?.alunoAlvo || null;
 
@@ -27,7 +26,6 @@ export default function Comunicacao() {
   const [erro, setErro] = useState(null);
   const [copiado, setCopiado] = useState(null);
 
-  // 1. Busca as Turmas da Instituição
   useEffect(() => {
     async function fetchTurmas() {
       if (!currentUser || !escolaSelecionada?.id) {
@@ -51,7 +49,6 @@ export default function Comunicacao() {
     fetchTurmas();
   }, [currentUser, escolaSelecionada]);
 
-  // 2. Busca Tarefas, Alunos e calcula Pendências da Turma e Tarefa selecionadas
   useEffect(() => {
     async function fetchDadosComunicacao() {
       if (!turmaAtiva) {
@@ -60,12 +57,10 @@ export default function Comunicacao() {
       }
       setLoadingDados(true);
       try {
-        // Busca Tarefas
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         
-        // Ordena por dataFim (mais próximas primeiro)
         tarefasData.sort((a, b) => {
           const timeA = a.dataFim?.toMillis() || 0;
           const timeB = b.dataFim?.toMillis() || 0;
@@ -74,7 +69,6 @@ export default function Comunicacao() {
         
         setTarefasDaTurma(tarefasData);
         
-        // Auto-seleciona a primeira tarefa se não tiver nenhuma selecionada
         const tarefaAtualId = tarefaAtivaId && tarefasData.some(t => t.id === tarefaAtivaId) ? tarefaAtivaId : (tarefasData[0]?.id || '');
         setTarefaAtivaId(tarefaAtualId);
 
@@ -84,7 +78,6 @@ export default function Comunicacao() {
           return;
         }
 
-        // Busca Alunos e Entregas (Atividades)
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapAlunos = await getDocs(qAlunos);
         const alunosData = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira');
@@ -93,10 +86,8 @@ export default function Comunicacao() {
         const snapAtividades = await getDocs(qAtividades);
         const entregasFeitas = new Set(snapAtividades.docs.map(d => d.data().alunoId));
 
-        // Filtra quem não entregou ESTA tarefa específica
         const listaDevedores = alunosData.filter(aluno => !entregasFeitas.has(aluno.id));
 
-        // Coloca o alunoAlvo no topo, se existir
         listaDevedores.sort((a, b) => {
           if (a.nome === alunoAlvo) return -1;
           if (b.nome === alunoAlvo) return 1;
@@ -113,11 +104,10 @@ export default function Comunicacao() {
     fetchDadosComunicacao();
   }, [turmaAtiva, tarefaAtivaId, alunoAlvo]);
 
-  // --- CÁLCULO DE DATAS E HORAS (Mantido da V1/V2) ---
   const getDiasRestantes = (timestampFim) => {
     if (!timestampFim || !timestampFim.toDate) return null;
     const agora = new Date();
-    const dataFim = timestampFim.toDate(); // Pega a hora exata (ex: 23:59)
+    const dataFim = timestampFim.toDate(); 
     const diferencaTime = dataFim.getTime() - agora.getTime();
     return Math.ceil(diferencaTime / (1000 * 3600 * 24));
   };
@@ -129,7 +119,6 @@ export default function Comunicacao() {
     return primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
   };
 
-  // --- GERADORES DE MENSAGENS INTELIGENTES (IDÊNTICOS À V1) ---
   const tarefaAtualObj = tarefasDaTurma.find(t => t.id === tarefaAtivaId);
   const diasRestantesVisual = tarefaAtualObj ? getDiasRestantes(tarefaAtualObj.dataFim) : null;
   const nomeTarefa = tarefaAtualObj?.nomeTarefa || tarefaAtualObj?.titulo || 'a tarefa';
@@ -140,7 +129,6 @@ export default function Comunicacao() {
       if (diasRestantesVisual < 0) return `Olá, pessoal!\nO prazo oficial de *${nomeTarefa}* foi encerrado. Notei algumas pendências no sistema.\n\nPor favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
       if (diasRestantesVisual >= 20) return `Olá, pessoal! 🌟 Passando para avisar que a etapa de *${nomeTarefa}* já está em andamento.\n\nFaltam ${diasRestantesVisual} dias para o encerramento. Quem já quiser ir adiantando as atividades, desejo excelentes estudos!\nQualquer coisa, podem contar comigo.`;
       if (diasRestantesVisual >= 8) return `Olá, pessoal! Nosso lembrete de acompanhamento sobre *${nomeTarefa}*.\n\nEntramos na fase intermediária e faltam ${diasRestantesVisual} dias para o encerramento.\nVamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, estou à disposição.`;
-      
       return `Olá, colegas!\n🚨 Passando para alertar que entramos na reta final de *${nomeTarefa}*. Faltam apenas ${diasRestantesVisual} dias para o encerramento!\n\nPeço a regularização das tarefas pendentes o quanto antes para evitarmos problemas.`;
     }
     return `Olá, pessoal!\nPassando para lembrar do nosso acompanhamento sobre *${nomeTarefa}*. Peço a regularização das tarefas pendentes o quanto antes para não acumular.\nQualquer dúvida, estou por aqui!`;
@@ -152,13 +140,11 @@ export default function Comunicacao() {
       if (diasRestantesVisual < 0) return `Olá, ${primeiroNome}! Tudo bem?\nO prazo oficial de *${nomeTarefa}* foi encerrado. Notei no sistema que ainda consta pendência para a entrega desta atividade.\n\nPor favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação. Fico no aguardo!`;
       if (diasRestantesVisual >= 20) return `Olá, ${primeiroNome}! Tudo bem? 🌟\nPassando para avisar que a etapa de *${nomeTarefa}* já está em andamento. Faltam ${diasRestantesVisual} dias para o encerramento e notei pendência na sua entrega.\n\nRecomendo adiantar a execução, pra não ficar para a última hora. Qualquer coisa, pode contar comigo!`;
       if (diasRestantesVisual >= 8) return `Olá, ${primeiroNome}! Tudo bem?\nNosso lembrete de acompanhamento sobre *${nomeTarefa}*. Faltam ${diasRestantesVisual} dias para o encerramento e notei pendência na sua entrega.\n\nVamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, pode me chamar.`;
-      
       return `Olá, ${primeiroNome}! Tudo bem?\n🚨 Passando para alertar que entramos na reta final de *${nomeTarefa}*. Faltam apenas ${diasRestantesVisual} dias para o encerramento!\n\nNotei pendência para esta entrega. Recomendo que regularize o quanto antes para não acumular nem termos problemas. Qualquer coisa, me chame.`;
     }
     return `Olá, ${primeiroNome}! Tudo bem?\nPassando para lembrar do nosso acompanhamento sobre *${nomeTarefa}*. Notei pendência para esta entrega.\n\nRecomendo a regularização o quanto antes para não acumular. Qualquer dúvida, pode contar comigo!`;
   };
 
-  // --- CONTROLES DE AÇÃO ---
   const aplicarFeedback = (idCopia, acaoAposFeedback) => {
     setCopiado(idCopia);
     setTimeout(() => {
@@ -191,8 +177,6 @@ export default function Comunicacao() {
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
   const isCarregando = loadingTurmas || loadingDados;
   const msgGeralPronta = gerarMensagemGeral();
-
-  // UX Defesa 1: Sem Instituição
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -209,8 +193,6 @@ export default function Comunicacao() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
-      
-      {/* CABEÇALHO */}
       <div className="mb-6">
         <Breadcrumb items={[{ label: `Comunicação (${escolaSelecionada.nome})` }]} />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
@@ -243,7 +225,6 @@ export default function Comunicacao() {
         </div>
       ) : (
         <>
-          {/* SMART TABS (TAREFAS DA TURMA) */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mb-6 flex flex-col gap-5">
             <div>
               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2">
@@ -275,7 +256,6 @@ export default function Comunicacao() {
               </div>
             )}
 
-            {/* RELÓGIO DE PRAZO INTELIGENTE */}
             {tarefaAtivaId && (
               <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
                 {diasRestantesVisual !== null ? (
@@ -292,11 +272,9 @@ export default function Comunicacao() {
             )}
           </div>
 
-          {/* ÁREAS DE MENSAGENS */}
           {tarefaAtivaId && (
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
               
-              {/* COLUNA ESQUERDA: Mensagem Geral */}
               <div className="xl:col-span-1 space-y-6 xl:sticky xl:top-24">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-200">
                   <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
@@ -318,7 +296,6 @@ export default function Comunicacao() {
                 </div>
               </div>
 
-              {/* COLUNA DIREITA: Cobrança Individualizada */}
               <div className="xl:col-span-2 space-y-4">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                   
@@ -354,4 +331,47 @@ export default function Comunicacao() {
                         const isFocado = pend.nome === alunoAlvo;
                         
                         return (
-                          <div key={idx} className={`p-5 rounded-2xl border transition-all ${isFocado ? 'bg-blue-50/30 bord
+                          <div key={idx} className={`p-5 rounded-2xl border transition-all ${isFocado ? 'bg-blue-50/30 border-blue-300 shadow-md ring-2 ring-blue-100' : 'bg-white border-gray-200 hover:border-blue-300 shadow-sm'}`}>
+                            
+                            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
+                              <div>
+                                <span className="font-black text-gray-900 text-lg block flex items-center gap-2">
+                                  {getPrimeiroNome(pend.nome)} <span className="text-gray-400 font-medium text-sm">({pend.nome})</span>
+                                  {isFocado && <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">Foco</span>}
+                                </span>
+                              </div>
+                              
+                              <div className="flex flex-wrap gap-2 shrink-0">
+                                <button 
+                                  onClick={() => handleCopiar(msgIndividualizada, idCopiaPlat)}
+                                  className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-sm ${copiado === idCopiaPlat ? 'bg-blue-600 text-white scale-95' : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'}`}
+                                >
+                                  {copiado === idCopiaPlat ? <><CheckCircle2 size={16}/> Copiado!</> : <><Copy size={16}/> Sistema Oficial</>} 
+                                </button>
+
+                                <button 
+                                  onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
+                                  className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-sm ${copiado === idCopiaZap ? 'bg-green-600 text-white scale-95' : 'bg-green-500 text-white hover:bg-green-600'}`}
+                                >
+                                  {copiado === idCopiaZap ? <><CheckCircle2 size={16}/> Abrindo...</> : <><Send size={16}/> Zap Privado</>} 
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm text-gray-600 italic whitespace-pre-wrap">
+                              "{msgIndividualizada}"
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
