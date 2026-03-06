@@ -27,7 +27,8 @@ export default function Navbar() {
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
   ];
 
-  const siglaEscola = escolaSelecionada ? escolaSelecionada.split(' ')[0] : 'SaaS';
+  // A CORREÇÃO ESTÁ AQUI: Agora ele busca especificamente o .nome dentro do objeto
+  const siglaEscola = escolaSelecionada?.nome ? escolaSelecionada.nome.split(' ')[0] : 'SaaS';
 
   return (
     <div className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
@@ -63,7 +64,6 @@ export default function Navbar() {
         </div>
 
         {/* === MODO CELULAR === */}
-        {/* A CORREÇÃO ESTÁ AQUI: Removemos o <style> global e adicionamos o [&::-webkit-scrollbar]:hidden */}
         <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           
           <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-3 py-2 rounded-lg mr-1 font-bold text-xs gap-1 shadow-sm">
