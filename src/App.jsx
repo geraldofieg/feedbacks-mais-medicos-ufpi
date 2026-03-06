@@ -4,11 +4,12 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
+import BotaoGlobal from './components/BotaoGlobal'; // NOVO: Import do Botão Global
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Turmas from './pages/Turmas';
-import Tarefas from './pages/Tarefas'; // NOVO: Import da tela de Tarefas
+import Tarefas from './pages/Tarefas'; 
 import NovaAtividade from './pages/NovaAtividade';
 import RevisarAtividade from './pages/RevisarAtividade';
 import Alunos from './pages/Alunos';
@@ -59,7 +60,7 @@ function App() {
           
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/turmas" element={<PrivateRoute><Turmas /></PrivateRoute>} />
-          <Route path="/tarefas" element={<PrivateRoute><Tarefas /></PrivateRoute>} /> {/* NOVO: Rota de Tarefas adicionada! */}
+          <Route path="/tarefas" element={<PrivateRoute><Tarefas /></PrivateRoute>} />
           <Route path="/cronograma" element={<PrivateRoute><Cronograma /></PrivateRoute>} />
           <Route path="/comunicacao" element={<PrivateRoute><Comunicacao /></PrivateRoute>} />
           <Route path="/nova-atividade" element={<PrivateRoute><NovaAtividade /></PrivateRoute>} />
@@ -73,6 +74,10 @@ function App() {
           {/* Rota de fallback: Se digitar uma URL que não existe, volta pro Dashboard */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
+
+        {/* NOVO: Botão Flutuante Global renderizado por cima de tudo */}
+        <BotaoGlobal />
+
       </AuthProvider>
     </Router>
   );
