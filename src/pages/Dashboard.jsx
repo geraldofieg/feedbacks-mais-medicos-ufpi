@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Shuffle, Building2, UserPlus, FileText, ChevronRight, Trash2, Pencil, Check, X } from 'lucide-react';
+import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Building2, UserPlus, FileText, ChevronRight, Trash2, Pencil, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -28,7 +28,7 @@ export default function Dashboard() {
     }, 50);
   }, [escolaSelecionada]);
 
-  // Busca Instituições (O Porteiro)
+  // Busca Instituições (Agora roda sempre, para alimentar o Dropdown)
   useEffect(() => {
     async function fetchInstituicoes() {
       if (!currentUser) return;
@@ -51,19 +51,15 @@ export default function Dashboard() {
         setLoadingInst(false);
       }
     }
-    
-    if (!escolaSelecionada) {
-      fetchInstituicoes();
-    }
-  }, [currentUser, escolaSelecionada]);
+    fetchInstituicoes();
+  }, [currentUser]);
 
-  // Busca Dados Reais do Dashboard (Agora usando o ID da Instituição!)
+  // Busca Dados Reais do Dashboard
   useEffect(() => {
     async function fetchDadosDashboard() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoadingDados(true);
       try {
-        // Agora buscamos por instituicaoId em vez do nome
         const qTurmas = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
         const snapTurmas = await getDocs(qTurmas);
         
@@ -91,7 +87,7 @@ export default function Dashboard() {
     }
   }, [currentUser, escolaSelecionada]);
 
-  // Criar Instituição (Agora gera um ID secreto automático)
+  // Criar Instituição
   async function handleCriarAcessar(e) {
     e.preventDefault();
     const nomeInst = novaInstituicao.trim();
@@ -107,7 +103,6 @@ export default function Dashboard() {
         dataCriacao: serverTimestamp()
       });
 
-      // Passa o Objeto completo para a memória do navegador
       setEscolaSelecionada({ id: docRef.id, nome: nomeInst });
     } catch (error) {
       console.error("Erro ao salvar instituição:", error);
@@ -125,6 +120,10 @@ export default function Dashboard() {
       await updateDoc(doc(db, 'instituicoes', id), { nome: nomeInstEdicao.trim() });
       setInstituicoes(instituicoes.map(inst => inst.id === id ? { ...inst, nome: nomeInstEdicao.trim() } : inst));
       setEditandoInstId(null);
+      // Atualiza o contexto se for a escola atual
+      if (escolaSelecionada?.id === id) {
+        setEscolaSelecionada({ id, nome: nomeInstEdicao.trim() });
+      }
     } catch (error) {
       console.error("Erro ao editar instituição:", error);
     }
@@ -144,7 +143,6 @@ export default function Dashboard() {
   }
 
   function selecionarInstituicao(instObj) {
-    // Passamos o objeto completo
     setEscolaSelecionada(instObj);
   }
 
@@ -256,25 +254,40 @@ export default function Dashboard() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       
+      {/* CABEÇALHO REVISADO: O botão "Trocar" virou um Dropdown inteligente */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8 justify-between">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm">
+        <div className="flex items-center gap-3 w-full">
+          <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm shrink-0">
             <GraduationCap size={28} />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-black text-gray-800 leading-tight">Centro de Comando</h1>
-            <p className="text-gray-500 text-sm font-medium mt-0.5">
-              Instituição Ativa: <strong className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{escolaSelecionada.nome}</strong>
-            </p>
+            
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-gray-500 text-sm font-medium">Instituição:</span>
+              <select
+                className="bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 py-1 px-2 font-bold cursor-pointer max-w-[200px] sm:max-w-xs truncate"
+                value={escolaSelecionada.id}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'NOVA') {
+                    setEscolaSelecionada(null);
+                  } else {
+                    const inst = instituicoes.find(i => i.id === val);
+                    if (inst) setEscolaSelecionada(inst);
+                  }
+                }}
+              >
+                {instituicoes.map(inst => (
+                  <option key={inst.id} value={inst.id}>{inst.nome}</option>
+                ))}
+                <option disabled>──────────</option>
+                <option value="NOVA">+ Criar Nova Instituição</option>
+              </select>
+            </div>
+
           </div>
         </div>
-        
-        <button 
-          onClick={() => setEscolaSelecionada(null)}
-          className="flex w-full sm:w-auto items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 px-4 py-2 rounded-lg shadow-sm hover:shadow transition-all font-bold"
-        >
-          <Shuffle size={16}/> Trocar Instituição
-        </button>
       </div>
 
       <div className="mb-10">
@@ -352,4 +365,4 @@ export default function Dashboard() {
 
     </div>
   );
-                    }
+}
