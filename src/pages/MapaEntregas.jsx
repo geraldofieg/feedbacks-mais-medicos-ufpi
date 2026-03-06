@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ClipboardList, Check, X, BookOpen, Users, FileText, RefreshCw } from 'lucide-react';
+import { ClipboardList, Check, X, BookOpen, Users, FileText, RefreshCw, GraduationCap } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function MapaEntregas() {
@@ -22,7 +22,7 @@ export default function MapaEntregas() {
   const [loadingMatriz, setLoadingMatriz] = useState(false);
   const [erro, setErro] = useState(null);
 
-  // 1. Busca as Turmas da Instituição (Função isolada para permitir recarregamento manual)
+  // 1. Busca as Turmas da Instituição
   async function fetchTurmas() {
     if (!currentUser || !escolaSelecionada?.id) {
       setLoadingTurmas(false);
@@ -103,15 +103,38 @@ export default function MapaEntregas() {
   
   const isCarregando = loadingTurmas || loadingMatriz;
 
+  // ==========================================
+  // NOVA BARREIRA: O USUÁRIO ESTÁ SEM INSTITUIÇÃO?
+  // ==========================================
+  if (!escolaSelecionada?.id) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <Breadcrumb items={[{ label: 'Mapa de Entregas' }]} />
+        <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10 shadow-sm">
+          <GraduationCap className="mx-auto text-blue-400 mb-4" size={56} />
+          <h2 className="text-2xl font-black text-blue-800 mb-2">Instituição não selecionada</h2>
+          <p className="text-blue-600 mb-8 font-medium text-lg">
+            Para visualizar o mapa de entregas, o sistema precisa saber em qual instituição você quer trabalhar.
+          </p>
+          <Link to="/" className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-xl hover:bg-blue-700 transition-all shadow-lg transform hover:-translate-y-1">
+            Ir para o Centro de Comando
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // FLUXO NORMAL DO MAPA
+  // ==========================================
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       
       <div className="mb-6">
-        <Breadcrumb items={[{ label: `Mapa de Entregas` }]} />
+        <Breadcrumb items={[{ label: `Mapa de Entregas (${escolaSelecionada.nome})` }]} />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
           <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 tracking-tight">
-            {/* MARCADOR DE VERSÃO: Se isso não aparecer, é porque o site não atualizou no seu celular! */}
-            <ClipboardList className="text-blue-600" size={22} /> Visão Panorâmica <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full ml-2">v3.1</span>
+            <ClipboardList className="text-blue-600" size={22} /> Visão Panorâmica <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full ml-1">v3.2</span>
           </h1>
 
           {!isCarregando && turmas.length > 0 && (
@@ -151,7 +174,6 @@ export default function MapaEntregas() {
               Criar Turma
             </Link>
             
-            {/* BOTÃO MÁGICO DE ATUALIZAÇÃO MANUAL */}
             <button onClick={fetchTurmas} className="inline-flex items-center justify-center gap-2 bg-white text-blue-600 font-bold py-3 px-8 rounded-xl hover:bg-gray-50 transition-all border border-blue-200 shadow-sm w-full sm:w-auto">
               <RefreshCw size={18} /> Forçar Sincronização
             </button>
@@ -233,4 +255,4 @@ export default function MapaEntregas() {
       )}
     </div>
   );
-}
+          }
