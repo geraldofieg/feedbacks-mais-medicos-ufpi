@@ -59,7 +59,7 @@ export default function Dashboard() {
   }
 
   // ==========================================
-  // TELA 1: O PORTEIRO
+  // TELA 1: O PORTEIRO (Agora com textos claros e diretos)
   // ==========================================
   if (!escolaSelecionada) {
     return (
@@ -68,11 +68,13 @@ export default function Dashboard() {
           
           <div className="text-center mb-8">
             <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-              {/* O ÍCONE CORRIGIDO PARA O CHAPÉU: */}
               <GraduationCap size={32} /> 
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
-            <p className="text-gray-500 mt-2 text-base md:text-lg px-2">Selecione seu espaço de trabalho ou crie um novo.</p>
+            {/* TEXTO CORRIGIDO: Alerta claro do que ele precisa fazer */}
+            <p className="text-gray-500 mt-2 text-base md:text-lg px-2">
+              Para começar a usar a plataforma, você precisa criar ou selecionar uma <strong>Instituição</strong>.
+            </p>
           </div>
 
           <div className="flex flex-col md:flex-row gap-6 w-full">
@@ -80,9 +82,9 @@ export default function Dashboard() {
             {/* Bloco 1: Criar Instituição */}
             <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 w-full md:w-1/2">
               <h2 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
-                <Plus className="text-blue-600"/> Criar Nova Instituição
+                <Plus className="text-blue-600"/> Criar Instituição
               </h2>
-              <p className="text-gray-500 text-sm mb-6 font-medium">Inicie um ambiente isolado para suas turmas.</p>
+              <p className="text-gray-500 text-sm mb-6 font-medium">Cadastre a faculdade, curso ou escola onde você leciona.</p>
               
               <form onSubmit={handleCriarAcessar} className="space-y-4">
                 <div>
@@ -95,23 +97,26 @@ export default function Dashboard() {
                     onChange={(e) => setNovaInstituicao(e.target.value)}
                   />
                 </div>
+                {/* BOTÃO CORRIGIDO: Agora chama "Criar Instituição" */}
                 <button type="submit" className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 transition-all shadow-md flex justify-center items-center gap-2">
-                  Acessar <ArrowRight size={18}/>
+                  Criar Instituição <ArrowRight size={18}/>
                 </button>
               </form>
             </div>
 
-            {/* Bloco 2: Lista de Espaços */}
+            {/* Bloco 2: Lista de Instituições */}
             <div className="bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200 w-full md:w-1/2">
+              {/* TÍTULO CORRIGIDO: Agora chama "Minhas Instituições" */}
               <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">
-                <LayoutDashboard className="text-gray-500"/> Meus Espaços
+                <LayoutDashboard className="text-gray-500"/> Minhas Instituições
               </h2>
               
               {loading ? (
-                <div className="text-gray-500 text-sm font-medium animate-pulse">Procurando suas instituições...</div>
+                <div className="text-gray-500 text-sm font-medium animate-pulse">Buscando cadastros...</div>
               ) : instituicoes.length === 0 ? (
                 <div className="text-center py-6">
-                  <p className="text-gray-500 text-sm font-medium italic">Você ainda não possui instituições cadastradas.</p>
+                  <p className="text-gray-500 text-sm font-medium italic">Você ainda não possui nenhuma instituição cadastrada.</p>
+                  <p className="text-gray-400 text-xs mt-2">Crie a primeira utilizando o formulário!</p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
@@ -157,7 +162,8 @@ export default function Dashboard() {
           onClick={() => setEscolaSelecionada('')}
           className="flex w-full sm:w-auto items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 px-4 py-2 rounded-lg shadow-sm hover:shadow transition-all font-bold"
         >
-          <Shuffle size={16}/> Trocar Espaço
+          {/* O termo aqui no botão do Dashboard também foi alterado para manter o padrão */}
+          <Shuffle size={16}/> Trocar Instituição
         </button>
       </div>
 
@@ -198,4 +204,4 @@ export default function Dashboard() {
       </div>
     </div>
   );
-                }
+}
