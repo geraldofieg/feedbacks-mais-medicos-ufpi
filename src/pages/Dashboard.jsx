@@ -234,13 +234,14 @@ export default function Dashboard() {
             <Plus size={20} className="opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all"/>
           </Link>
 
-          <button className="bg-orange-500 text-white p-4 rounded-2xl shadow-sm hover:shadow-md hover:bg-orange-600 transition-all flex items-center justify-between group text-left">
+          {/* CORREÇÃO AQUI: Botão transformado em Link para a nova página de Tarefas */}
+          <Link to="/tarefas" className="bg-orange-500 text-white p-4 rounded-2xl shadow-sm hover:shadow-md hover:bg-orange-600 transition-all flex items-center justify-between group text-left">
             <div className="flex items-center gap-3">
               <div className="bg-orange-400/50 p-2 rounded-xl"><FileText size={20}/></div>
               <span className="font-bold">Nova Tarefa</span>
             </div>
             <Plus size={20} className="opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all"/>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -261,7 +262,8 @@ export default function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {minhasTurmas.map(turma => (
-              <Link key={turma.id} to="/turmas" className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm hover:border-blue-400 hover:shadow-md transition-all group flex justify-between items-center">
+              {/* CORREÇÃO AQUI: O cartão agora envia o professor para a página de Tarefas e passa o ID da turma selecionada */}
+              <Link key={turma.id} to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm hover:border-blue-400 hover:shadow-md transition-all group flex justify-between items-center">
                 <div>
                   <h3 className="font-black text-gray-800 text-lg group-hover:text-blue-700 transition-colors">{turma.nome}</h3>
                   <p className="text-xs text-gray-400 mt-1 font-medium">Clique para gerenciar</p>
@@ -292,4 +294,4 @@ export default function Dashboard() {
 
     </div>
   );
-            }
+}
