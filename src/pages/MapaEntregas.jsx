@@ -18,16 +18,16 @@ export default function MapaEntregas() {
   const [tarefas, setTarefas] = useState([]);
   const [atividades, setAtividades] = useState([]);
   
-  // CORREÇÃO: Dois controles de carregamento para evitar a "Condição de Corrida"
+  // O Estado inicial deve ser true para ele nascer já carregando
   const [loadingTurmas, setLoadingTurmas] = useState(true);
   const [loadingMatriz, setLoadingMatriz] = useState(false);
 
   // 1. Busca as Turmas da Instituição
   useEffect(() => {
     async function fetchTurmas() {
+      // A MÁGICA DA PACIÊNCIA: Se não tem os dados ainda, simplesmente retorne e continue no estado "Loading"
       if (!currentUser || !escolaSelecionada?.id) {
-        setLoadingTurmas(false);
-        return;
+        return; 
       }
       
       setLoadingTurmas(true);
@@ -46,6 +46,7 @@ export default function MapaEntregas() {
       } catch (error) {
         console.error("Erro ao buscar turmas:", error);
       } finally {
+        // Só desliga o loading de turmas quando a consulta no banco realmente terminar
         setLoadingTurmas(false);
       }
     }
@@ -64,7 +65,6 @@ export default function MapaEntregas() {
       
       setLoadingMatriz(true);
       try {
-        // A. Busca Alunos da Turma
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapAlunos = await getDocs(qAlunos);
         const alunosData = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -72,7 +72,6 @@ export default function MapaEntregas() {
           .sort((a, b) => a.nome.localeCompare(b.nome)); 
         setAlunos(alunosData);
 
-        // B. Busca Tarefas da Turma
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -80,7 +79,6 @@ export default function MapaEntregas() {
           .sort((a, b) => a.dataCriacao?.toMillis() - b.dataCriacao?.toMillis()); 
         setTarefas(tarefasData);
 
-        // C. Busca as Entregas
         const qAtividades = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
         const snapAtividades = await getDocs(qAtividades);
         const atividadesData = snapAtividades.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -101,14 +99,13 @@ export default function MapaEntregas() {
 
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
   
-  // Trava de segurança principal
   const isCarregando = loadingTurmas || loadingMatriz;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       
       <div className="mb-6">
-        <Breadcrumb items={[{ label: `Mapa de Entregas (${escolaSelecionada?.nome || '...'})` }]} />
+        <Breadcrumb items={[{ label: `Mapa de Entregas` }]} />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
           <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 tracking-tight">
             <ClipboardList className="text-blue-600" size={22} /> Visão Panorâmica
