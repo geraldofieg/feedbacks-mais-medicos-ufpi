@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Users, Plus, ArrowRight, LayoutDashboard } from 'lucide-react';
+import { BookOpen, Users, Plus, ArrowRight, Pencil, Trash2, X, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -10,8 +10,14 @@ export default function Turmas() {
   const { currentUser, escolaSelecionada } = useAuth();
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Estados para Criação
   const [novaTurma, setNovaTurma] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  // Estados para Edição
+  const [editandoId, setEditandoId] = useState(null);
+  const [nomeEdicao, setNomeEdicao] = useState('');
 
   useEffect(() => {
     async function fetchTurmas() {
@@ -27,7 +33,10 @@ export default function Turmas() {
           id: doc.id,
           ...doc.data()
         }));
-        setTurmas(turmasData.sort((a, b) => b.dataCriacao?.toMillis() - a.dataCriacao?.toMillis()));
+        
+        // A MÁGICA DA LIXEIRA: Filtra no frontend para não mostrar o que está na lixeira
+        const turmasAtivas = turmasData.filter(t => t.status !== 'lixeira');
+        setTurmas(turmasAtivas.sort((a, b) => b.dataCriacao?.toMillis() - a.dataCriacao?.toMillis()));
       } catch (error) {
         console.error("Erro ao buscar turmas:", error);
       } finally {
@@ -61,14 +70,39 @@ export default function Turmas() {
     }
   }
 
+  // FUNÇÃO NOVA: Salva a alteração do nome
+  async function handleSalvarEdicao(id) {
+    if (!nomeEdicao.trim()) return;
+    try {
+      await updateDoc(doc(db, 'turmas', id), { nome: nomeEdicao.trim() });
+      setTurmas(turmas.map(t => t.id === id ? { ...t, nome: nomeEdicao.trim() } : t));
+      setEditandoId(null);
+    } catch (error) {
+      console.error("Erro ao editar turma:", error);
+      alert("Erro ao alterar o nome.");
+    }
+  }
+
+  // FUNÇÃO NOVA: Envia para a Lixeira (Soft Delete)
+  async function handleLixeira(id, nome) {
+    if (!window.confirm(`Tem certeza que deseja enviar a turma "${nome}" para a lixeira?\n\nAlunos e tarefas vinculados deixarão de aparecer nos relatórios principais.`)) return;
+    
+    try {
+      await updateDoc(doc(db, 'turmas', id), { status: 'lixeira' });
+      // Remove a turma da tela imediatamente
+      setTurmas(turmas.filter(t => t.id !== id));
+    } catch (error) {
+      console.error("Erro ao enviar para lixeira:", error);
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* BREADCRUMB INSERIDO AQUI */}
       <Breadcrumb items={[{ label: 'Turmas' }]} />
 
       <div className="flex items-center gap-3 mb-8">
         <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm">
-          <GraduationCapIcon />
+          <BookOpen size={28} />
         </div>
         <div>
           <h1 className="text-2xl font-black text-gray-800 leading-tight">Minhas Turmas</h1>
@@ -114,17 +148,50 @@ export default function Turmas() {
                   <div className="p-5 flex-1">
                     <div className="flex justify-between items-start mb-3">
                       <div className="bg-blue-50 text-blue-600 p-2 rounded-lg"><BookOpen size={20}/></div>
-                      <span className="bg-green-50 text-green-700 text-[10px] font-black uppercase px-2 py-1 rounded-md tracking-wider">Ativa</span>
+                      
+                      {/* BOTÕES DE AÇÃO NO TOPO DO CARTÃO */}
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          onClick={() => { setEditandoId(turma.id); setNomeEdicao(turma.nome); }} 
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Editar Nome"
+                        >
+                          <Pencil size={16}/>
+                        </button>
+                        <button 
+                          onClick={() => handleLixeira(turma.id, turma.nome)} 
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Mover para Lixeira"
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      </div>
                     </div>
-                    <h3 className="font-black text-gray-800 text-xl mb-1">{turma.nome}</h3>
-                    <p className="text-xs text-gray-400 font-medium">Criada recentemente</p>
+                    
+                    {/* MODO DE EDIÇÃO INLINE */}
+                    {editandoId === turma.id ? (
+                      <div className="flex items-center gap-2 mb-1 mt-2">
+                        <input 
+                          type="text" 
+                          value={nomeEdicao} 
+                          onChange={(e) => setNomeEdicao(e.target.value)} 
+                          className="w-full border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800" 
+                          autoFocus 
+                        />
+                        <button onClick={() => handleSalvarEdicao(turma.id)} className="bg-green-500 text-white p-2 rounded-lg hover:bg-green-600 shadow-sm"><Check size={16}/></button>
+                        <button onClick={() => setEditandoId(null)} className="bg-gray-200 text-gray-600 p-2 rounded-lg hover:bg-gray-300"><X size={16}/></button>
+                      </div>
+                    ) : (
+                      <h3 className="font-black text-gray-800 text-xl mb-1">{turma.nome}</h3>
+                    )}
+                    
+                    <p className="text-xs text-gray-400 font-medium">Turma Ativa</p>
                   </div>
                   
                   <div className="bg-gray-50 border-t border-gray-100 p-3 grid grid-cols-2 gap-2">
                     <Link to="/alunos" className="flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 hover:text-blue-600 hover:bg-blue-50 py-2 rounded-lg transition-colors">
                       <Users size={16}/> Alunos
                     </Link>
-                    {/* AQUI ESTÁ A CORREÇÃO: Passando o state do ID da turma */}
                     <Link to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="flex items-center justify-center gap-1.5 text-sm font-bold text-blue-600 hover:bg-blue-50 py-2 rounded-lg transition-colors">
                       Tarefas <ArrowRight size={16}/>
                     </Link>
@@ -138,11 +205,4 @@ export default function Turmas() {
       </div>
     </div>
   );
-}
-
-// Subcomponente de ícone para não poluir o import
-function GraduationCapIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.42 10.922a2 2 0 0 0-.019-3.838L12.83 4.347a2 2 0 0 0-1.66 0L2.6 7.08a2 2 0 0 0 0 3.832l8.57 2.733a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg>
-  )
 }
