@@ -106,7 +106,6 @@ export default function Tarefas() {
     }
   }
 
-  // A CORREÇÃO ANTI-CRASH ESTÁ AQUI: Tolera dados antigos sem quebrar a tela
   const tarefasFiltradas = tarefas.filter(t => {
     const nomeSeguro = t.nomeTarefa || t.titulo || '';
     return nomeSeguro.toLowerCase().includes(busca.toLowerCase());
@@ -115,25 +114,21 @@ export default function Tarefas() {
   if (loading) return <div className="p-10 text-center animate-pulse font-bold text-gray-400">Carregando tarefas...</div>;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* Breadcrumb unificado */}
-      <Breadcrumb items={[{ label: `Tarefas (${escolaSelecionada?.nome})` }]} />
+    <div className="max-w-7xl mx-auto px-4 py-6">
       
-      <div className="flex items-center gap-3 mb-8 mt-4">
-        <div className="bg-orange-100 text-orange-600 p-3 rounded-xl shadow-sm">
-          <FileText size={28} />
-        </div>
-        <div>
-          <h1 className="text-2xl font-black text-gray-800 tracking-tight">Gestão de Tarefas</h1>
-          <p className="text-gray-500 text-sm font-medium">Configure as atividades para as suas turmas.</p>
-        </div>
+      {/* CABEÇALHO COMPACTO: Fim do desperdício de espaço! */}
+      <div className="mb-6">
+        <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Tarefas' }]} />
+        <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 mt-3 tracking-tight">
+          <FileText className="text-orange-500" size={22} /> Tarefas
+        </h1>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Formulário de Criação (Lateral no Desktop) */}
         <div className="lg:col-span-1">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm sticky top-24">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Cadastrar Nova Tarefa</h2>
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-200 shadow-sm sticky top-24">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-5">Cadastrar Nova Tarefa</h2>
             <form onSubmit={handleCriar} className="space-y-4">
               <div>
                 <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Título da Tarefa</label>
@@ -163,7 +158,7 @@ export default function Tarefas() {
                 </select>
               </div>
 
-              <button disabled={salvando} className="w-full bg-orange-500 text-white font-black py-4 rounded-xl hover:bg-orange-600 transition-all shadow-md flex items-center justify-center gap-2 mt-2">
+              <button disabled={salvando} className="w-full bg-orange-500 text-white font-black py-3.5 rounded-xl hover:bg-orange-600 transition-all shadow-md flex items-center justify-center gap-2 mt-2">
                 <Plus size={20}/> {salvando ? 'Salvando...' : 'Criar Tarefa'}
               </button>
             </form>
@@ -172,12 +167,12 @@ export default function Tarefas() {
 
         {/* Lista de Tarefas (Principal) */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between px-2">
+          <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Minhas Tarefas Criadas</h2>
             <span className="bg-gray-100 text-gray-500 text-[10px] font-black px-2 py-0.5 rounded-full">{tarefas.length}</span>
           </div>
 
-          <div className="relative mb-6">
+          <div className="relative mb-4">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
             <input 
               type="text" placeholder="Procurar tarefa pelo nome..." 
@@ -187,13 +182,12 @@ export default function Tarefas() {
           </div>
 
           {tarefasFiltradas.length === 0 ? (
-            <div className="text-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
+            <div className="text-center py-16 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
               <p className="text-gray-400 font-medium">Nenhuma tarefa encontrada.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
               {tarefasFiltradas.map(tarefa => {
-                // Outra proteção contra dados velhos
                 const nomeSeguro = tarefa.nomeTarefa || tarefa.titulo || 'Tarefa sem nome';
                 
                 return (
@@ -202,7 +196,7 @@ export default function Tarefas() {
                     <div className="bg-orange-50 text-orange-500 p-2.5 rounded-xl">
                       <FileText size={22}/>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <button 
                         onClick={() => { setEditandoId(tarefa.id); setTituloEdicao(nomeSeguro); setEnunciadoEdicao(tarefa.enunciado || ''); }}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -256,4 +250,4 @@ export default function Tarefas() {
       </div>
     </div>
   );
-                        }
+}
