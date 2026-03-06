@@ -59,11 +59,12 @@ export default function Dashboard() {
   }
 
   // ==========================================
-  // TELA 1: O PORTEIRO (Agora com textos claros e diretos)
+  // TELA 1: O PORTEIRO
   // ==========================================
   if (!escolaSelecionada) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-start md:justify-center p-4 pt-12 md:pt-4">
+      // CORREÇÃO 1: Adicionado w-full e overflow-x-hidden para travar vazamentos no celular
+      <div className="min-h-screen flex flex-col items-center justify-start md:justify-center p-4 pt-12 md:pt-4 w-full overflow-x-hidden">
         <div className="max-w-4xl w-full mt-4 md:mt-0">
           
           <div className="text-center mb-8">
@@ -71,16 +72,16 @@ export default function Dashboard() {
               <GraduationCap size={32} /> 
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
-            {/* TEXTO CORRIGIDO: Alerta claro do que ele precisa fazer */}
             <p className="text-gray-500 mt-2 text-base md:text-lg px-2">
               Para começar a usar a plataforma, você precisa criar ou selecionar uma <strong>Instituição</strong>.
             </p>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-6 w-full">
+          {/* CORREÇÃO 2: Trocado flex para grid puro (muito mais estável em celulares) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
             
             {/* Bloco 1: Criar Instituição */}
-            <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 w-full md:w-1/2">
+            <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 w-full">
               <h2 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                 <Plus className="text-blue-600"/> Criar Instituição
               </h2>
@@ -97,7 +98,6 @@ export default function Dashboard() {
                     onChange={(e) => setNovaInstituicao(e.target.value)}
                   />
                 </div>
-                {/* BOTÃO CORRIGIDO: Agora chama "Criar Instituição" */}
                 <button type="submit" className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 transition-all shadow-md flex justify-center items-center gap-2">
                   Criar Instituição <ArrowRight size={18}/>
                 </button>
@@ -105,8 +105,7 @@ export default function Dashboard() {
             </div>
 
             {/* Bloco 2: Lista de Instituições */}
-            <div className="bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200 w-full md:w-1/2">
-              {/* TÍTULO CORRIGIDO: Agora chama "Minhas Instituições" */}
+            <div className="bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200 w-full">
               <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">
                 <LayoutDashboard className="text-gray-500"/> Minhas Instituições
               </h2>
@@ -162,11 +161,22 @@ export default function Dashboard() {
           onClick={() => setEscolaSelecionada('')}
           className="flex w-full sm:w-auto items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 bg-white border border-gray-200 px-4 py-2 rounded-lg shadow-sm hover:shadow transition-all font-bold"
         >
-          {/* O termo aqui no botão do Dashboard também foi alterado para manter o padrão */}
           <Shuffle size={16}/> Trocar Instituição
         </button>
       </div>
 
+      {/* CORREÇÃO 3: O Chamado para Ação (CTA) agora fica NO TOPO, guiando o usuário */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 sm:p-8 text-center shadow-sm mb-8">
+        <h2 className="text-xl font-black text-blue-900 mb-2">Sua instituição está configurada!</h2>
+        <p className="text-blue-700 mb-6 max-w-lg mx-auto font-medium text-sm sm:text-base">
+          Para começar a gerenciar suas avaliações, o primeiro passo é criar uma turma para agrupar seus alunos.
+        </p>
+        <Link to="/turmas" className="inline-flex w-full sm:w-auto justify-center items-center gap-2 bg-blue-600 text-white font-black py-3.5 px-6 rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
+          <Plus size={20}/> Acessar Minhas Turmas
+        </Link>
+      </div>
+
+      {/* Os quadros numéricos descem e ficam abaixo da instrução principal */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between">
           <div className="flex justify-between items-start mb-4">
@@ -193,15 +203,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 sm:p-8 text-center shadow-sm">
-        <h2 className="text-xl font-black text-blue-900 mb-2">Sua instituição está configurada!</h2>
-        <p className="text-blue-700 mb-6 max-w-lg mx-auto font-medium text-sm sm:text-base">
-          Para começar a gerenciar suas avaliações, o primeiro passo é criar uma turma para agrupar seus alunos.
-        </p>
-        <Link to="/turmas" className="inline-flex w-full sm:w-auto justify-center items-center gap-2 bg-blue-600 text-white font-black py-3.5 px-6 rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-          <Plus size={20}/> Acessar Minhas Turmas
-        </Link>
-      </div>
     </div>
   );
 }
