@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Shuffle, Building2 } from 'lucide-react';
+import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Shuffle, Building2, UserPlus, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -13,7 +13,6 @@ export default function Dashboard() {
   const [loadingInst, setLoadingInst] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
-  // Novos estados para os números reais do Dashboard
   const [estatisticas, setEstatisticas] = useState({ turmas: 0, alunos: 0, pendencias: 0 });
   const [loadingStats, setLoadingStats] = useState(false);
 
@@ -23,7 +22,6 @@ export default function Dashboard() {
     }, 50);
   }, [escolaSelecionada]);
 
-  // Busca as Instituições para o Porteiro
   useEffect(() => {
     async function fetchInstituicoes() {
       if (!currentUser) return;
@@ -52,31 +50,27 @@ export default function Dashboard() {
     }
   }, [currentUser, escolaSelecionada]);
 
-  // A MÁGICA NOVA: Busca os números reais para preencher os quadros
   useEffect(() => {
     async function fetchEstatisticas() {
       if (!currentUser || !escolaSelecionada) return;
       setLoadingStats(true);
       try {
-        // 1. Conta as Turmas
         const qTurmas = query(collection(db, 'turmas'), where('instituicao', '==', escolaSelecionada), where('professorUid', '==', currentUser.uid));
         const snapTurmas = await getDocs(qTurmas);
         const totalTurmas = snapTurmas.size;
 
-        // 2. Conta os Alunos (Filtra pelos alunos que pertencem às turmas desse professor)
         let totalAlunos = 0;
         if (totalTurmas > 0) {
           const turmasIds = snapTurmas.docs.map(d => d.id);
           const qAlunos = query(collection(db, 'alunos'), where('instituicao', '==', escolaSelecionada));
           const snapAlunos = await getDocs(qAlunos);
-          // Conta apenas os alunos que estão nas turmas do professor logado
           totalAlunos = snapAlunos.docs.filter(a => turmasIds.includes(a.data().turmaId)).length;
         }
 
         setEstatisticas({
           turmas: totalTurmas,
           alunos: totalAlunos,
-          pendencias: 0 // Deixaremos o cálculo de pendências para a fase de Tarefas
+          pendencias: 0 
         });
       } catch (error) {
         console.error("Erro ao buscar estatísticas:", error);
@@ -187,7 +181,7 @@ export default function Dashboard() {
   }
 
   // ==========================================
-  // TELA 2: O DASHBOARD REAL (Com dados do Banco)
+  // TELA 2: O DASHBOARD REAL
   // ==========================================
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -212,7 +206,6 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* LÓGICA CONDICIONAL: Só mostra o banner gigante se o professor NÃO tiver turmas */}
       {!loadingStats && estatisticas.turmas === 0 && (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 sm:p-8 text-center shadow-sm mb-8 animate-in fade-in slide-in-from-top-4">
           <h2 className="text-xl font-black text-blue-900 mb-2">Sua instituição está configurada!</h2>
@@ -225,38 +218,69 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* QUADROS COM NÚMEROS REAIS */}
+      {/* QUADROS COM NÚMEROS REAIS - AGORA SÃO LINKS CLICÁVEIS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition-shadow">
+        <Link to="/turmas" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-lg hover:border-blue-300 transition-all group cursor-pointer block">
           <div className="flex justify-between items-start mb-4">
-            <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Total de Turmas</p>
-            <div className="bg-blue-50 p-2.5 rounded-lg text-blue-600"><Building2 size={20}/></div>
+            <p className="text-gray-500 text-xs font-bold uppercase tracking-wider group-hover:text-blue-600 transition-colors">Total de Turmas</p>
+            <div className="bg-blue-50 p-2.5 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors"><Building2 size={20}/></div>
           </div>
-          <h3 className="text-3xl font-black text-gray-800">
-            {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.turmas}
-          </h3>
-        </div>
+          <div className="flex items-end justify-between">
+            <h3 className="text-3xl font-black text-gray-800">
+              {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.turmas}
+            </h3>
+            <span className="text-blue-600 text-xs font-bold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">Acessar <ArrowRight size={14}/></span>
+          </div>
+        </Link>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition-shadow">
+        <Link to="/alunos" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-lg hover:border-green-300 transition-all group cursor-pointer block">
           <div className="flex justify-between items-start mb-4">
-            <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Alunos Ativos</p>
-            <div className="bg-green-50 p-2.5 rounded-lg text-green-600"><Users size={20}/></div>
+            <p className="text-gray-500 text-xs font-bold uppercase tracking-wider group-hover:text-green-600 transition-colors">Alunos Ativos</p>
+            <div className="bg-green-50 p-2.5 rounded-lg text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors"><Users size={20}/></div>
           </div>
-          <h3 className="text-3xl font-black text-gray-800">
-            {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.alunos}
-          </h3>
-        </div>
+          <div className="flex items-end justify-between">
+            <h3 className="text-3xl font-black text-gray-800">
+              {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.alunos}
+            </h3>
+            <span className="text-green-600 text-xs font-bold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">Acessar <ArrowRight size={14}/></span>
+          </div>
+        </Link>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition-shadow">
+        <Link to="/pendencias" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-lg hover:border-orange-300 transition-all group cursor-pointer block">
           <div className="flex justify-between items-start mb-4">
-            <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Tarefas Pendentes</p>
-            <div className="bg-orange-50 p-2.5 rounded-lg text-orange-600"><LayoutDashboard size={20}/></div>
+            <p className="text-gray-500 text-xs font-bold uppercase tracking-wider group-hover:text-orange-600 transition-colors">Tarefas Pendentes</p>
+            <div className="bg-orange-50 p-2.5 rounded-lg text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors"><LayoutDashboard size={20}/></div>
           </div>
-          <h3 className="text-3xl font-black text-gray-800">
-            {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.pendencias}
-          </h3>
-        </div>
+          <div className="flex items-end justify-between">
+            <h3 className="text-3xl font-black text-gray-800">
+              {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.pendencias}
+            </h3>
+            <span className="text-orange-600 text-xs font-bold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">Acessar <ArrowRight size={14}/></span>
+          </div>
+        </Link>
       </div>
+
+      {/* NOVA SEÇÃO: ACESSOS RÁPIDOS */}
+      {!loadingStats && estatisticas.turmas > 0 && (
+        <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+          <h3 className="text-lg font-black text-gray-800 mb-4">Ações Rápidas</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <Link to="/turmas" className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-blue-300 hover:bg-blue-50 transition-all text-sm font-bold text-gray-700 hover:text-blue-700">
+              <div className="bg-blue-100 text-blue-600 p-2 rounded-lg"><Building2 size={16}/></div>
+              Gerenciar Turmas
+            </Link>
+            <Link to="/alunos" className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-green-300 hover:bg-green-50 transition-all text-sm font-bold text-gray-700 hover:text-green-700">
+              <div className="bg-green-100 text-green-600 p-2 rounded-lg"><UserPlus size={16}/></div>
+              Adicionar Aluno
+            </Link>
+            <button className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-orange-300 hover:bg-orange-50 transition-all text-sm font-bold text-gray-700 hover:text-orange-700 text-left">
+              <div className="bg-orange-100 text-orange-600 p-2 rounded-lg"><FileText size={16}/></div>
+              Nova Tarefa (Em breve)
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
