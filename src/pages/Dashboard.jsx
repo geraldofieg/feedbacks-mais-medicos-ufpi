@@ -13,11 +13,9 @@ export default function Dashboard() {
   const [loadingInst, setLoadingInst] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
-  // Estados de Edição da Instituição
   const [editandoInstId, setEditandoInstId] = useState(null);
   const [nomeInstEdicao, setNomeInstEdicao] = useState('');
 
-  // Estados do Dashboard Real
   const [minhasTurmas, setMinhasTurmas] = useState([]);
   const [estatisticas, setEstatisticas] = useState({ alunos: 0, pendencias: 0 });
   const [loadingDados, setLoadingDados] = useState(false);
@@ -28,7 +26,7 @@ export default function Dashboard() {
     }, 50);
   }, [escolaSelecionada]);
 
-  // Busca Instituições (Agora roda sempre, para alimentar o Dropdown)
+  // Busca Instituições e Aplica a Regra do "Crachá Automático"
   useEffect(() => {
     async function fetchInstituicoes() {
       if (!currentUser) return;
@@ -44,7 +42,14 @@ export default function Dashboard() {
           }
         });
 
-        setInstituicoes(instList.sort((a, b) => a.nome.localeCompare(b.nome)));
+        const listaOrdenada = instList.sort((a, b) => a.nome.localeCompare(b.nome));
+        setInstituicoes(listaOrdenada);
+
+        // A INTELIGÊNCIA AQUI: Se tem só 1 instituição e nenhuma selecionada, seleciona automaticamente!
+        if (listaOrdenada.length === 1 && !escolaSelecionada) {
+          setEscolaSelecionada(listaOrdenada[0]);
+        }
+
       } catch (error) {
         console.error("Erro ao buscar instituições:", error);
       } finally {
@@ -52,7 +57,7 @@ export default function Dashboard() {
       }
     }
     fetchInstituicoes();
-  }, [currentUser]);
+  }, [currentUser, escolaSelecionada, setEscolaSelecionada]);
 
   // Busca Dados Reais do Dashboard
   useEffect(() => {
@@ -76,7 +81,7 @@ export default function Dashboard() {
 
         setEstatisticas({ alunos: totalAlunos, pendencias: 0 });
       } catch (error) {
-        console.error("Erro ao buscar dados do dashboard:", error);
+        console.error("Erro ao buscar dados:", error);
       } finally {
         setLoadingDados(false);
       }
@@ -87,7 +92,6 @@ export default function Dashboard() {
     }
   }, [currentUser, escolaSelecionada]);
 
-  // Criar Instituição
   async function handleCriarAcessar(e) {
     e.preventDefault();
     const nomeInst = novaInstituicao.trim();
@@ -95,24 +99,20 @@ export default function Dashboard() {
 
     try {
       setSalvando(true);
-      
       const docRef = await addDoc(collection(db, 'instituicoes'), {
         nome: nomeInst,
         professorUid: currentUser.uid,
         status: 'ativa',
         dataCriacao: serverTimestamp()
       });
-
       setEscolaSelecionada({ id: docRef.id, nome: nomeInst });
     } catch (error) {
-      console.error("Erro ao salvar instituição:", error);
-      alert("Ocorreu um erro. Tente novamente.");
+      console.error("Erro:", error);
     } finally {
       setSalvando(false);
     }
   }
 
-  // Editar Nome da Instituição
   async function handleSalvarEdicaoInst(e, id) {
     e.stopPropagation();
     if (!nomeInstEdicao.trim()) return;
@@ -120,25 +120,22 @@ export default function Dashboard() {
       await updateDoc(doc(db, 'instituicoes', id), { nome: nomeInstEdicao.trim() });
       setInstituicoes(instituicoes.map(inst => inst.id === id ? { ...inst, nome: nomeInstEdicao.trim() } : inst));
       setEditandoInstId(null);
-      // Atualiza o contexto se for a escola atual
       if (escolaSelecionada?.id === id) {
         setEscolaSelecionada({ id, nome: nomeInstEdicao.trim() });
       }
     } catch (error) {
-      console.error("Erro ao editar instituição:", error);
+      console.error("Erro ao editar:", error);
     }
   }
 
-  // Soft Delete de Instituição
   async function handleLixeiraInstituicao(e, id, nome) {
     e.stopPropagation(); 
-    if (!window.confirm(`Tem certeza que deseja apagar o espaço "${nome}"?\n\nEle será enviado para a lixeira e você perderá o acesso a todas as turmas cadastradas nele.`)) return;
-
+    if (!window.confirm(`Apagar o espaço "${nome}"?\n\nEle será enviado para a lixeira.`)) return;
     try {
       await updateDoc(doc(db, 'instituicoes', id), { status: 'lixeira' });
       setInstituicoes(instituicoes.filter(inst => inst.id !== id));
     } catch (error) {
-      console.error("Erro ao enviar instituição para a lixeira:", error);
+      console.error("Erro:", error);
     }
   }
 
@@ -147,94 +144,59 @@ export default function Dashboard() {
   }
 
   // ==========================================
-  // TELA 1: O PORTEIRO
+  // TELA 1: O PORTEIRO (Layout Invertido e Focado)
   // ==========================================
   if (!escolaSelecionada) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8 mt-4 md:mt-8">
+      <div className="max-w-4xl mx-auto px-4 py-8 mt-4 md:mt-8">
         <div className="text-center mb-10">
           <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <GraduationCap size={32} /> 
           </div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
           <p className="text-gray-500 mt-2 text-base md:text-lg px-2">
-            Para começar a usar a plataforma, você precisa criar ou selecionar uma <strong>Instituição</strong>.
+            Selecione o seu ambiente de trabalho para continuar.
           </p>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-6 w-full">
-          <div className="w-full md:w-1/2 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
-            <h2 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
-              <Plus className="text-blue-600"/> Criar Instituição
-            </h2>
-            <p className="text-gray-500 text-sm mb-6 font-medium">Cadastre a faculdade, curso ou escola onde você leciona.</p>
-            
-            <form onSubmit={handleCriarAcessar} className="space-y-4">
-              <div>
-                <input
-                  type="text" required placeholder="Ex: Meu Cursinho, Mais Médicos..."
-                  className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors font-medium"
-                  value={novaInstituicao} onChange={(e) => setNovaInstituicao(e.target.value)}
-                />
-              </div>
-              <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md flex justify-center items-center gap-2">
-                {salvando ? 'Salvando...' : <>Criar Instituição <ArrowRight size={18}/></>}
-              </button>
-            </form>
-          </div>
-
-          <div className="w-full md:w-1/2 bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200">
-            <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">
-              <LayoutDashboard className="text-gray-500"/> Minhas Instituições
+        <div className="flex flex-col gap-8 w-full max-w-2xl mx-auto">
+          
+          {/* DESTAQUE 1: A Lista de Instituições agora é a estrela */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <LayoutDashboard size={18}/> Suas Instituições Ativas
             </h2>
             
             {loadingInst ? (
-              <div className="text-gray-500 text-sm font-medium animate-pulse">Buscando cadastros...</div>
+              <div className="text-gray-400 text-sm font-medium animate-pulse text-center py-6">Carregando seus espaços...</div>
             ) : instituicoes.length === 0 ? (
-              <div className="text-center py-6">
-                <p className="text-gray-500 text-sm font-medium italic">Você ainda não possui nenhuma instituição ativa.</p>
+              <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                <p className="text-gray-500 text-sm font-medium">Você ainda não possui nenhuma instituição cadastrada.</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+              <div className="space-y-3">
                 {instituicoes.map(inst => (
-                  <div key={inst.id} className="w-full bg-white border border-gray-200 p-3 pl-4 rounded-xl flex items-center justify-between hover:border-blue-500 hover:shadow-sm transition-all group cursor-pointer" onClick={() => selecionarInstituicao(inst)}>
+                  <div key={inst.id} className="w-full bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center justify-between hover:bg-blue-600 hover:text-white transition-all group cursor-pointer shadow-sm" onClick={() => selecionarInstituicao(inst)}>
                     
                     {editandoInstId === inst.id ? (
                       <div className="flex items-center gap-2 w-full pr-2" onClick={e => e.stopPropagation()}>
                         <input 
-                          type="text" 
-                          value={nomeInstEdicao} 
-                          onChange={(e) => setNomeInstEdicao(e.target.value)} 
-                          className="w-full border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800" 
-                          autoFocus 
+                          type="text" value={nomeInstEdicao} onChange={(e) => setNomeInstEdicao(e.target.value)} 
+                          className="w-full border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800" autoFocus 
                         />
                         <button onClick={(e) => handleSalvarEdicaoInst(e, inst.id)} className="bg-green-500 text-white p-1.5 rounded-lg hover:bg-green-600 shadow-sm"><Check size={16}/></button>
                         <button onClick={(e) => { e.stopPropagation(); setEditandoInstId(null); }} className="bg-gray-200 text-gray-600 p-1.5 rounded-lg hover:bg-gray-300"><X size={16}/></button>
                       </div>
                     ) : (
                       <>
-                        <span className="flex-1 text-left font-bold text-gray-700 group-hover:text-blue-700 truncate mr-2">
+                        <span className="flex-1 text-left font-black text-blue-800 group-hover:text-white text-lg truncate">
                           {inst.nome}
                         </span>
                         
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditandoInstId(inst.id); setNomeInstEdicao(inst.nome); }}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Editar Nome"
-                          >
-                            <Pencil size={18} />
-                          </button>
-                          <button
-                            onClick={(e) => handleLixeiraInstituicao(e, inst.id, inst.nome)}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Mover Instituição para Lixeira"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                          <div className="p-2 text-gray-400 group-hover:text-blue-600 bg-gray-50 rounded-lg ml-1">
-                            <ArrowRight size={18} />
-                          </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setEditandoInstId(inst.id); setNomeInstEdicao(inst.nome); }} className="p-2 text-blue-400 hover:text-white hover:bg-blue-500 rounded-lg transition-colors opacity-0 group-hover:opacity-100" title="Editar Nome"><Pencil size={18} /></button>
+                          <button onClick={(e) => handleLixeiraInstituicao(e, inst.id, inst.nome)} className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors opacity-0 group-hover:opacity-100" title="Apagar"><Trash2 size={18} /></button>
+                          <div className="p-2 text-blue-600 group-hover:text-white ml-1"><ArrowRight size={24} /></div>
                         </div>
                       </>
                     )}
@@ -243,6 +205,24 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          {/* DESTAQUE 2: O formulário de Criar agora é secundário */}
+          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+             <h2 className="text-sm font-bold text-gray-500 mb-4 flex items-center gap-2">
+              <Plus size={18}/> Cadastrar Novo Vínculo
+            </h2>
+            <form onSubmit={handleCriarAcessar} className="flex gap-2">
+              <input
+                type="text" required placeholder="Ex: Meu Cursinho..."
+                className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 transition-colors font-medium outline-none"
+                value={novaInstituicao} onChange={(e) => setNovaInstituicao(e.target.value)}
+              />
+              <button type="submit" disabled={salvando} className="bg-gray-800 text-white font-bold py-3 px-6 rounded-xl hover:bg-gray-900 disabled:opacity-50 transition-all shadow-sm whitespace-nowrap">
+                {salvando ? '...' : 'Criar'}
+              </button>
+            </form>
+          </div>
+
         </div>
       </div>
     );
@@ -254,7 +234,6 @@ export default function Dashboard() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       
-      {/* CABEÇALHO REVISADO: O botão "Trocar" virou um Dropdown inteligente */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8 justify-between">
         <div className="flex items-center gap-3 w-full">
           <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm shrink-0">
@@ -285,7 +264,6 @@ export default function Dashboard() {
                 <option value="NOVA">+ Criar Nova Instituição</option>
               </select>
             </div>
-
           </div>
         </div>
       </div>
@@ -365,4 +343,4 @@ export default function Dashboard() {
 
     </div>
   );
-}
+            }
