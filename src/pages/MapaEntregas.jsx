@@ -18,15 +18,15 @@ export default function MapaEntregas() {
   const [tarefas, setTarefas] = useState([]);
   const [atividades, setAtividades] = useState([]);
   
-  // O Estado inicial deve ser true para ele nascer já carregando
   const [loadingTurmas, setLoadingTurmas] = useState(true);
   const [loadingMatriz, setLoadingMatriz] = useState(false);
 
   // 1. Busca as Turmas da Instituição
   useEffect(() => {
     async function fetchTurmas() {
-      // A MÁGICA DA PACIÊNCIA: Se não tem os dados ainda, simplesmente retorne e continue no estado "Loading"
+      // CORREÇÃO DEFINITIVA: Se não tiver a chave, ele desliga o carregamento na hora e não trava!
       if (!currentUser || !escolaSelecionada?.id) {
+        setLoadingTurmas(false);
         return; 
       }
       
@@ -46,7 +46,6 @@ export default function MapaEntregas() {
       } catch (error) {
         console.error("Erro ao buscar turmas:", error);
       } finally {
-        // Só desliga o loading de turmas quando a consulta no banco realmente terminar
         setLoadingTurmas(false);
       }
     }
