@@ -20,21 +20,22 @@ O sistema opera em uma hierarquia plana de 3 níveis para garantir velocidade de
 3. **Nível 3 (Atividades/Tarefas):** Avaliações vinculadas diretamente a uma Turma. O nome da tarefa (Ex: "Fórum 01", "Desafio Final") vira o agrupador lógico para cálculos de pendências.
 
 ## 5. Estrutura do Banco de Dados (Firestore)
-Todas as coleções recebem a chave da `instituicao` para isolamento de dados. **Todas as consultas do sistema devem conter a trava:** `where('instituicao', '==', escolaSelecionada)`.
+Todas as coleções recebem a chave da `instituicao` para isolamento de dados. **Todas as consultas do sistema devem conter a trava:** `where('instituicao', '==', escolaSelecionada)` e ignorar documentos com `status: 'lixeira'`.
 
-* **`instituicoes` (Nova):** Garante a persistência do nível 1. `id` (formato seguro: `uid_nomeDaInstituicao`), `nome`, `professorUid`, `dataCriacao`.
+* **`instituicoes`:** Garante a persistência do nível 1. `id` (formato seguro: `uid_nomeDaInstituicao`), `nome`, `professorUid`, `status` ('ativa'|'lixeira'), `dataCriacao`.
 * **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role`, `dataCadastro`.
-* **`turmas`**: `id`, `instituicao`, `nome`, `professorUid`, `dataCriacao`, `status` ('ativa'|'arquivada').
-* **`alunos`**: `id`, `nome`, `turmaId`, `instituicao`, `dataCadastro`.
-* **`atividades`**: `id`, `alunoId`, `turmaId`, `instituicao`, `nomeTarefa`, `enunciado`, `resposta`, `status` ('pendente'|'aprovado'|'devolvido'), `nota` (numérico, opcional), `feedbackSugerido`, `feedbackFinal`, `dataPostagem`, `dataAprovacao`.
+* **`turmas`**: `id`, `instituicao`, `nome`, `professorUid`, `status` ('ativa'|'lixeira'), `dataCriacao`.
+* **`alunos`**: `id`, `nome`, `turmaId`, `instituicao`, `status` ('ativa'|'lixeira'), `dataCadastro`.
+* **`tarefas` (Definição):** `id`, `nomeTarefa`, `enunciado`, `turmaId`, `instituicao`, `professorUid`, `status` ('ativa'|'lixeira'), `dataCriacao`.
+* **`atividades` (Entregas):** `id`, `alunoId`, `turmaId`, `instituicao`, `tarefaId`, `resposta`, `status` ('pendente'|'aprovado'|'devolvido'), `nota`, `feedbackSugerido`, `feedbackFinal`, `dataPostagem`.
 
 ## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
 * **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada na sessão, o Dashboard exibe a interface de seleção:
-    * **Criar Instituição:** Campo de texto livre (Ex: "Meu Cursinho Particular") que grava na coleção `instituicoes` e define o contexto atual.
+    * **Criar Instituição:** Campo de texto livre que grava na coleção `instituicoes` e define o contexto atual.
     * **Minhas Instituições:** Lista dinâmica gerada a partir das coleções `instituicoes` e `turmas`, agrupando espaços já pertencentes àquele `professorUid`.
-* **Dashboard Inteligente:** O painel conta os dados reais em tempo real.
-    * Se `Turmas === 0`, oculta os atalhos e exibe um Call to Action gigante: "+ Criar Primeira Turma".
-    * Se `Turmas > 0`, os quadros de estatísticas tornam-se botões clicáveis que redirecionam para as respectivas páginas.
+* **Dashboard (Centro de Comando):** O painel conta os dados reais em tempo real.
+    * Se `Turmas === 0`, oculta os atalhos e exibe um Call to Action gigante.
+    * Se `Turmas > 0`, exibe as turmas como cartões clicáveis que redirecionam diretamente para as Tarefas daquela turma específica e botões de atalho rápido.
 * **Termômetro da IA:** Mede a eficiência do prompt. Regra: Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA.
 
 ## 7. Perfis de Acesso (RBAC SaaS)
@@ -51,29 +52,28 @@ O ciclo de vida divide-se em 3 funis condicionais:
 Automatização de cobranças cruzando alunos ativos x atividades pendentes da Turma.
 * **Redação de Mentoria e Apoio (Templates Exatos):**
   * **1. Grupo Geral da Turma:**
-    * *< 0 dias (Vencido):* "Olá, pessoal! O prazo oficial da tarefa {tarefa} foi encerrado. Notei algumas pendências no sistema. Por favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo."
-    * *>= 20 dias (Início):* "Olá, pessoal! 🌟 Passando para avisar que a etapa de {tarefa} já está liberada. Faltam {dias} dias para o encerramento. Quem já quiser ir adiantando as atividades, desejo excelentes estudos! Qualquer coisa, podem contar comigo."
-    * *>= 8 dias (Meio):* "Olá, pessoal! Nosso lembrete de acompanhamento sobre a {tarefa}. Entramos na fase intermediária e faltam {dias} dias para o encerramento. Vamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, estou à disposição."
-    * *< 8 dias (Reta Final):* "Olá, colegas! 🚨 Passando para alertar que entramos na reta final da {tarefa}. Faltam apenas {dias} dias para o encerramento! Peço a regularização das tarefas pendentes o quanto antes para evitarmos problemas."
+    * *< 0 dias (Vencido):* "Olá, pessoal! O prazo oficial da tarefa {tarefa} foi encerrado. Notei algumas pendências no sistema..."
+    * *>= 20 dias (Início):* "Olá, pessoal! 🌟 Passando para avisar que a etapa de {tarefa} já está liberada..."
+    * *>= 8 dias (Meio):* "Olá, pessoal! Nosso lembrete de acompanhamento sobre a {tarefa}..."
+    * *< 8 dias (Reta Final):* "Olá, colegas! 🚨 Passando para alertar que entramos na reta final da {tarefa}..."
   * **2. Templates Individuais:** Devem usar obrigatoriamente o primeiro nome do aluno e listar nominalmente as tarefas em atraso.
 
 ## 10. Mapa de Entregas (Proatividade Visual)
 Renderiza uma tabela dinâmica onde:
 * **Linhas:** Alunos da Turma.
 * **Colunas:** Nomes das tarefas identificadas para aquela Turma.
-* **Células:** Cruzamento exato via `${alunoId}-${nomeTarefa}`. Exibe ícone de Check Verde com a Nota ou X Vermelho.
+* **Células:** Cruzamento exato. Exibe ícone de Check Verde com a Nota ou X Vermelho.
 
 ## 11. Inauguração de Tarefas (Enunciados Base)
-O professor pode cadastrar o enunciado padrão de uma tarefa em `Configuracoes.jsx`. Isso permite que o Mapa de Entregas e o Módulo de Comunicação saibam que aquela tarefa existe mesmo antes de qualquer aluno enviar a primeira resposta.
+O professor pode cadastrar o enunciado padrão de uma tarefa em `/tarefas`. Isso permite que o Mapa de Entregas e o Módulo de Comunicação saibam que aquela tarefa existe mesmo antes de qualquer aluno enviar a primeira resposta.
 
 ## 12. Gestão de Alunos (Impacto Sistêmico)
 O cadastro de alunos exige vinculação a uma `Turma`.
-* **Integridade:** Se um aluno é removido, o sistema recalcula instantaneamente o Dashboard e o Mapa de Entregas daquela Turma para evitar falsos positivos de pendências.
 * **Troca de Contexto:** Ao clicar em "Trocar Instituição" no Dashboard, o sistema limpa o `@SaaS_EscolaSelecionada` e redireciona o professor de volta ao "Porteiro".
 
 ## 13. Padrões de Usabilidade e Navegação (Camadas de Defesa UX)
-Para evitar que o comportamento não-linear do usuário gere erros e frustrações, o sistema utiliza 3 camadas de defesa de usabilidade em todas as suas interfaces:
-1. **Estado Vazio Educativo (Empty States):** Se o usuário acessar uma tela filha sem ter cadastrado a entidade pai (Ex: acessar `/alunos` com `Turmas === 0`), o sistema não exibe tabelas vazias. A interface é substituída por um aviso amigável explicando a dependência e oferecendo um botão de atalho para a criação do item pai.
-2. **Criação "Just-in-Time":** Interrupções de fluxo são proibidas. Em modais de criação (como cadastrar um Aluno), se o usuário notar que a `Turma` desejada não existe, ele deve ter a opção de criá-la diretamente por um botão `+ Nova Turma` dentro do próprio modal de Aluno, salvando as duas entidades simultaneamente no banco.
-3. **Navegação Profunda (Breadcrumbs):** Telas de nível 2 e 3 devem obrigatoriamente importar o componente `<Breadcrumb />` no topo da página. Isso garante que o usuário saiba seu nível de profundidade e consiga recuar sem usar os botões do navegador. Exemplo: `🏠 > Turmas > Alunos`.
-4. 
+Para evitar que o comportamento não-linear do usuário gere erros e frustrações, o sistema utiliza 4 camadas de defesa de usabilidade em todas as suas interfaces:
+1. **Estado Vazio Educativo (Empty States):** Se o usuário acessar uma tela filha sem ter cadastrado a entidade pai, o sistema exibe um aviso amigável explicando a dependência e oferecendo um botão de atalho para a criação do item pai.
+2. **Criação "Just-in-Time":** Interrupções de fluxo são proibidas. Em modais de criação, se o usuário notar que a entidade "Pai" desejada não existe, ele deve ter a opção de criá-la diretamente por um botão `+ Novo` dentro do próprio modal.
+3. **Navegação Profunda (Breadcrumbs):** Telas de nível 2 e 3 devem obrigatoriamente importar o componente `<Breadcrumb />` no topo da página, sem "links mortos".
+4. **CRUD Dinâmico e Lixeira Invisível (Soft Delete):** A edição de nomenclaturas (Turmas, Tarefas, Alunos) deve ser feita na própria linha/cartão (Inline Edit). A exclusão de registros usa o padrão "Soft Delete": o documento recebe `status: 'lixeira'`, desaparecendo da interface principal sem deletar fisicamente o dado do banco, evitando quebra de relações em cascata (dados órfãos).
