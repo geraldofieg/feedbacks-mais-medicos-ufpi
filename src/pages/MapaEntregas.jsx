@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ClipboardList, Check, X, BookOpen, Users, FileText } from 'lucide-react';
+import { ClipboardList, Check, X, BookOpen, Users, FileText, RefreshCw } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function MapaEntregas() {
@@ -20,35 +20,38 @@ export default function MapaEntregas() {
   
   const [loadingTurmas, setLoadingTurmas] = useState(true);
   const [loadingMatriz, setLoadingMatriz] = useState(false);
+  const [erro, setErro] = useState(null);
 
-  // 1. Busca as Turmas da Instituição
-  useEffect(() => {
-    async function fetchTurmas() {
-      // CORREÇÃO DEFINITIVA: Se não tiver a chave, ele desliga o carregamento na hora e não trava!
-      if (!currentUser || !escolaSelecionada?.id) {
-        setLoadingTurmas(false);
-        return; 
-      }
-      
-      setLoadingTurmas(true);
-      try {
-        const qT = query(collection(db, 'turmas'), 
-          where('instituicaoId', '==', escolaSelecionada.id),
-          where('professorUid', '==', currentUser.uid)
-        );
-        const snapT = await getDocs(qT);
-        const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
-        setTurmas(turmasData);
-        
-        if (turmasData.length > 0 && !turmaAtiva) {
-          setTurmaAtiva(turmasData[0].id);
-        }
-      } catch (error) {
-        console.error("Erro ao buscar turmas:", error);
-      } finally {
-        setLoadingTurmas(false);
-      }
+  // 1. Busca as Turmas da Instituição (Função isolada para permitir recarregamento manual)
+  async function fetchTurmas() {
+    if (!currentUser || !escolaSelecionada?.id) {
+      setLoadingTurmas(false);
+      return; 
     }
+    
+    setErro(null);
+    setLoadingTurmas(true);
+    try {
+      const qT = query(collection(db, 'turmas'), 
+        where('instituicaoId', '==', escolaSelecionada.id),
+        where('professorUid', '==', currentUser.uid)
+      );
+      const snapT = await getDocs(qT);
+      const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+      setTurmas(turmasData);
+      
+      if (turmasData.length > 0 && !turmaAtiva) {
+        setTurmaAtiva(turmasData[0].id);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar turmas:", error);
+      setErro("Falha de conexão com o banco de dados.");
+    } finally {
+      setLoadingTurmas(false);
+    }
+  }
+
+  useEffect(() => {
     fetchTurmas();
   }, [currentUser, escolaSelecionada]);
 
@@ -107,7 +110,8 @@ export default function MapaEntregas() {
         <Breadcrumb items={[{ label: `Mapa de Entregas` }]} />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
           <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 tracking-tight">
-            <ClipboardList className="text-blue-600" size={22} /> Visão Panorâmica
+            {/* MARCADOR DE VERSÃO: Se isso não aparecer, é porque o site não atualizou no seu celular! */}
+            <ClipboardList className="text-blue-600" size={22} /> Visão Panorâmica <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full ml-2">v3.1</span>
           </h1>
 
           {!isCarregando && turmas.length > 0 && (
@@ -129,14 +133,29 @@ export default function MapaEntregas() {
           <ClipboardList className="text-blue-300" size={48} />
           <p className="font-bold text-blue-400">Sincronizando dados...</p>
         </div>
+      ) : erro ? (
+        <div className="bg-red-50 border-2 border-dashed border-red-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10">
+          <p className="text-red-600 font-bold mb-4">{erro}</p>
+          <button onClick={fetchTurmas} className="bg-red-600 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto hover:bg-red-700">
+            <RefreshCw size={18} /> Tentar Novamente
+          </button>
+        </div>
       ) : turmas.length === 0 ? (
         <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10">
           <BookOpen className="mx-auto text-blue-400 mb-4" size={48} />
           <h2 className="text-xl font-black text-blue-800 mb-2">Sem turmas ativas</h2>
           <p className="text-blue-600 mb-6 font-medium">Você precisa criar uma turma antes de visualizar o mapa.</p>
-          <Link to="/turmas" className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-all shadow-md">
-            Ir para Turmas
-          </Link>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link to="/turmas" className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-all shadow-md w-full sm:w-auto">
+              Criar Turma
+            </Link>
+            
+            {/* BOTÃO MÁGICO DE ATUALIZAÇÃO MANUAL */}
+            <button onClick={fetchTurmas} className="inline-flex items-center justify-center gap-2 bg-white text-blue-600 font-bold py-3 px-8 rounded-xl hover:bg-gray-50 transition-all border border-blue-200 shadow-sm w-full sm:w-auto">
+              <RefreshCw size={18} /> Forçar Sincronização
+            </button>
+          </div>
         </div>
       ) : alunos.length === 0 ? (
         <div className="bg-gray-50 border border-gray-200 p-10 rounded-3xl text-center mt-6">
@@ -214,4 +233,4 @@ export default function MapaEntregas() {
       )}
     </div>
   );
-            }
+}
