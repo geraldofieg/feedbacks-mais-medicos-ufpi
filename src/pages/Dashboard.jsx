@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Shuffle, Building2 } from 'lucide-react';
@@ -11,30 +11,32 @@ export default function Dashboard() {
   const [instituicoes, setInstituicoes] = useState([]);
   const [novaInstituicao, setNovaInstituicao] = useState('');
   const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
 
-  // Força o scroll para o topo ao carregar a tela
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [escolaSelecionada]);
 
+  // A CORREÇÃO DO BUG LÓGICO: Agora ele busca no banco oficial de Instituições
   useEffect(() => {
     async function fetchInstituicoes() {
       if (!currentUser) return;
       try {
-        const q = query(
-          collection(db, 'turmas'),
-          where('professorUid', '==', currentUser.uid)
-        );
-        const querySnapshot = await getDocs(q);
-        
         const instSet = new Set();
-        querySnapshot.docs.forEach(doc => {
-          if (doc.data().instituicao) {
-            instSet.add(doc.data().instituicao);
-          }
+
+        // 1. Busca as instituições salvas oficialmente
+        const qInst = query(collection(db, 'instituicoes'), where('professorUid', '==', currentUser.uid));
+        const snapInst = await getDocs(qInst);
+        snapInst.docs.forEach(d => instSet.add(d.data().nome));
+
+        // 2. Busca pelas turmas antigas (para garantir que nada do passado se perca)
+        const qTurmas = query(collection(db, 'turmas'), where('professorUid', '==', currentUser.uid));
+        const snapTurmas = await getDocs(qTurmas);
+        snapTurmas.docs.forEach(d => {
+          if (d.data().instituicao) instSet.add(d.data().instituicao);
         });
         
-        setInstituicoes(Array.from(instSet));
+        setInstituicoes(Array.from(instSet).sort());
       } catch (error) {
         console.error("Erro ao buscar instituições:", error);
       } finally {
@@ -47,10 +49,31 @@ export default function Dashboard() {
     }
   }, [currentUser, escolaSelecionada]);
 
-  function handleCriarAcessar(e) {
+  // A CORREÇÃO DO SALVAMENTO: Salva no banco antes de entrar
+  async function handleCriarAcessar(e) {
     e.preventDefault();
-    if (novaInstituicao.trim()) {
-      setEscolaSelecionada(novaInstituicao.trim());
+    const nomeInst = novaInstituicao.trim();
+    if (!nomeInst) return;
+
+    try {
+      setSalvando(true);
+      
+      // Cria um ID seguro (ID_DO_PROFESSOR + Nome_da_Escola)
+      const idSeguro = `${currentUser.uid}_${nomeInst.replace(/\s+/g, '')}`;
+      
+      // Salva a Instituição no Firebase para ela nunca mais sumir
+      await setDoc(doc(db, 'instituicoes', idSeguro), {
+        nome: nomeInst,
+        professorUid: currentUser.uid,
+        dataCriacao: serverTimestamp()
+      }, { merge: true });
+
+      setEscolaSelecionada(nomeInst);
+    } catch (error) {
+      console.error("Erro ao salvar instituição:", error);
+      alert("Ocorreu um erro. Tente novamente.");
+    } finally {
+      setSalvando(false);
     }
   }
 
@@ -63,9 +86,9 @@ export default function Dashboard() {
   // ==========================================
   if (!escolaSelecionada) {
     return (
-      // CORREÇÃO 1: Adicionado w-full e overflow-x-hidden para travar vazamentos no celular
-      <div className="min-h-screen flex flex-col items-center justify-start md:justify-center p-4 pt-12 md:pt-4 w-full overflow-x-hidden">
-        <div className="max-w-4xl w-full mt-4 md:mt-0">
+      // A CORREÇÃO DE LAYOUT: Removido min-h-screen, adicionado padding robusto
+      <div className="w-full flex flex-col items-center justify-start px-4 pt-12 pb-16 overflow-x-hidden">
+        <div className="max-w-4xl w-full">
           
           <div className="text-center mb-8">
             <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
@@ -77,11 +100,10 @@ export default function Dashboard() {
             </p>
           </div>
 
-          {/* CORREÇÃO 2: Trocado flex para grid puro (muito mais estável em celulares) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+          {/* A CORREÇÃO DO EMPILHAMENTO: Flex-col força um embaixo do outro no celular */}
+          <div className="flex flex-col md:flex-row gap-6 w-full">
             
-            {/* Bloco 1: Criar Instituição */}
-            <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 w-full">
+            <div className="w-full md:w-1/2 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
               <h2 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
                 <Plus className="text-blue-600"/> Criar Instituição
               </h2>
@@ -98,14 +120,13 @@ export default function Dashboard() {
                     onChange={(e) => setNovaInstituicao(e.target.value)}
                   />
                 </div>
-                <button type="submit" className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 transition-all shadow-md flex justify-center items-center gap-2">
-                  Criar Instituição <ArrowRight size={18}/>
+                <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md flex justify-center items-center gap-2">
+                  {salvando ? 'Salvando...' : <>Criar Instituição <ArrowRight size={18}/></>}
                 </button>
               </form>
             </div>
 
-            {/* Bloco 2: Lista de Instituições */}
-            <div className="bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200 w-full">
+            <div className="w-full md:w-1/2 bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200">
               <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">
                 <LayoutDashboard className="text-gray-500"/> Minhas Instituições
               </h2>
@@ -165,7 +186,6 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* CORREÇÃO 3: O Chamado para Ação (CTA) agora fica NO TOPO, guiando o usuário */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 sm:p-8 text-center shadow-sm mb-8">
         <h2 className="text-xl font-black text-blue-900 mb-2">Sua instituição está configurada!</h2>
         <p className="text-blue-700 mb-6 max-w-lg mx-auto font-medium text-sm sm:text-base">
@@ -176,7 +196,6 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Os quadros numéricos descem e ficam abaixo da instrução principal */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between">
           <div className="flex justify-between items-start mb-4">
@@ -202,7 +221,6 @@ export default function Dashboard() {
           <h3 className="text-3xl font-black text-gray-800">--</h3>
         </div>
       </div>
-
     </div>
   );
 }
