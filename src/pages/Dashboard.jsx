@@ -10,22 +10,25 @@ export default function Dashboard() {
   
   const [instituicoes, setInstituicoes] = useState([]);
   const [novaInstituicao, setNovaInstituicao] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loadingInst, setLoadingInst] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
-  // Força a tela a ir pro topo de forma suave logo após renderizar, evitando a "tela cinza"
+  // Novos estados para os números reais do Dashboard
+  const [estatisticas, setEstatisticas] = useState({ turmas: 0, alunos: 0, pendencias: 0 });
+  const [loadingStats, setLoadingStats] = useState(false);
+
   useEffect(() => {
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 50);
   }, [escolaSelecionada]);
 
+  // Busca as Instituições para o Porteiro
   useEffect(() => {
     async function fetchInstituicoes() {
       if (!currentUser) return;
       try {
         const instSet = new Set();
-
         const qInst = query(collection(db, 'instituicoes'), where('professorUid', '==', currentUser.uid));
         const snapInst = await getDocs(qInst);
         snapInst.docs.forEach(d => instSet.add(d.data().nome));
@@ -40,12 +43,50 @@ export default function Dashboard() {
       } catch (error) {
         console.error("Erro ao buscar instituições:", error);
       } finally {
-        setLoading(false);
+        setLoadingInst(false);
       }
     }
     
     if (!escolaSelecionada) {
       fetchInstituicoes();
+    }
+  }, [currentUser, escolaSelecionada]);
+
+  // A MÁGICA NOVA: Busca os números reais para preencher os quadros
+  useEffect(() => {
+    async function fetchEstatisticas() {
+      if (!currentUser || !escolaSelecionada) return;
+      setLoadingStats(true);
+      try {
+        // 1. Conta as Turmas
+        const qTurmas = query(collection(db, 'turmas'), where('instituicao', '==', escolaSelecionada), where('professorUid', '==', currentUser.uid));
+        const snapTurmas = await getDocs(qTurmas);
+        const totalTurmas = snapTurmas.size;
+
+        // 2. Conta os Alunos (Filtra pelos alunos que pertencem às turmas desse professor)
+        let totalAlunos = 0;
+        if (totalTurmas > 0) {
+          const turmasIds = snapTurmas.docs.map(d => d.id);
+          const qAlunos = query(collection(db, 'alunos'), where('instituicao', '==', escolaSelecionada));
+          const snapAlunos = await getDocs(qAlunos);
+          // Conta apenas os alunos que estão nas turmas do professor logado
+          totalAlunos = snapAlunos.docs.filter(a => turmasIds.includes(a.data().turmaId)).length;
+        }
+
+        setEstatisticas({
+          turmas: totalTurmas,
+          alunos: totalAlunos,
+          pendencias: 0 // Deixaremos o cálculo de pendências para a fase de Tarefas
+        });
+      } catch (error) {
+        console.error("Erro ao buscar estatísticas:", error);
+      } finally {
+        setLoadingStats(false);
+      }
+    }
+
+    if (escolaSelecionada) {
+      fetchEstatisticas();
     }
   }, [currentUser, escolaSelecionada]);
 
@@ -78,13 +119,11 @@ export default function Dashboard() {
   }
 
   // ==========================================
-  // TELA 1: O PORTEIRO (Layout Blindado)
+  // TELA 1: O PORTEIRO
   // ==========================================
   if (!escolaSelecionada) {
     return (
-      // Agora usamos max-w com margens normais. Sem frescura de Flexbox para altura, evitando o corte!
       <div className="max-w-5xl mx-auto px-4 py-8 mt-4 md:mt-8">
-        
         <div className="text-center mb-10">
           <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <GraduationCap size={32} /> 
@@ -96,7 +135,6 @@ export default function Dashboard() {
         </div>
 
         <div className="flex flex-col md:flex-row gap-6 w-full">
-          
           <div className="w-full md:w-1/2 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
             <h2 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
               <Plus className="text-blue-600"/> Criar Instituição
@@ -106,12 +144,9 @@ export default function Dashboard() {
             <form onSubmit={handleCriarAcessar} className="space-y-4">
               <div>
                 <input
-                  type="text"
-                  required
-                  placeholder="Ex: Meu Cursinho, Mais Médicos..."
+                  type="text" required placeholder="Ex: Meu Cursinho, Mais Médicos..."
                   className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors font-medium"
-                  value={novaInstituicao}
-                  onChange={(e) => setNovaInstituicao(e.target.value)}
+                  value={novaInstituicao} onChange={(e) => setNovaInstituicao(e.target.value)}
                 />
               </div>
               <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md flex justify-center items-center gap-2">
@@ -125,7 +160,7 @@ export default function Dashboard() {
               <LayoutDashboard className="text-gray-500"/> Minhas Instituições
             </h2>
             
-            {loading ? (
+            {loadingInst ? (
               <div className="text-gray-500 text-sm font-medium animate-pulse">Buscando cadastros...</div>
             ) : instituicoes.length === 0 ? (
               <div className="text-center py-6">
@@ -136,8 +171,7 @@ export default function Dashboard() {
               <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                 {instituicoes.map(inst => (
                   <button
-                    key={inst}
-                    onClick={() => selecionarInstituicao(inst)}
+                    key={inst} onClick={() => selecionarInstituicao(inst)}
                     className="w-full bg-white border border-gray-200 p-4 rounded-xl flex items-center justify-between hover:border-blue-500 hover:shadow-sm transition-all text-left group"
                   >
                     <span className="font-bold text-gray-700 group-hover:text-blue-700 truncate mr-2">{inst}</span>
@@ -147,14 +181,13 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-
         </div>
       </div>
     );
   }
 
   // ==========================================
-  // TELA 2: O DASHBOARD REAL
+  // TELA 2: O DASHBOARD REAL (Com dados do Banco)
   // ==========================================
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -179,42 +212,51 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 sm:p-8 text-center shadow-sm mb-8">
-        <h2 className="text-xl font-black text-blue-900 mb-2">Sua instituição está configurada!</h2>
-        <p className="text-blue-700 mb-6 max-w-lg mx-auto font-medium text-sm sm:text-base">
-          Para começar a gerenciar suas avaliações, o primeiro passo é criar uma turma para agrupar seus alunos.
-        </p>
-        {/* CORREÇÃO DO TEXTO DO BOTÃO: Chamada clara para ação! */}
-        <Link to="/turmas" className="inline-flex w-full sm:w-auto justify-center items-center gap-2 bg-blue-600 text-white font-black py-3.5 px-6 rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-          <Plus size={20}/> Criar Primeira Turma
-        </Link>
-      </div>
+      {/* LÓGICA CONDICIONAL: Só mostra o banner gigante se o professor NÃO tiver turmas */}
+      {!loadingStats && estatisticas.turmas === 0 && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 sm:p-8 text-center shadow-sm mb-8 animate-in fade-in slide-in-from-top-4">
+          <h2 className="text-xl font-black text-blue-900 mb-2">Sua instituição está configurada!</h2>
+          <p className="text-blue-700 mb-6 max-w-lg mx-auto font-medium text-sm sm:text-base">
+            Para começar a gerenciar suas avaliações, o primeiro passo é criar uma turma para agrupar seus alunos.
+          </p>
+          <Link to="/turmas" className="inline-flex w-full sm:w-auto justify-center items-center gap-2 bg-blue-600 text-white font-black py-3.5 px-6 rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
+            <Plus size={20}/> Criar Primeira Turma
+          </Link>
+        </div>
+      )}
 
+      {/* QUADROS COM NÚMEROS REAIS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Total de Turmas</p>
             <div className="bg-blue-50 p-2.5 rounded-lg text-blue-600"><Building2 size={20}/></div>
           </div>
-          <h3 className="text-3xl font-black text-gray-800">--</h3>
+          <h3 className="text-3xl font-black text-gray-800">
+            {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.turmas}
+          </h3>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Alunos Ativos</p>
             <div className="bg-green-50 p-2.5 rounded-lg text-green-600"><Users size={20}/></div>
           </div>
-          <h3 className="text-3xl font-black text-gray-800">--</h3>
+          <h3 className="text-3xl font-black text-gray-800">
+            {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.alunos}
+          </h3>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Tarefas Pendentes</p>
             <div className="bg-orange-50 p-2.5 rounded-lg text-orange-600"><LayoutDashboard size={20}/></div>
           </div>
-          <h3 className="text-3xl font-black text-gray-800">--</h3>
+          <h3 className="text-3xl font-black text-gray-800">
+            {loadingStats ? <span className="animate-pulse text-gray-300">...</span> : estatisticas.pendencias}
+          </h3>
         </div>
       </div>
     </div>
   );
-        }
+}
