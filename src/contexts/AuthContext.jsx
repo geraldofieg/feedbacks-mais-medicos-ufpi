@@ -1,6 +1,11 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { auth } from '../services/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
 
 const AuthContext = createContext();
 
@@ -19,7 +24,6 @@ export function AuthProvider({ children }) {
       try {
         return JSON.parse(stored);
       } catch (e) {
-        // Se encontrar o formato antigo (apenas texto), ele limpa para forçar o novo padrão
         return null; 
       }
     }
@@ -36,6 +40,20 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // FUNÇÕES DE AUTENTICAÇÃO RESTAURADAS
+  function signup(email, password) {
+    return createUserWithEmailAndPassword(auth, email, password);
+  }
+
+  function login(email, password) {
+    return signInWithEmailAndPassword(auth, email, password);
+  }
+
+  function logout() {
+    setEscolaSelecionada(null); // Limpa a instituição ao sair
+    return signOut(auth);
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -47,6 +65,9 @@ export function AuthProvider({ children }) {
 
   const value = {
     currentUser,
+    login,
+    signup,
+    logout,
     escolaSelecionada,
     setEscolaSelecionada,
   };
