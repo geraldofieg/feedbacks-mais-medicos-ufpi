@@ -15,12 +15,11 @@ export default function Tarefas() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
 
+  // O "Controle Remoto" da página: define a turma que estamos vendo/editando
+  const [turmaAtiva, setTurmaAtiva] = useState(location.state?.turmaIdSelecionada || '');
+
   // Estados para Criação
-  const [novaTarefa, setNovaTarefa] = useState({
-    titulo: '',
-    enunciado: '',
-    turmaId: location.state?.turmaIdSelecionada || ''
-  });
+  const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '' });
   const [salvando, setSalvando] = useState(false);
 
   // Estados para Edição Inline
@@ -28,8 +27,9 @@ export default function Tarefas() {
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
 
+  // 1. Busca as Turmas da Instituição
   useEffect(() => {
-    async function fetchData() {
+    async function fetchTurmas() {
       if (!currentUser || !escolaSelecionada?.id) return;
       try {
         const qT = query(collection(db, 'turmas'), 
@@ -39,34 +39,56 @@ export default function Tarefas() {
         const snapT = await getDocs(qT);
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
-
-        const qA = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
-        const snapA = await getDocs(qA);
-        const tarefasData = snapA.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
-        setTarefas(tarefasData);
         
-        if (turmasData.length > 0 && !novaTarefa.turmaId) {
-          setNovaTarefa(prev => ({ ...prev, turmaId: turmasData[0].id }));
+        // Se não tiver turma ativa selecionada, pega a primeira da lista
+        if (turmasData.length > 0 && !turmaAtiva) {
+          setTurmaAtiva(turmasData[0].id);
         }
       } catch (error) {
-        console.error("Erro ao buscar dados:", error);
+        console.error("Erro ao buscar turmas:", error);
+      }
+    }
+    fetchTurmas();
+  }, [currentUser, escolaSelecionada]);
+
+  // 2. Busca as Tarefas APENAS da Turma Ativa (A correção do bug está aqui!)
+  useEffect(() => {
+    async function fetchTarefas() {
+      if (!turmaAtiva) {
+        setTarefas([]);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const qA = query(collection(db, 'tarefas'), 
+          where('instituicaoId', '==', escolaSelecionada.id),
+          where('turmaId', '==', turmaAtiva) // Trava de segurança restaurada
+        );
+        const snapA = await getDocs(qA);
+        const tarefasData = snapA.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        
+        // Ordena da mais recente para a mais antiga
+        setTarefas(tarefasData.sort((a, b) => b.dataCriacao?.toMillis() - a.dataCriacao?.toMillis()));
+      } catch (error) {
+        console.error("Erro ao buscar tarefas:", error);
       } finally {
         setLoading(false);
       }
     }
-    fetchData();
-  }, [currentUser, escolaSelecionada]);
+    fetchTarefas();
+  }, [turmaAtiva, escolaSelecionada]);
 
   async function handleCriar(e) {
     e.preventDefault();
-    if (!novaTarefa.titulo || !novaTarefa.turmaId) return;
+    if (!novaTarefa.titulo || !turmaAtiva) return;
 
     try {
       setSalvando(true);
       const tarefaData = {
         nomeTarefa: novaTarefa.titulo.trim(),
         enunciado: novaTarefa.enunciado.trim(),
-        turmaId: novaTarefa.turmaId,
+        turmaId: turmaAtiva,
         instituicaoId: escolaSelecionada.id,
         professorUid: currentUser.uid,
         status: 'ativa',
@@ -74,7 +96,7 @@ export default function Tarefas() {
       };
       const docRef = await addDoc(collection(db, 'tarefas'), tarefaData);
       setTarefas([{ id: docRef.id, ...tarefaData }, ...tarefas]);
-      setNovaTarefa({ ...novaTarefa, titulo: '', enunciado: '' });
+      setNovaTarefa({ titulo: '', enunciado: '' });
     } catch (error) {
       console.error("Erro ao criar tarefa:", error);
     } finally {
@@ -111,12 +133,11 @@ export default function Tarefas() {
     return nomeSeguro.toLowerCase().includes(busca.toLowerCase());
   });
 
-  if (loading) return <div className="p-10 text-center animate-pulse font-bold text-gray-400">Carregando tarefas...</div>;
+  const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       
-      {/* CABEÇALHO COMPACTO: Fim do desperdício de espaço! */}
       <div className="mb-6">
         <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Tarefas' }]} />
         <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 mt-3 tracking-tight">
@@ -125,10 +146,22 @@ export default function Tarefas() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Formulário de Criação (Lateral no Desktop) */}
+        {/* Formulário de Criação e Controle de Contexto */}
         <div className="lg:col-span-1">
           <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-200 shadow-sm sticky top-24">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-5">Cadastrar Nova Tarefa</h2>
+            
+            {/* O SELETOR DE TURMA AGORA FICA NO TOPO DO CARTÃO */}
+            <div className="mb-6 pb-4 border-b border-gray-100">
+              <label className="text-[10px] font-black text-gray-400 uppercase ml-1 block mb-1">Selecionar Turma</label>
+              <select 
+                className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-blue-700 transition-colors cursor-pointer"
+                value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}
+              >
+                {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+              </select>
+            </div>
+
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Cadastrar Nova Tarefa</h2>
             <form onSubmit={handleCriar} className="space-y-4">
               <div>
                 <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Título da Tarefa</label>
@@ -148,17 +181,7 @@ export default function Tarefas() {
                 />
               </div>
 
-              <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Turma Destinada</label>
-                <select 
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl mt-1 focus:ring-2 focus:ring-orange-500 outline-none font-bold text-gray-700"
-                  value={novaTarefa.turmaId} onChange={e => setNovaTarefa({...novaTarefa, turmaId: e.target.value})}
-                >
-                  {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
-              </div>
-
-              <button disabled={salvando} className="w-full bg-orange-500 text-white font-black py-3.5 rounded-xl hover:bg-orange-600 transition-all shadow-md flex items-center justify-center gap-2 mt-2">
+              <button disabled={salvando || !turmaAtiva} className="w-full bg-orange-500 text-white font-black py-3.5 rounded-xl hover:bg-orange-600 transition-all shadow-md flex items-center justify-center gap-2 mt-2 disabled:opacity-50">
                 <Plus size={20}/> {salvando ? 'Salvando...' : 'Criar Tarefa'}
               </button>
             </form>
@@ -168,22 +191,26 @@ export default function Tarefas() {
         {/* Lista de Tarefas (Principal) */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Minhas Tarefas Criadas</h2>
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+              Tarefas da Turma: <strong className="text-blue-600">{getNomeTurmaAtiva()}</strong>
+            </h2>
             <span className="bg-gray-100 text-gray-500 text-[10px] font-black px-2 py-0.5 rounded-full">{tarefas.length}</span>
           </div>
 
           <div className="relative mb-4">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
             <input 
-              type="text" placeholder="Procurar tarefa pelo nome..." 
+              type="text" placeholder="Procurar tarefa nesta turma..." 
               className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium shadow-sm"
               value={busca} onChange={e => setBusca(e.target.value)}
             />
           </div>
 
-          {tarefasFiltradas.length === 0 ? (
+          {loading ? (
+            <div className="p-10 text-center animate-pulse font-bold text-gray-400">Carregando tarefas...</div>
+          ) : tarefasFiltradas.length === 0 ? (
             <div className="text-center py-16 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
-              <p className="text-gray-400 font-medium">Nenhuma tarefa encontrada.</p>
+              <p className="text-gray-400 font-medium">Nenhuma tarefa encontrada nesta turma.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
@@ -232,14 +259,9 @@ export default function Tarefas() {
                   ) : (
                     <div>
                       <h3 className="font-black text-gray-800 text-lg leading-tight mb-1">{nomeSeguro}</h3>
-                      <p className="text-gray-500 text-sm line-clamp-2 mb-4 font-medium italic">
+                      <p className="text-gray-500 text-sm line-clamp-2 font-medium italic">
                         {tarefa.enunciado || "Sem enunciado definido."}
                       </p>
-                      <div className="flex items-center gap-2">
-                         <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                           {turmas.find(t => t.id === tarefa.turmaId)?.nome || 'Turma Removida'}
-                         </span>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -250,4 +272,4 @@ export default function Tarefas() {
       </div>
     </div>
   );
-}
+    }
