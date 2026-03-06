@@ -13,23 +13,23 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
+  // Força a tela a ir pro topo de forma suave logo após renderizar, evitando a "tela cinza"
   useEffect(() => {
-    window.scrollTo(0, 0);
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
   }, [escolaSelecionada]);
 
-  // A CORREÇÃO DO BUG LÓGICO: Agora ele busca no banco oficial de Instituições
   useEffect(() => {
     async function fetchInstituicoes() {
       if (!currentUser) return;
       try {
         const instSet = new Set();
 
-        // 1. Busca as instituições salvas oficialmente
         const qInst = query(collection(db, 'instituicoes'), where('professorUid', '==', currentUser.uid));
         const snapInst = await getDocs(qInst);
         snapInst.docs.forEach(d => instSet.add(d.data().nome));
 
-        // 2. Busca pelas turmas antigas (para garantir que nada do passado se perca)
         const qTurmas = query(collection(db, 'turmas'), where('professorUid', '==', currentUser.uid));
         const snapTurmas = await getDocs(qTurmas);
         snapTurmas.docs.forEach(d => {
@@ -49,7 +49,6 @@ export default function Dashboard() {
     }
   }, [currentUser, escolaSelecionada]);
 
-  // A CORREÇÃO DO SALVAMENTO: Salva no banco antes de entrar
   async function handleCriarAcessar(e) {
     e.preventDefault();
     const nomeInst = novaInstituicao.trim();
@@ -57,11 +56,8 @@ export default function Dashboard() {
 
     try {
       setSalvando(true);
-      
-      // Cria um ID seguro (ID_DO_PROFESSOR + Nome_da_Escola)
       const idSeguro = `${currentUser.uid}_${nomeInst.replace(/\s+/g, '')}`;
       
-      // Salva a Instituição no Firebase para ela nunca mais sumir
       await setDoc(doc(db, 'instituicoes', idSeguro), {
         nome: nomeInst,
         professorUid: currentUser.uid,
@@ -82,79 +78,76 @@ export default function Dashboard() {
   }
 
   // ==========================================
-  // TELA 1: O PORTEIRO
+  // TELA 1: O PORTEIRO (Layout Blindado)
   // ==========================================
   if (!escolaSelecionada) {
     return (
-      // A CORREÇÃO DE LAYOUT: Removido min-h-screen, adicionado padding robusto
-      <div className="w-full flex flex-col items-center justify-start px-4 pt-12 pb-16 overflow-x-hidden">
-        <div className="max-w-4xl w-full">
+      // Agora usamos max-w com margens normais. Sem frescura de Flexbox para altura, evitando o corte!
+      <div className="max-w-5xl mx-auto px-4 py-8 mt-4 md:mt-8">
+        
+        <div className="text-center mb-10">
+          <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <GraduationCap size={32} /> 
+          </div>
+          <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
+          <p className="text-gray-500 mt-2 text-base md:text-lg px-2">
+            Para começar a usar a plataforma, você precisa criar ou selecionar uma <strong>Instituição</strong>.
+          </p>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-6 w-full">
           
-          <div className="text-center mb-8">
-            <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <GraduationCap size={32} /> 
-            </div>
-            <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
-            <p className="text-gray-500 mt-2 text-base md:text-lg px-2">
-              Para começar a usar a plataforma, você precisa criar ou selecionar uma <strong>Instituição</strong>.
-            </p>
-          </div>
-
-          {/* A CORREÇÃO DO EMPILHAMENTO: Flex-col força um embaixo do outro no celular */}
-          <div className="flex flex-col md:flex-row gap-6 w-full">
+          <div className="w-full md:w-1/2 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
+            <h2 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
+              <Plus className="text-blue-600"/> Criar Instituição
+            </h2>
+            <p className="text-gray-500 text-sm mb-6 font-medium">Cadastre a faculdade, curso ou escola onde você leciona.</p>
             
-            <div className="w-full md:w-1/2 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
-              <h2 className="text-lg font-black text-gray-800 mb-2 flex items-center gap-2">
-                <Plus className="text-blue-600"/> Criar Instituição
-              </h2>
-              <p className="text-gray-500 text-sm mb-6 font-medium">Cadastre a faculdade, curso ou escola onde você leciona.</p>
-              
-              <form onSubmit={handleCriarAcessar} className="space-y-4">
-                <div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Meu Cursinho, Mais Médicos..."
-                    className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors font-medium"
-                    value={novaInstituicao}
-                    onChange={(e) => setNovaInstituicao(e.target.value)}
-                  />
-                </div>
-                <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md flex justify-center items-center gap-2">
-                  {salvando ? 'Salvando...' : <>Criar Instituição <ArrowRight size={18}/></>}
-                </button>
-              </form>
-            </div>
-
-            <div className="w-full md:w-1/2 bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200">
-              <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">
-                <LayoutDashboard className="text-gray-500"/> Minhas Instituições
-              </h2>
-              
-              {loading ? (
-                <div className="text-gray-500 text-sm font-medium animate-pulse">Buscando cadastros...</div>
-              ) : instituicoes.length === 0 ? (
-                <div className="text-center py-6">
-                  <p className="text-gray-500 text-sm font-medium italic">Você ainda não possui nenhuma instituição cadastrada.</p>
-                  <p className="text-gray-400 text-xs mt-2">Crie a primeira utilizando o formulário!</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
-                  {instituicoes.map(inst => (
-                    <button
-                      key={inst}
-                      onClick={() => selecionarInstituicao(inst)}
-                      className="w-full bg-white border border-gray-200 p-4 rounded-xl flex items-center justify-between hover:border-blue-500 hover:shadow-sm transition-all text-left group"
-                    >
-                      <span className="font-bold text-gray-700 group-hover:text-blue-700 truncate mr-2">{inst}</span>
-                      <ArrowRight size={18} className="text-gray-400 group-hover:text-blue-600 flex-shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
+            <form onSubmit={handleCriarAcessar} className="space-y-4">
+              <div>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Meu Cursinho, Mais Médicos..."
+                  className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors font-medium"
+                  value={novaInstituicao}
+                  onChange={(e) => setNovaInstituicao(e.target.value)}
+                />
+              </div>
+              <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white font-black py-3.5 px-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md flex justify-center items-center gap-2">
+                {salvando ? 'Salvando...' : <>Criar Instituição <ArrowRight size={18}/></>}
+              </button>
+            </form>
           </div>
+
+          <div className="w-full md:w-1/2 bg-gray-50 p-6 sm:p-8 rounded-2xl border border-gray-200">
+            <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">
+              <LayoutDashboard className="text-gray-500"/> Minhas Instituições
+            </h2>
+            
+            {loading ? (
+              <div className="text-gray-500 text-sm font-medium animate-pulse">Buscando cadastros...</div>
+            ) : instituicoes.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-gray-500 text-sm font-medium italic">Você ainda não possui nenhuma instituição cadastrada.</p>
+                <p className="text-gray-400 text-xs mt-2">Crie a primeira utilizando o formulário!</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                {instituicoes.map(inst => (
+                  <button
+                    key={inst}
+                    onClick={() => selecionarInstituicao(inst)}
+                    className="w-full bg-white border border-gray-200 p-4 rounded-xl flex items-center justify-between hover:border-blue-500 hover:shadow-sm transition-all text-left group"
+                  >
+                    <span className="font-bold text-gray-700 group-hover:text-blue-700 truncate mr-2">{inst}</span>
+                    <ArrowRight size={18} className="text-gray-400 group-hover:text-blue-600 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
     );
@@ -191,8 +184,9 @@ export default function Dashboard() {
         <p className="text-blue-700 mb-6 max-w-lg mx-auto font-medium text-sm sm:text-base">
           Para começar a gerenciar suas avaliações, o primeiro passo é criar uma turma para agrupar seus alunos.
         </p>
+        {/* CORREÇÃO DO TEXTO DO BOTÃO: Chamada clara para ação! */}
         <Link to="/turmas" className="inline-flex w-full sm:w-auto justify-center items-center gap-2 bg-blue-600 text-white font-black py-3.5 px-6 rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-          <Plus size={20}/> Acessar Minhas Turmas
+          <Plus size={20}/> Criar Primeira Turma
         </Link>
       </div>
 
@@ -223,4 +217,4 @@ export default function Dashboard() {
       </div>
     </div>
   );
-}
+        }
