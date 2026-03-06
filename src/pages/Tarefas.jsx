@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Search, Pencil, Trash2, Check, X, AlertCircle } from 'lucide-react';
+import { FileText, Plus, Search, Pencil, Trash2, Check, X } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Tarefas() {
@@ -106,13 +106,17 @@ export default function Tarefas() {
     }
   }
 
-  const tarefasFiltradas = tarefas.filter(t => t.nomeTarefa.toLowerCase().includes(busca.toLowerCase()));
+  // A CORREÇÃO ANTI-CRASH ESTÁ AQUI: Tolera dados antigos sem quebrar a tela
+  const tarefasFiltradas = tarefas.filter(t => {
+    const nomeSeguro = t.nomeTarefa || t.titulo || '';
+    return nomeSeguro.toLowerCase().includes(busca.toLowerCase());
+  });
 
   if (loading) return <div className="p-10 text-center animate-pulse font-bold text-gray-400">Carregando tarefas...</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* Breadcrumb unificado com o título da página para economizar espaço */}
+      {/* Breadcrumb unificado */}
       <Breadcrumb items={[{ label: `Tarefas (${escolaSelecionada?.nome})` }]} />
       
       <div className="flex items-center gap-3 mb-8 mt-4">
@@ -188,7 +192,11 @@ export default function Tarefas() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {tarefasFiltradas.map(tarefa => (
+              {tarefasFiltradas.map(tarefa => {
+                // Outra proteção contra dados velhos
+                const nomeSeguro = tarefa.nomeTarefa || tarefa.titulo || 'Tarefa sem nome';
+                
+                return (
                 <div key={tarefa.id} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all group">
                   <div className="flex justify-between items-start mb-4">
                     <div className="bg-orange-50 text-orange-500 p-2.5 rounded-xl">
@@ -196,14 +204,16 @@ export default function Tarefas() {
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
-                        onClick={() => { setEditandoId(tarefa.id); setTituloEdicao(tarefa.nomeTarefa); setEnunciadoEdicao(tarefa.enunciado || ''); }}
+                        onClick={() => { setEditandoId(tarefa.id); setTituloEdicao(nomeSeguro); setEnunciadoEdicao(tarefa.enunciado || ''); }}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Editar Tarefa"
                       >
                         <Pencil size={18}/>
                       </button>
                       <button 
-                        onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa)}
+                        onClick={() => handleLixeira(tarefa.id, nomeSeguro)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Apagar Tarefa"
                       >
                         <Trash2 size={18}/>
                       </button>
@@ -227,7 +237,7 @@ export default function Tarefas() {
                     </div>
                   ) : (
                     <div>
-                      <h3 className="font-black text-gray-800 text-lg leading-tight mb-1">{tarefa.nomeTarefa}</h3>
+                      <h3 className="font-black text-gray-800 text-lg leading-tight mb-1">{nomeSeguro}</h3>
                       <p className="text-gray-500 text-sm line-clamp-2 mb-4 font-medium italic">
                         {tarefa.enunciado || "Sem enunciado definido."}
                       </p>
@@ -239,7 +249,7 @@ export default function Tarefas() {
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>
