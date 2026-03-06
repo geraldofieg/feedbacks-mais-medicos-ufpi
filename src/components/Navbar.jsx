@@ -27,8 +27,10 @@ export default function Navbar() {
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
   ];
 
-  // A CORREÇÃO ESTÁ AQUI: Agora ele busca especificamente o .nome dentro do objeto
   const siglaEscola = escolaSelecionada?.nome ? escolaSelecionada.nome.split(' ')[0] : 'SaaS';
+
+  // BLINDAGEM DE UX: Só mostra os links das ferramentas se o professor tiver com o "crachá"
+  const mostrarLinks = !!escolaSelecionada?.id;
 
   return (
     <div className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
@@ -44,7 +46,7 @@ export default function Navbar() {
           </Link>
 
           <div className="flex items-center gap-6">
-            {navLinks.map(link => (
+            {mostrarLinks && navLinks.map(link => (
               <Link
                 key={link.path}
                 to={link.path}
@@ -70,7 +72,7 @@ export default function Navbar() {
             <GraduationCap size={16} /> {siglaEscola}
           </Link>
 
-          {navLinks.filter(link => link.path !== '/').map(link => (
+          {mostrarLinks && navLinks.filter(link => link.path !== '/').map(link => (
             <Link
               key={link.path}
               to={link.path}
