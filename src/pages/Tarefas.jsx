@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Trash2, Search, X, BookOpen, AlertCircle } from 'lucide-react';
+import { FileText, Plus, Trash2, Search, X, BookOpen, AlertCircle, Pencil, Check } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Tarefas() {
   const { currentUser, escolaSelecionada } = useAuth();
   
-  // A MÁGICA DA NAVEGAÇÃO: Lê se o utilizador veio do Dashboard através de um clique no cartão da turma
   const location = useLocation();
   const turmaVindaDoDashboard = location.state?.turmaIdSelecionada || '';
 
@@ -20,11 +19,16 @@ export default function Tarefas() {
   
   const [turmaSelecionada, setTurmaSelecionada] = useState(turmaVindaDoDashboard);
 
-  // Controle do Modal
+  // Controle do Modal de Criação
   const [showModal, setShowModal] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [nomeTarefa, setNomeTarefa] = useState('');
   const [enunciado, setEnunciado] = useState('');
+
+  // Controle de Edição (Inline)
+  const [editandoId, setEditandoId] = useState(null);
+  const [nomeEdicao, setNomeEdicao] = useState('');
+  const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
 
   // 1. Carrega as Turmas
   useEffect(() => {
@@ -34,11 +38,13 @@ export default function Tarefas() {
         const qTurmas = query(collection(db, 'turmas'), where('instituicao', '==', escolaSelecionada), where('professorUid', '==', currentUser.uid));
         const turmasSnap = await getDocs(qTurmas);
         const turmasData = turmasSnap.docs.map(t => ({ id: t.id, ...t.data() }));
-        setTurmas(turmasData);
+        
+        // Filtramos para só exibir turmas que não estão na lixeira
+        const turmasAtivas = turmasData.filter(t => t.status !== 'lixeira');
+        setTurmas(turmasAtivas);
 
-        // Se não veio do Dashboard mas tem turmas, seleciona a primeira por padrão
-        if (turmasData.length > 0 && !turmaVindaDoDashboard) {
-          setTurmaSelecionada(turmasData[0].id);
+        if (turmasAtivas.length > 0 && !turmaVindaDoDashboard) {
+          setTurmaSelecionada(turmasAtivas[0].id);
         }
       } catch (error) {
         console.error("Erro ao buscar turmas:", error);
@@ -49,7 +55,7 @@ export default function Tarefas() {
     fetchTurmas();
   }, [currentUser, escolaSelecionada, turmaVindaDoDashboard]);
 
-  // 2. Carrega as Tarefas sempre que a Turma selecionada mudar
+  // 2. Carrega as Tarefas (Ocultando a Lixeira)
   useEffect(() => {
     async function fetchTarefas() {
       if (!turmaSelecionada) return;
@@ -62,8 +68,10 @@ export default function Tarefas() {
         const tarefasSnap = await getDocs(qTarefas);
         const tarefasData = tarefasSnap.docs.map(t => ({ id: t.id, ...t.data() }));
         
-        // Ordena da mais recente para a mais antiga
-        setTarefas(tarefasData.sort((a, b) => b.dataCriacao?.toMillis() - a.dataCriacao?.toMillis()));
+        // A MÁGICA DA LIXEIRA: Filtra tarefas ativas
+        const tarefasAtivas = tarefasData.filter(t => t.status !== 'lixeira');
+        
+        setTarefas(tarefasAtivas.sort((a, b) => b.dataCriacao?.toMillis() - a.dataCriacao?.toMillis()));
       } catch (error) {
         console.error("Erro ao buscar tarefas:", error);
       }
@@ -71,6 +79,7 @@ export default function Tarefas() {
     fetchTarefas();
   }, [turmaSelecionada, escolaSelecionada]);
 
+  // Criação
   async function handleSalvarTarefa(e) {
     e.preventDefault();
     if (!nomeTarefa.trim() || !turmaSelecionada) return;
@@ -83,6 +92,7 @@ export default function Tarefas() {
         turmaId: turmaSelecionada,
         instituicao: escolaSelecionada,
         professorUid: currentUser.uid,
+        status: 'ativa', // Importante para a lixeira funcionar
         dataCriacao: serverTimestamp()
       };
       
@@ -100,13 +110,31 @@ export default function Tarefas() {
     }
   }
 
-  async function handleDeletar(id) {
-    if (!window.confirm("Tem certeza que deseja apagar esta tarefa?")) return;
+  // Edição
+  async function handleSalvarEdicao(id) {
+    if (!nomeEdicao.trim()) return;
     try {
-      await deleteDoc(doc(db, 'tarefas', id));
+      await updateDoc(doc(db, 'tarefas', id), { 
+        nomeTarefa: nomeEdicao.trim(),
+        enunciado: enunciadoEdicao.trim()
+      });
+      
+      setTarefas(tarefas.map(t => t.id === id ? { ...t, nomeTarefa: nomeEdicao.trim(), enunciado: enunciadoEdicao.trim() } : t));
+      setEditandoId(null);
+    } catch (error) {
+      console.error("Erro ao editar tarefa:", error);
+      alert("Erro ao alterar os dados da tarefa.");
+    }
+  }
+
+  // Soft Delete (Mover para Lixeira)
+  async function handleLixeira(id, nome) {
+    if (!window.confirm(`Tem certeza que deseja enviar a tarefa "${nome}" para a lixeira?`)) return;
+    try {
+      await updateDoc(doc(db, 'tarefas', id), { status: 'lixeira' });
       setTarefas(tarefas.filter(t => t.id !== id));
     } catch (error) {
-      console.error("Erro ao apagar tarefa:", error);
+      console.error("Erro ao enviar para lixeira:", error);
     }
   }
 
@@ -116,7 +144,7 @@ export default function Tarefas() {
   if (loading) return <div className="text-center py-20 text-gray-500 font-medium animate-pulse">A aceder ao banco de dados...</div>;
 
   // ==========================================
-  // ESTADO VAZIO EDUCATIVO (Não tem turmas)
+  // ESTADO VAZIO EDUCATIVO (Não tem turmas ativas)
   // ==========================================
   if (turmas.length === 0) {
     return (
@@ -144,11 +172,10 @@ export default function Tarefas() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       
-      {/* BREADCRUMB INTELIGENTE: Mostra o caminho com o nome da turma atual */}
+      {/* BREADCRUMB CORRIGIDO */}
       <Breadcrumb items={[
         { label: 'Turmas', path: '/turmas' },
-        { label: getNomeTurmaSelecionada() },
-        { label: 'Tarefas' }
+        { label: `Tarefas (${getNomeTurmaSelecionada()})` }
       ]} />
       
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
@@ -159,11 +186,11 @@ export default function Tarefas() {
           <div className="flex-1">
             <h1 className="text-2xl font-black text-gray-800 leading-tight">Gestão de Tarefas</h1>
             
-            {/* SELETOR DE TURMA (Dropdown) */}
+            {/* SELETOR DE TURMA */}
             <div className="mt-1 flex items-center gap-2">
               <span className="text-gray-500 text-sm font-medium">Turma:</span>
               <select 
-                className="bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 py-1 px-2 font-bold cursor-pointer"
+                className="bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 py-1 px-2 font-bold cursor-pointer max-w-[200px] truncate"
                 value={turmaSelecionada}
                 onChange={(e) => setTurmaSelecionada(e.target.value)}
               >
@@ -206,22 +233,61 @@ export default function Tarefas() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tarefasFiltradas.map(tarefa => (
-            <div key={tarefa.id} className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow relative group">
-              <button 
-                onClick={() => handleDeletar(tarefa.id)} 
-                className="absolute top-4 right-4 p-2 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                title="Apagar tarefa"
-              >
-                <Trash2 size={18} />
-              </button>
+            <div key={tarefa.id} className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow relative group flex flex-col">
               
-              <div className="bg-orange-50 text-orange-600 w-12 h-12 rounded-xl flex items-center justify-center mb-4">
-                <FileText size={24} />
+              {/* BOTÕES DE AÇÃO (Lápis e Lixeira) */}
+              <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <button 
+                  onClick={() => { setEditandoId(tarefa.id); setNomeEdicao(tarefa.nomeTarefa); setEnunciadoEdicao(tarefa.enunciado || ''); }} 
+                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Editar Tarefa"
+                >
+                  <Pencil size={18} />
+                </button>
+                <button 
+                  onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa)} 
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Mover para Lixeira"
+                >
+                  <Trash2 size={18} />
+                </button>
               </div>
-              <h3 className="text-lg font-black text-gray-800 mb-2">{tarefa.nomeTarefa}</h3>
-              <p className="text-gray-500 text-sm line-clamp-3 mb-4">{tarefa.enunciado || 'Sem enunciado cadastrado.'}</p>
               
-              <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
+              {editandoId === tarefa.id ? (
+                // MODO DE EDIÇÃO INLINE
+                <div className="flex-1 mt-8 mb-4 flex flex-col gap-2">
+                  <input 
+                    type="text" 
+                    value={nomeEdicao} 
+                    onChange={(e) => setNomeEdicao(e.target.value)} 
+                    className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800" 
+                    placeholder="Nome da Tarefa"
+                    autoFocus 
+                  />
+                  <textarea 
+                    value={enunciadoEdicao} 
+                    onChange={(e) => setEnunciadoEdicao(e.target.value)} 
+                    className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 resize-none" 
+                    rows="3"
+                    placeholder="Enunciado (Opcional)"
+                  />
+                  <div className="flex gap-2 mt-1">
+                    <button onClick={() => handleSalvarEdicao(tarefa.id)} className="flex-1 bg-green-500 text-white py-1.5 rounded-lg hover:bg-green-600 shadow-sm flex items-center justify-center gap-1 text-sm font-bold"><Check size={16}/> Salvar</button>
+                    <button onClick={() => setEditandoId(null)} className="flex-1 bg-gray-200 text-gray-600 py-1.5 rounded-lg hover:bg-gray-300 flex items-center justify-center gap-1 text-sm font-bold"><X size={16}/> Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                // MODO DE VISUALIZAÇÃO
+                <div className="flex-1">
+                  <div className="bg-orange-50 text-orange-600 w-12 h-12 rounded-xl flex items-center justify-center mb-4">
+                    <FileText size={24} />
+                  </div>
+                  <h3 className="text-lg font-black text-gray-800 mb-2 pr-12">{tarefa.nomeTarefa}</h3>
+                  <p className="text-gray-500 text-sm line-clamp-3 mb-4">{tarefa.enunciado || 'Sem enunciado cadastrado.'}</p>
+                </div>
+              )}
+              
+              <div className="pt-4 border-t border-gray-100 flex justify-between items-center mt-auto">
                 <span className="text-xs font-bold text-gray-400 uppercase">Módulo Base</span>
               </div>
             </div>
