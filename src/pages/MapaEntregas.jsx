@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ClipboardList, Check, X, AlertCircle, BookOpen, Users, FileText } from 'lucide-react';
+import { ClipboardList, Check, X, BookOpen, Users, FileText } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function MapaEntregas() {
@@ -17,12 +17,20 @@ export default function MapaEntregas() {
   const [alunos, setAlunos] = useState([]);
   const [tarefas, setTarefas] = useState([]);
   const [atividades, setAtividades] = useState([]);
-  const [loading, setLoading] = useState(true);
+  
+  // CORREÇÃO: Dois controles de carregamento para evitar a "Condição de Corrida"
+  const [loadingTurmas, setLoadingTurmas] = useState(true);
+  const [loadingMatriz, setLoadingMatriz] = useState(false);
 
-  // 1. Busca as Turmas da Instituição para o Dropdown
+  // 1. Busca as Turmas da Instituição
   useEffect(() => {
     async function fetchTurmas() {
-      if (!currentUser || !escolaSelecionada?.id) return;
+      if (!currentUser || !escolaSelecionada?.id) {
+        setLoadingTurmas(false);
+        return;
+      }
+      
+      setLoadingTurmas(true);
       try {
         const qT = query(collection(db, 'turmas'), 
           where('instituicaoId', '==', escolaSelecionada.id),
@@ -37,37 +45,42 @@ export default function MapaEntregas() {
         }
       } catch (error) {
         console.error("Erro ao buscar turmas:", error);
+      } finally {
+        setLoadingTurmas(false);
       }
     }
     fetchTurmas();
   }, [currentUser, escolaSelecionada]);
 
-  // 2. Constrói a Matriz (Alunos x Tarefas x Entregas) da Turma Ativa
+  // 2. Constrói a Matriz da Turma Ativa
   useEffect(() => {
     async function fetchMatriz() {
       if (!turmaAtiva) {
-        setLoading(false);
+        setAlunos([]);
+        setTarefas([]);
+        setAtividades([]);
         return;
       }
-      setLoading(true);
+      
+      setLoadingMatriz(true);
       try {
-        // A. Busca Alunos da Turma (Linhas)
+        // A. Busca Alunos da Turma
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapAlunos = await getDocs(qAlunos);
         const alunosData = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(a => a.status !== 'lixeira')
-          .sort((a, b) => a.nome.localeCompare(b.nome)); // Ordem alfabética
+          .sort((a, b) => a.nome.localeCompare(b.nome)); 
         setAlunos(alunosData);
 
-        // B. Busca Tarefas da Turma (Colunas)
+        // B. Busca Tarefas da Turma
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(t => t.status !== 'lixeira')
-          .sort((a, b) => a.dataCriacao?.toMillis() - b.dataCriacao?.toMillis()); // Ordem de criação
+          .sort((a, b) => a.dataCriacao?.toMillis() - b.dataCriacao?.toMillis()); 
         setTarefas(tarefasData);
 
-        // C. Busca as Entregas (O Cruzamento)
+        // C. Busca as Entregas
         const qAtividades = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
         const snapAtividades = await getDocs(qAtividades);
         const atividadesData = snapAtividades.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -76,31 +89,32 @@ export default function MapaEntregas() {
       } catch (error) {
         console.error("Erro ao montar o mapa:", error);
       } finally {
-        setLoading(false);
+        setLoadingMatriz(false);
       }
     }
     fetchMatriz();
   }, [turmaAtiva]);
 
-  // Função para checar se a célula tem entrega
   const verificarEntrega = (alunoId, tarefaId) => {
     return atividades.some(ativ => ativ.alunoId === alunoId && ativ.tarefaId === tarefaId);
   };
 
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
+  
+  // Trava de segurança principal
+  const isCarregando = loadingTurmas || loadingMatriz;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       
       <div className="mb-6">
-        <Breadcrumb items={[{ label: 'Mapa de Entregas' }]} />
+        <Breadcrumb items={[{ label: `Mapa de Entregas (${escolaSelecionada?.nome || '...'})` }]} />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
           <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 tracking-tight">
             <ClipboardList className="text-blue-600" size={22} /> Visão Panorâmica
           </h1>
 
-          {/* O Controle Remoto do Mapa */}
-          {turmas.length > 0 && (
+          {!isCarregando && turmas.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-widest hidden sm:block">Turma:</span>
               <select 
@@ -114,10 +128,10 @@ export default function MapaEntregas() {
         </div>
       </div>
 
-      {loading ? (
+      {isCarregando ? (
         <div className="p-20 text-center animate-pulse flex flex-col items-center gap-3">
           <ClipboardList className="text-blue-300" size={48} />
-          <p className="font-bold text-blue-400">Desenhando matriz de entregas...</p>
+          <p className="font-bold text-blue-400">Sincronizando dados...</p>
         </div>
       ) : turmas.length === 0 ? (
         <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10">
@@ -148,7 +162,6 @@ export default function MapaEntregas() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-2">
-          
           <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
             <h3 className="font-black text-gray-700">Progresso da Turma</h3>
             <div className="flex gap-4 text-xs font-bold text-gray-500">
@@ -161,16 +174,13 @@ export default function MapaEntregas() {
             <table className="w-full text-left border-collapse min-w-[600px]">
               <thead>
                 <tr className="bg-gray-50">
-                  {/* Coluna Fixa do Aluno */}
                   <th className="p-4 pl-6 border-b border-gray-200 text-xs uppercase font-black text-gray-400 tracking-wider sticky left-0 bg-gray-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                     Aluno
                   </th>
-                  
-                  {/* Colunas Dinâmicas das Tarefas */}
                   {tarefas.map(tarefa => (
                     <th key={tarefa.id} className="p-4 text-center border-b border-l border-gray-200">
                       <div className="text-[10px] uppercase font-black text-orange-500 tracking-widest mb-1">Tarefa</div>
-                      <div className="font-bold text-gray-700 text-sm line-clamp-2 leading-tight" title={tarefa.nomeTarefa}>
+                      <div className="font-bold text-gray-700 text-sm line-clamp-2 leading-tight" title={tarefa.nomeTarefa || tarefa.titulo}>
                         {tarefa.nomeTarefa || tarefa.titulo}
                       </div>
                     </th>
@@ -180,13 +190,9 @@ export default function MapaEntregas() {
               <tbody className="divide-y divide-gray-100">
                 {alunos.map(aluno => (
                   <tr key={aluno.id} className="hover:bg-blue-50/30 transition-colors group">
-                    
-                    {/* Nome do Aluno */}
                     <td className="p-4 pl-6 font-bold text-gray-800 whitespace-nowrap sticky left-0 bg-white group-hover:bg-blue-50/30 transition-colors z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                       {aluno.nome}
                     </td>
-                    
-                    {/* Células de Cruzamento */}
                     {tarefas.map(tarefa => {
                       const entregou = verificarEntrega(aluno.id, tarefa.id);
                       return (
