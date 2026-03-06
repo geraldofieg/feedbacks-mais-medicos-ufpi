@@ -1,148 +1,203 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { useLocation, Link } from 'react-router-dom';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Check, X, ClipboardList } from 'lucide-react';
-
-// Importando a inteligência do Cronograma Oficial
-import { cronogramaAssincrono, getStatusData } from '../data/cronogramaData';
-
-const isModuloValido = (nome) => {
-  if (!nome) return false;
-  const lower = nome.toLowerCase();
-  if (lower.includes('recupera')) return false;
-  const match = lower.match(/\d+/);
-  if (match && parseInt(match[0], 10) < 7) return false;
-  return true; 
-};
-
-// Extrator blindado de números
-const extractNum = (nome) => {
-  if (!nome) return 0;
-  const match = nome.match(/\d+/);
-  return match ? parseInt(match[0], 10) : 0;
-};
+import { useAuth } from '../contexts/AuthContext';
+import { ClipboardList, Check, X, AlertCircle, BookOpen, Users, FileText } from 'lucide-react';
+import Breadcrumb from '../components/Breadcrumb';
 
 export default function MapaEntregas() {
+  const { currentUser, escolaSelecionada } = useAuth();
+  const location = useLocation();
+  
+  const [turmas, setTurmas] = useState([]);
+  const [turmaAtiva, setTurmaAtiva] = useState(location.state?.turmaIdSelecionada || '');
+  
+  // A Matriz de Dados
   const [alunos, setAlunos] = useState([]);
-  const [tarefasMapeadas, setTarefasMapeadas] = useState([]);
-  const [entregas, setEntregas] = useState(new Set());
+  const [tarefas, setTarefas] = useState([]);
+  const [atividades, setAtividades] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // 1. Busca as Turmas da Instituição para o Dropdown
   useEffect(() => {
-    // 1. Ouvinte de Alunos Ativos
-    const unsubAlunos = onSnapshot(collection(db, 'alunos'), (snap) => {
-      setAlunos(snap.docs.map(doc => doc.data().nome).sort());
-    });
-
-    // 2. Ouvinte de Atividades (Últimos 90 dias)
-    const dataLimite = new Date();
-    dataLimite.setDate(dataLimite.getDate() - 90);
-    const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
-
-    const unsubAtividades = onSnapshot(qAtividades, (snap) => {
-      const ativs = snap.docs.map(doc => doc.data()).filter(a => isModuloValido(a.modulo));
-      
-      const setEntregasTemp = new Set();
-      const modulosMap = {};
-      let maxNumDB = 0;
-
-      // Mapeia o que já tem no banco
-      ativs.forEach(a => {
-        const num = extractNum(a.modulo);
-        if (num > maxNumDB) maxNumDB = num;
-
-        // Normalização blindada: Salva a entrega usando o número do módulo
-        if (a.aluno && a.aluno.toLowerCase() !== 'enunciado') {
-          setEntregasTemp.add(`${a.aluno}-${num}-${a.tarefa}`);
-        }
+    async function fetchTurmas() {
+      if (!currentUser || !escolaSelecionada?.id) return;
+      try {
+        const qT = query(collection(db, 'turmas'), 
+          where('instituicaoId', '==', escolaSelecionada.id),
+          where('professorUid', '==', currentUser.uid)
+        );
+        const snapT = await getDocs(qT);
+        const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        setTurmas(turmasData);
         
-        if (!modulosMap[num]) modulosMap[num] = { nome: a.modulo, numero: num, tarefas: new Set() };
-        modulosMap[num].tarefas.add(a.tarefa);
-      });
-
-      // --- A MÁGICA: INJETANDO AS COLUNAS DO CRONOGRAMA OFICIAL ---
-      const moduloAtualIndex = cronogramaAssincrono.findIndex(m => getStatusData(m.inicio, m.fim) === 'atual');
-      const moduloAtual = moduloAtualIndex !== -1 ? cronogramaAssincrono[moduloAtualIndex] : null;
-
-      const numeroAlvoPrincipal = moduloAtual ? extractNum(moduloAtual.modulo) : maxNumDB;
-      const numsAlvo = [numeroAlvoPrincipal, numeroAlvoPrincipal - 1].filter(n => n >= 7);
-
-      // Garante que o Atual e o Anterior existam na tabela, mesmo sem notas
-      numsAlvo.forEach(numAlvo => {
-        const cronoMod = cronogramaAssincrono.find(m => extractNum(m.modulo) === numAlvo);
-        const nomeLabel = cronoMod ? cronoMod.modulo : `Módulo ${numAlvo}`;
-
-        if (!modulosMap[numAlvo]) {
-          modulosMap[numAlvo] = { nome: nomeLabel, numero: numAlvo, tarefas: new Set() };
+        if (turmasData.length > 0 && !turmaAtiva) {
+          setTurmaAtiva(turmasData[0].id);
         }
+      } catch (error) {
+        console.error("Erro ao buscar turmas:", error);
+      }
+    }
+    fetchTurmas();
+  }, [currentUser, escolaSelecionada]);
 
-        // Adiciona as tarefas oficiais (Desafio e Fórum) nas colunas
-        const tarefasOficiais = cronoMod?.tarefas || [`M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Desafio`, `M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Fórum`];
-        tarefasOficiais.forEach(t => modulosMap[numAlvo].tarefas.add(t));
-      });
+  // 2. Constrói a Matriz (Alunos x Tarefas x Entregas) da Turma Ativa
+  useEffect(() => {
+    async function fetchMatriz() {
+      if (!turmaAtiva) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        // A. Busca Alunos da Turma (Linhas)
+        const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
+        const snapAlunos = await getDocs(qAlunos);
+        const alunosData = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(a => a.status !== 'lixeira')
+          .sort((a, b) => a.nome.localeCompare(b.nome)); // Ordem alfabética
+        setAlunos(alunosData);
 
-      // Transforma o Map em array e ordena (Maior módulo na esquerda)
-      const listaMod = Object.values(modulosMap).sort((a, b) => b.numero - a.numero);
-      
-      const colunas = [];
-      listaMod.forEach(mod => {
-        // Ordena as tarefas alfabeticamente (Desafio antes de Fórum)
-        Array.from(mod.tarefas).sort().forEach(tar => {
-          colunas.push({ modulo: mod.nome, numero: mod.numero, tarefa: tar });
-        });
-      });
+        // B. Busca Tarefas da Turma (Colunas)
+        const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
+        const snapTarefas = await getDocs(qTarefas);
+        const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(t => t.status !== 'lixeira')
+          .sort((a, b) => a.dataCriacao?.toMillis() - b.dataCriacao?.toMillis()); // Ordem de criação
+        setTarefas(tarefasData);
 
-      setTarefasMapeadas(colunas);
-      setEntregas(setEntregasTemp);
-      setLoading(false);
-    });
+        // C. Busca as Entregas (O Cruzamento)
+        const qAtividades = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
+        const snapAtividades = await getDocs(qAtividades);
+        const atividadesData = snapAtividades.docs.map(d => ({ id: d.id, ...d.data() }));
+        setAtividades(atividadesData);
 
-    return () => { unsubAlunos(); unsubAtividades(); };
-  }, []);
+      } catch (error) {
+        console.error("Erro ao montar o mapa:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchMatriz();
+  }, [turmaAtiva]);
+
+  // Função para checar se a célula tem entrega
+  const verificarEntrega = (alunoId, tarefaId) => {
+    return atividades.some(ativ => ativ.alunoId === alunoId && ativ.tarefaId === tarefaId);
+  };
+
+  const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors"><ArrowLeft size={24} /></Link>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <ClipboardList className="text-blue-600" /> Mapa de Entregas Recentes
-          </h2>
-        </div>
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      
+      <div className="mb-6">
+        <Breadcrumb items={[{ label: 'Mapa de Entregas' }]} />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
+          <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 tracking-tight">
+            <ClipboardList className="text-blue-600" size={22} /> Visão Panorâmica
+          </h1>
 
-        {loading ? (
-          <div className="text-center py-20 text-blue-600 font-bold animate-pulse">Desenhando mapa...</div>
-        ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-gray-100 text-gray-600 uppercase font-bold text-xs">
-                <tr>
-                  <th className="px-6 py-4 rounded-tl-2xl border-b border-gray-200">Aluno</th>
-                  {tarefasMapeadas.map((t, i) => (
-                    <th key={i} className="px-4 py-4 text-center border-l border-b border-gray-200 whitespace-nowrap bg-gray-50">
-                      <div className="text-[10px] text-gray-400 mb-0.5">{t.modulo}</div>
-                      <div className="text-gray-700">{t.tarefa}</div>
+          {/* O Controle Remoto do Mapa */}
+          {turmas.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest hidden sm:block">Turma:</span>
+              <select 
+                className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 py-2 px-3 font-bold shadow-sm cursor-pointer w-full sm:w-auto"
+                value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}
+              >
+                {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="p-20 text-center animate-pulse flex flex-col items-center gap-3">
+          <ClipboardList className="text-blue-300" size={48} />
+          <p className="font-bold text-blue-400">Desenhando matriz de entregas...</p>
+        </div>
+      ) : turmas.length === 0 ? (
+        <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10">
+          <BookOpen className="mx-auto text-blue-400 mb-4" size={48} />
+          <h2 className="text-xl font-black text-blue-800 mb-2">Sem turmas ativas</h2>
+          <p className="text-blue-600 mb-6 font-medium">Você precisa criar uma turma antes de visualizar o mapa.</p>
+          <Link to="/turmas" className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-all shadow-md">
+            Ir para Turmas
+          </Link>
+        </div>
+      ) : alunos.length === 0 ? (
+        <div className="bg-gray-50 border border-gray-200 p-10 rounded-3xl text-center mt-6">
+          <Users className="mx-auto text-gray-300 mb-3" size={40} />
+          <h2 className="text-lg font-black text-gray-700 mb-1">Turma Vazia</h2>
+          <p className="text-gray-500 text-sm mb-5">Adicione alunos à turma <strong>{getNomeTurmaAtiva()}</strong> para ver o mapa.</p>
+          <Link to="/alunos" className="text-blue-600 font-bold hover:underline bg-white px-4 py-2 border border-gray-200 rounded-lg shadow-sm">
+            Adicionar Alunos
+          </Link>
+        </div>
+      ) : tarefas.length === 0 ? (
+        <div className="bg-orange-50 border border-orange-100 p-10 rounded-3xl text-center mt-6">
+          <FileText className="mx-auto text-orange-300 mb-3" size={40} />
+          <h2 className="text-lg font-black text-orange-800 mb-1">Nenhuma Tarefa Criada</h2>
+          <p className="text-orange-600 text-sm mb-5">Crie tarefas para a turma <strong>{getNomeTurmaAtiva()}</strong> para gerar as colunas do mapa.</p>
+          <Link to="/tarefas" state={{ turmaIdSelecionada: turmaAtiva }} className="text-orange-600 font-bold hover:underline bg-white px-4 py-2 border border-orange-200 rounded-lg shadow-sm">
+            Criar Primeira Tarefa
+          </Link>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-2">
+          
+          <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+            <h3 className="font-black text-gray-700">Progresso da Turma</h3>
+            <div className="flex gap-4 text-xs font-bold text-gray-500">
+              <span className="flex items-center gap-1"><Check className="text-green-500" size={14}/> Entregue</span>
+              <span className="flex items-center gap-1"><X className="text-red-400" size={14}/> Pendente</span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
+            <table className="w-full text-left border-collapse min-w-[600px]">
+              <thead>
+                <tr className="bg-gray-50">
+                  {/* Coluna Fixa do Aluno */}
+                  <th className="p-4 pl-6 border-b border-gray-200 text-xs uppercase font-black text-gray-400 tracking-wider sticky left-0 bg-gray-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                    Aluno
+                  </th>
+                  
+                  {/* Colunas Dinâmicas das Tarefas */}
+                  {tarefas.map(tarefa => (
+                    <th key={tarefa.id} className="p-4 text-center border-b border-l border-gray-200">
+                      <div className="text-[10px] uppercase font-black text-orange-500 tracking-widest mb-1">Tarefa</div>
+                      <div className="font-bold text-gray-700 text-sm line-clamp-2 leading-tight" title={tarefa.nomeTarefa}>
+                        {tarefa.nomeTarefa || tarefa.titulo}
+                      </div>
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {alunos.map((aluno, i) => (
-                  <tr key={i} className="border-b border-gray-100 hover:bg-orange-50/50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-gray-800 whitespace-nowrap">{aluno}</td>
-                    {tarefasMapeadas.map((t, j) => {
-                      // Verifica o cruzamento de dados usando a regra normalizada (número exato)
-                      const entregou = entregas.has(`${aluno}-${t.numero}-${t.tarefa}`);
+              <tbody className="divide-y divide-gray-100">
+                {alunos.map(aluno => (
+                  <tr key={aluno.id} className="hover:bg-blue-50/30 transition-colors group">
+                    
+                    {/* Nome do Aluno */}
+                    <td className="p-4 pl-6 font-bold text-gray-800 whitespace-nowrap sticky left-0 bg-white group-hover:bg-blue-50/30 transition-colors z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                      {aluno.nome}
+                    </td>
+                    
+                    {/* Células de Cruzamento */}
+                    {tarefas.map(tarefa => {
+                      const entregou = verificarEntrega(aluno.id, tarefa.id);
                       return (
-                        <td key={j} className="px-4 py-4 text-center border-l border-gray-100">
+                        <td key={tarefa.id} className="p-3 text-center border-l border-gray-100">
                           {entregou ? (
-                            <div className="inline-flex bg-green-100 text-green-600 p-1.5 rounded-full shadow-sm" title="Entregue">
-                              <Check size={16}/>
+                            <div className="inline-flex bg-green-100 text-green-600 p-1.5 rounded-full shadow-sm hover:scale-110 transition-transform cursor-default" title="Atividade Entregue">
+                              <Check size={18} strokeWidth={3}/>
                             </div>
                           ) : (
-                            <div className="inline-flex bg-red-50 text-red-400 p-1.5 rounded-full shadow-sm" title="Pendente">
-                              <X size={16}/>
+                            <div className="inline-flex bg-red-50 text-red-300 p-1.5 rounded-full hover:scale-110 transition-transform cursor-default" title="Pendente">
+                              <X size={18} strokeWidth={3}/>
                             </div>
                           )}
                         </td>
@@ -153,8 +208,8 @@ export default function MapaEntregas() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
