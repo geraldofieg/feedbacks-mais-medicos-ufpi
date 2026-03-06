@@ -7,7 +7,8 @@ import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
-import Turmas from './pages/Turmas'; // NOVO: Import da tela de Turmas
+import Turmas from './pages/Turmas';
+import Tarefas from './pages/Tarefas'; // NOVO: Import da tela de Tarefas
 import NovaAtividade from './pages/NovaAtividade';
 import RevisarAtividade from './pages/RevisarAtividade';
 import Alunos from './pages/Alunos';
@@ -57,7 +58,8 @@ function App() {
           <Route path="/cadastro" element={<Signup />} />
           
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          <Route path="/turmas" element={<PrivateRoute><Turmas /></PrivateRoute>} /> {/* NOVO: Rota de Turmas */}
+          <Route path="/turmas" element={<PrivateRoute><Turmas /></PrivateRoute>} />
+          <Route path="/tarefas" element={<PrivateRoute><Tarefas /></PrivateRoute>} /> {/* NOVO: Rota de Tarefas adicionada! */}
           <Route path="/cronograma" element={<PrivateRoute><Cronograma /></PrivateRoute>} />
           <Route path="/comunicacao" element={<PrivateRoute><Comunicacao /></PrivateRoute>} />
           <Route path="/nova-atividade" element={<PrivateRoute><NovaAtividade /></PrivateRoute>} />
@@ -68,6 +70,7 @@ function App() {
           <Route path="/lista/:status" element={<PrivateRoute><ListaAtividades /></PrivateRoute>} />
           <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
           
+          {/* Rota de fallback: Se digitar uma URL que não existe, volta pro Dashboard */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </AuthProvider>
