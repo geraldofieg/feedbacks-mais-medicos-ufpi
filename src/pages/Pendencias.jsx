@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,7 @@ import Breadcrumb from '../components/Breadcrumb';
 export default function Pendencias() {
   const { currentUser, escolaSelecionada } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate(); 
   
   const [turmas, setTurmas] = useState([]);
   const [turmaAtiva, setTurmaAtiva] = useState(location.state?.turmaIdSelecionada || '');
@@ -216,21 +217,20 @@ export default function Pendencias() {
                 <div className="p-5 bg-white">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {item.devedores.map(aluno => (
-                      <div key={aluno.id} className="flex items-center justify-between gap-2 text-sm font-bold text-gray-700 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 p-3 rounded-xl border border-gray-100 transition-colors group">
+                      <div 
+                        key={aluno.id} 
+                        onClick={() => navigate('/comunicacao', { state: { turmaIdSelecionada: turmaAtiva, alunoAlvo: aluno.nome } })}
+                        className="flex items-center justify-between gap-2 text-sm font-bold text-gray-700 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 p-3 rounded-xl border border-gray-100 transition-colors group cursor-pointer"
+                        title="Ir para a Central de Comunicação"
+                      >
                         <div className="flex items-center gap-2 truncate">
                           <User size={16} className="text-gray-400 group-hover:text-blue-500 shrink-0"/> 
                           <span className="truncate">{aluno.nome}</span>
                         </div>
                         
-                        {/* A CORREÇÃO DE UX ESTÁ NESTA LINHA: SEMPRE VISÍVEL NO CELULAR (opacity-100) */}
-                        <Link 
-                          to="/comunicacao" 
-                          state={{ turmaIdSelecionada: turmaAtiva, alunoAlvo: aluno.nome }}
-                          className="bg-white p-2 md:p-1.5 rounded-md border border-gray-200 text-blue-500 md:text-gray-400 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 shrink-0 flex items-center gap-1"
-                          title="Cobrar Aluno na Central"
-                        >
+                        <div className="bg-white p-2 md:p-1.5 rounded-md border border-blue-200 md:border-gray-200 text-blue-600 md:text-gray-400 group-hover:text-blue-600 group-hover:border-blue-300 shadow-sm transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 shrink-0 flex items-center gap-1">
                           <MessageCircle size={14}/> <span className="text-[10px] uppercase font-black tracking-widest md:hidden">Cobrar</span>
-                        </Link>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -242,4 +242,4 @@ export default function Pendencias() {
       )}
     </div>
   );
-}
+                        }
