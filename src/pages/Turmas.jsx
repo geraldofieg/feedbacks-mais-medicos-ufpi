@@ -11,21 +11,20 @@ export default function Turmas() {
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Estados para Criação
   const [novaTurma, setNovaTurma] = useState('');
   const [salvando, setSalvando] = useState(false);
 
-  // Estados para Edição
   const [editandoId, setEditandoId] = useState(null);
   const [nomeEdicao, setNomeEdicao] = useState('');
 
   useEffect(() => {
     async function fetchTurmas() {
-      if (!currentUser || !escolaSelecionada) return;
+      // CORREÇÃO: Agora garantimos que existe o ID da escola
+      if (!currentUser || !escolaSelecionada?.id) return;
       try {
         const q = query(
           collection(db, 'turmas'),
-          where('instituicao', '==', escolaSelecionada),
+          where('instituicaoId', '==', escolaSelecionada.id), // A NOVA FECHADURA AQUI
           where('professorUid', '==', currentUser.uid)
         );
         const querySnapshot = await getDocs(q);
@@ -34,7 +33,6 @@ export default function Turmas() {
           ...doc.data()
         }));
         
-        // A MÁGICA DA LIXEIRA: Filtra no frontend para não mostrar o que está na lixeira
         const turmasAtivas = turmasData.filter(t => t.status !== 'lixeira');
         setTurmas(turmasAtivas.sort((a, b) => b.dataCriacao?.toMillis() - a.dataCriacao?.toMillis()));
       } catch (error) {
@@ -54,7 +52,8 @@ export default function Turmas() {
       setSalvando(true);
       const novaTurmaObj = {
         nome: novaTurma.trim(),
-        instituicao: escolaSelecionada,
+        instituicaoId: escolaSelecionada.id, // SALVANDO COM A NOVA FECHADURA
+        instituicaoNome: escolaSelecionada.nome, // Guardamos o nome como backup visual
         professorUid: currentUser.uid,
         status: 'ativa',
         dataCriacao: serverTimestamp()
@@ -70,7 +69,6 @@ export default function Turmas() {
     }
   }
 
-  // FUNÇÃO NOVA: Salva a alteração do nome
   async function handleSalvarEdicao(id) {
     if (!nomeEdicao.trim()) return;
     try {
@@ -83,13 +81,11 @@ export default function Turmas() {
     }
   }
 
-  // FUNÇÃO NOVA: Envia para a Lixeira (Soft Delete)
   async function handleLixeira(id, nome) {
     if (!window.confirm(`Tem certeza que deseja enviar a turma "${nome}" para a lixeira?\n\nAlunos e tarefas vinculados deixarão de aparecer nos relatórios principais.`)) return;
     
     try {
       await updateDoc(doc(db, 'turmas', id), { status: 'lixeira' });
-      // Remove a turma da tela imediatamente
       setTurmas(turmas.filter(t => t.id !== id));
     } catch (error) {
       console.error("Erro ao enviar para lixeira:", error);
@@ -106,8 +102,9 @@ export default function Turmas() {
         </div>
         <div>
           <h1 className="text-2xl font-black text-gray-800 leading-tight">Minhas Turmas</h1>
+          {/* CORREÇÃO VISUAL: Exibindo .nome */}
           <p className="text-gray-500 text-sm font-medium mt-0.5">
-            Gerencie os agrupamentos de alunos em: <strong className="text-gray-700">{escolaSelecionada}</strong>
+            Gerencie os agrupamentos de alunos em: <strong className="text-gray-700">{escolaSelecionada?.nome}</strong>
           </p>
         </div>
       </div>
@@ -149,7 +146,6 @@ export default function Turmas() {
                     <div className="flex justify-between items-start mb-3">
                       <div className="bg-blue-50 text-blue-600 p-2 rounded-lg"><BookOpen size={20}/></div>
                       
-                      {/* BOTÕES DE AÇÃO NO TOPO DO CARTÃO */}
                       <div className="flex items-center gap-1.5">
                         <button 
                           onClick={() => { setEditandoId(turma.id); setNomeEdicao(turma.nome); }} 
@@ -168,7 +164,6 @@ export default function Turmas() {
                       </div>
                     </div>
                     
-                    {/* MODO DE EDIÇÃO INLINE */}
                     {editandoId === turma.id ? (
                       <div className="flex items-center gap-2 mb-1 mt-2">
                         <input 
