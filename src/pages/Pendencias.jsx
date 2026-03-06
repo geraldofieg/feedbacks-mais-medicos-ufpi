@@ -18,33 +18,32 @@ export default function Pendencias() {
   const [loadingDados, setLoadingDados] = useState(false);
   const [erro, setErro] = useState(null);
 
-  // 1. Busca as Turmas
-  async function fetchTurmas() {
-    if (!currentUser || !escolaSelecionada?.id) {
-      setLoadingTurmas(false);
-      return; 
-    }
-    setErro(null);
-    setLoadingTurmas(true);
-    try {
-      const qT = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
-      const snapT = await getDocs(qT);
-      const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
-      setTurmas(turmasData);
-      
-      if (turmasData.length > 0 && !turmaAtiva) {
-        setTurmaAtiva(turmasData[0].id);
+  useEffect(() => {
+    async function fetchTurmas() {
+      if (!currentUser || !escolaSelecionada?.id) {
+        setLoadingTurmas(false);
+        return; 
       }
-    } catch (error) {
-      setErro("Falha de conexão com o banco de dados.");
-    } finally {
-      setLoadingTurmas(false);
+      setErro(null);
+      setLoadingTurmas(true);
+      try {
+        const qT = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        const snapT = await getDocs(qT);
+        const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        setTurmas(turmasData);
+        
+        if (turmasData.length > 0 && !turmaAtiva) {
+          setTurmaAtiva(turmasData[0].id);
+        }
+      } catch (error) {
+        setErro("Falha de conexão com o banco de dados.");
+      } finally {
+        setLoadingTurmas(false);
+      }
     }
-  }
+    fetchTurmas(); 
+  }, [currentUser, escolaSelecionada]);
 
-  useEffect(() => { fetchTurmas(); }, [currentUser, escolaSelecionada]);
-
-  // 2. Constrói o Relatório de Pendências (Focado na Tarefa, como na V1)
   useEffect(() => {
     async function fetchPendencias() {
       if (!turmaAtiva) {
@@ -67,7 +66,6 @@ export default function Pendencias() {
         const snapTarefas = await getDocs(qTarefas);
         const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
 
-        // Ordenação Original da V1: Mais recentes (ou com prazo mais longe) no topo
         const tarefasOrdenadas = tarefasData.sort((a, b) => {
           const timeA = a.dataFim?.toMillis() || (a.dataCriacao?.toMillis() || 0);
           const timeB = b.dataFim?.toMillis() || (b.dataCriacao?.toMillis() || 0);
@@ -103,7 +101,6 @@ export default function Pendencias() {
     fetchPendencias();
   }, [turmaAtiva]); 
 
-  // Função original da V1 mantida para calcular o selo do prazo
   const getStatusPrazo = (timestampFim) => {
     if (!timestampFim || !timestampFim.toDate) return null;
     const hoje = new Date();
@@ -125,9 +122,7 @@ export default function Pendencias() {
 
   const isCarregando = loadingTurmas || loadingDados;
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
-
-  // UX Defesa 1: Sem Instituição
-  if (!escolaSelecionada?.id) {
+    if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Breadcrumb items={[{ label: 'Pendências' }]} />
@@ -173,7 +168,7 @@ export default function Pendencias() {
       ) : erro ? (
         <div className="bg-red-50 border-2 border-dashed border-red-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10">
           <p className="text-red-600 font-bold mb-4">{erro}</p>
-          <button onClick={fetchTurmas} className="bg-red-600 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto hover:bg-red-700"><RefreshCw size={18} /> Tentar Novamente</button>
+          <button onClick={() => window.location.reload()} className="bg-red-600 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto hover:bg-red-700"><RefreshCw size={18} /> Tentar Novamente</button>
         </div>
       ) : turmas.length === 0 ? (
         <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10">
@@ -204,7 +199,6 @@ export default function Pendencias() {
                     </div>
                   </div>
                   
-                  {/* SELO DE PRAZO INTELIGENTE (Preservado da V1) */}
                   <div className="shrink-0 flex items-center gap-3">
                     {status ? (
                       <div className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 ${status.vencido ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}`}>
@@ -228,14 +222,14 @@ export default function Pendencias() {
                           <span className="truncate">{aluno.nome}</span>
                         </div>
                         
-                        {/* PONTE DE INTEGRAÇÃO COM COMUNICAÇÃO */}
+                        {/* A CORREÇÃO DE UX ESTÁ NESTA LINHA: SEMPRE VISÍVEL NO CELULAR (opacity-100) */}
                         <Link 
                           to="/comunicacao" 
                           state={{ turmaIdSelecionada: turmaAtiva, alunoAlvo: aluno.nome }}
-                          className="bg-white p-1.5 rounded-md border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-all opacity-0 group-hover:opacity-100 shrink-0"
-                          title="Cobrar Aluno"
+                          className="bg-white p-2 md:p-1.5 rounded-md border border-gray-200 text-blue-500 md:text-gray-400 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 shrink-0 flex items-center gap-1"
+                          title="Cobrar Aluno na Central"
                         >
-                          <MessageCircle size={14}/>
+                          <MessageCircle size={14}/> <span className="text-[10px] uppercase font-black tracking-widest md:hidden">Cobrar</span>
                         </Link>
                       </div>
                     ))}
@@ -248,4 +242,4 @@ export default function Pendencias() {
       )}
     </div>
   );
-                }
+}
