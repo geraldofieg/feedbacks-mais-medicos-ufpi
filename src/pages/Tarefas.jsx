@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Search, Pencil, Trash2, Check, X, CalendarClock, Calendar, StickyNote, GraduationCap } from 'lucide-react';
+import { FileText, Plus, Search, Pencil, Trash2, Check, X, CalendarClock, Calendar, StickyNote, GraduationCap, ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Tarefas() {
@@ -141,7 +141,7 @@ export default function Tarefas() {
       setTarefas(tarefas.filter(t => t.id !== id));
     } catch (error) { console.error("Erro remover:", error); }
   }
-   const formatarDataLocal = (ts) => {
+    const formatarDataLocal = (ts) => {
     if (!ts) return "";
     try {
       let d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -222,13 +222,20 @@ export default function Tarefas() {
                       <div className="flex items-center gap-3 truncate">
                         <div className="p-2.5 bg-white rounded-xl shadow-sm border border-gray-100">{getIconeTipo(tarefa.tipo)}</div>
                         <div className="truncate">
-                          <h3 className="font-black text-gray-800 truncate leading-tight">{tarefa.nomeTarefa || tarefa.titulo}</h3>
+                          {/* A MÁGICA DO TELETRANSPORTE AQUI! */}
+                          {(tarefa.tipo === 'entrega' || !tarefa.tipo) ? (
+                            <Link to={`/revisar/${tarefa.id}`} className="font-black text-orange-700 hover:text-orange-800 hover:underline truncate leading-tight flex items-center gap-1 group/link">
+                              {tarefa.nomeTarefa || tarefa.titulo} <ArrowRight size={14} className="opacity-0 group-hover/link:opacity-100 transition-opacity hidden md:block"/>
+                            </Link>
+                          ) : (
+                            <h3 className="font-black text-gray-800 truncate leading-tight">{tarefa.nomeTarefa || tarefa.titulo}</h3>
+                          )}
                           <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
                             {tarefa.tipo || 'entrega'} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem data'}
                           </div>
                         </div>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 shrink-0">
                         <button onClick={() => iniciarEdicao(tarefa)} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={20}/></button>
                         <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-2.5 text-red-400 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20}/></button>
                       </div>
@@ -262,4 +269,4 @@ export default function Tarefas() {
       </div>
     </div>
   );
-}
+                      }
