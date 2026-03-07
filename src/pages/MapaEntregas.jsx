@@ -84,7 +84,13 @@ export default function MapaEntregas() {
 
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
-        setTarefas(snapTarefas.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira').sort((a, b) => a.dataCriacao?.toMillis() - b.dataCriacao?.toMillis()));
+        
+        // CORREÇÃO DO BUG AQUI: Filtra apenas as do tipo "entrega" para gerar as colunas do Mapa
+        const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo))
+          .sort((a, b) => a.dataCriacao?.toMillis() - b.dataCriacao?.toMillis());
+          
+        setTarefas(tarefasData);
 
         const qAtividades = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
         const snapAtividades = await getDocs(qAtividades);
@@ -101,7 +107,8 @@ export default function MapaEntregas() {
   const verificarEntrega = (alunoId, tarefaId) => atividades.some(ativ => ativ.alunoId === alunoId && ativ.tarefaId === tarefaId);
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
   const isCarregando = loadingTurmas || loadingMatriz;
-    if (!escolaSelecionada?.id) {
+
+  if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Breadcrumb items={[{ label: 'Mapa de Entregas' }]} />
@@ -165,9 +172,9 @@ export default function MapaEntregas() {
       ) : tarefas.length === 0 ? (
         <div className="bg-orange-50 border border-orange-100 p-10 rounded-3xl text-center mt-6">
           <FileText className="mx-auto text-orange-300 mb-3" size={40} />
-          <h2 className="text-lg font-black text-orange-800 mb-1">Nenhuma Tarefa Criada</h2>
-          <p className="text-orange-600 text-sm mb-5">Crie tarefas para a turma <strong>{getNomeTurmaAtiva()}</strong> para gerar as colunas do mapa.</p>
-          <Link to="/tarefas" state={{ turmaIdSelecionada: turmaAtiva }} className="text-orange-600 font-bold hover:underline bg-white px-4 py-2 border border-orange-200 rounded-lg shadow-sm">Criar Primeira Tarefa</Link>
+          <h2 className="text-lg font-black text-orange-800 mb-1">Nenhuma Entrega Criada</h2>
+          <p className="text-orange-600 text-sm mb-5">Crie tarefas do tipo "Entrega" para a turma <strong>{getNomeTurmaAtiva()}</strong> para gerar as colunas do mapa.</p>
+          <Link to="/tarefas" state={{ turmaIdSelecionada: turmaAtiva }} className="text-orange-600 font-bold hover:underline bg-white px-4 py-2 border border-orange-200 rounded-lg shadow-sm">Criar Primeira Entrega</Link>
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-2">
@@ -188,7 +195,7 @@ export default function MapaEntregas() {
                   </th>
                   {tarefas.map(tarefa => (
                     <th key={tarefa.id} className="px-3 py-3 md:p-4 text-center border-b border-l border-gray-200 min-w-[100px] max-w-[150px]">
-                      <div className="text-[9px] uppercase font-black text-orange-500 tracking-widest mb-1 truncate">Tarefa</div>
+                      <div className="text-[9px] uppercase font-black text-orange-500 tracking-widest mb-1 truncate">Entrega</div>
                       <div className="font-bold text-gray-700 text-xs md:text-sm truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
                         {tarefa.nomeTarefa || tarefa.titulo}
                       </div>
@@ -228,4 +235,3 @@ export default function MapaEntregas() {
     </div>
   );
 }
-
