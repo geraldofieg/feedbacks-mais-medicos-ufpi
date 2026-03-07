@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Search, Pencil, Trash2, Check, X, CalendarClock, Calendar, StickyNote } from 'lucide-react';
+import { FileText, Plus, Search, Pencil, Trash2, Check, X, CalendarClock, Calendar, StickyNote, GraduationCap } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Tarefas() {
@@ -25,6 +25,13 @@ export default function Tarefas() {
   const [dataFimEdicao, setDataFimEdicao] = useState('');
   const [tipoEdicao, setTipoEdicao] = useState('entrega');
 
+  // CORREÇÃO DO BUG: O "Espião" que força a mudança de turma quando você clica no Dashboard
+  useEffect(() => {
+    if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
+      setTurmaAtiva(location.state.turmaIdSelecionada);
+    }
+  }, [location.state]);
+
   useEffect(() => {
     async function fetchTurmas() {
       if (!currentUser || !escolaSelecionada?.id) return;
@@ -33,11 +40,19 @@ export default function Tarefas() {
         const snapT = await getDocs(qT);
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
-        if (turmasData.length > 0 && !turmaAtiva) setTurmaAtiva(turmasData[0].id);
+        
+        // Lógica de "Memória" corrigida
+        if (turmasData.length > 0) {
+          if (location.state?.turmaIdSelecionada) {
+            setTurmaAtiva(location.state.turmaIdSelecionada);
+          } else if (!turmaAtiva) {
+            setTurmaAtiva(turmasData[0].id);
+          }
+        }
       } catch (error) { console.error("Erro fetch turmas:", error); }
     }
     fetchTurmas();
-  }, [currentUser, escolaSelecionada]);
+  }, [currentUser, escolaSelecionada, location.state]);
 
   useEffect(() => {
     async function fetchTarefas() {
@@ -144,71 +159,100 @@ export default function Tarefas() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Gestão e Cronograma' }]} />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-        <div className="lg:col-span-1">
-          {/* A CORREÇÃO ESTÁ AQUI: lg:sticky e lg:top-24 matam o fantasma no celular */}
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm lg:sticky lg:top-24">
-            <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Turma Ativa</label>
-            <select className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl mb-6 font-black text-blue-700 outline-none" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
-              {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
+      
+      {/* 1. SELETOR DE TURMA ISOLADO NO TOPO */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600"><GraduationCap size={24}/></div>
+          <div>
+            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Turma Ativa</h2>
+            <p className="text-xs text-gray-500 font-medium">Selecione para ver ou gerenciar os registros</p>
+          </div>
+        </div>
+        {turmas.length > 0 && (
+          <select className="w-full sm:w-auto px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl font-black text-blue-700 outline-none cursor-pointer focus:ring-2 focus:ring-blue-500" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
+            {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* 2. GRID INVERTIDO (A Lista vem antes do Formulário) */}
+      <div className="flex flex-col lg:flex-row gap-6 mt-6">
+        
+        {/* COLUNA ESQUERDA: A LISTA (Fica no topo no celular) */}
+        <div className="flex-1 lg:w-2/3 space-y-4">
+          <input type="text" placeholder="Procurar no radar da turma..." className="w-full px-6 py-4 bg-white border border-gray-200 rounded-2xl outline-none shadow-sm focus:ring-2 focus:ring-blue-500" value={busca} onChange={e => setBusca(e.target.value)} />
+          
+          <div className="grid grid-cols-1 gap-4">
+            {loading ? (
+              <div className="text-center py-10 font-bold text-gray-400 animate-pulse">Carregando registros...</div>
+            ) : tarefasFiltradas.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                <p className="text-gray-500 font-medium">Nenhum registro encontrado para esta turma.</p>
+              </div>
+            ) : (
+              tarefasFiltradas.map(tarefa => (
+                <div key={tarefa.id} className={`bg-white p-5 rounded-2xl border transition-all ${editandoId === tarefa.id ? 'border-blue-500 ring-4 ring-blue-50 shadow-lg' : `${getCorTipo(tarefa.tipo)}`}`}>
+                  {editandoId === tarefa.id ? (
+                    <div className="space-y-4 animate-in fade-in zoom-in duration-200">
+                      <div className="grid grid-cols-2 gap-3">
+                        <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
+                        <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white outline-none" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
+                          <option value="entrega">Entrega</option>
+                          <option value="compromisso">Compromisso</option>
+                          <option value="lembrete">Lembrete</option>
+                        </select>
+                      </div>
+                      <input type="datetime-local" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
+                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm outline-none resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3"/>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleSalvarEdicao(tarefa.id)} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold shadow-md">Salvar</button>
+                        <button onClick={() => setEditandoId(null)} className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-xl font-bold">Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-3 truncate">
+                        <div className="p-2.5 bg-white rounded-xl shadow-sm border border-gray-100">{getIconeTipo(tarefa.tipo)}</div>
+                        <div className="truncate">
+                          <h3 className="font-black text-gray-800 truncate leading-tight">{tarefa.nomeTarefa || tarefa.titulo}</h3>
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                            {tarefa.tipo || 'entrega'} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem data'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={() => iniciarEdicao(tarefa)} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={20}/></button>
+                        <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-2.5 text-red-400 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20}/></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* COLUNA DIREITA: O FORMULÁRIO (Fica no fundo no celular) */}
+        <div className="lg:w-1/3">
+          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-sm lg:sticky lg:top-24">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Plus size={16}/> Adicionar à Turma
+            </h2>
             <form onSubmit={handleCriar} className="space-y-4">
-              <select className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700 outline-none" value={novaTarefa.tipo} onChange={e => setNovaTarefa({...novaTarefa, tipo: e.target.value})}>
+              <select className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.tipo} onChange={e => setNovaTarefa({...novaTarefa, tipo: e.target.value})}>
                 <option value="entrega">📝 Entrega (Desafio)</option>
                 <option value="compromisso">📅 Compromisso (Aula)</option>
                 <option value="lembrete">💡 Lembrete (Post-it)</option>
               </select>
-              <input type="text" required placeholder="Título..." className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} />
-              <input type="datetime-local" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})} />
-              <textarea placeholder="Observações..." rows="3" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none resize-none" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
-              <button disabled={salvando} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-md"> {salvando ? 'Salvando...' : 'Adicionar'} </button>
+              <input type="text" required placeholder="Título..." className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} />
+              <input type="datetime-local" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-gray-700" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})} />
+              <textarea placeholder="Observações..." rows="3" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none resize-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
+              <button disabled={salvando || !turmaAtiva} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-md hover:bg-blue-700 transition-all disabled:opacity-50"> {salvando ? 'Salvando...' : 'Adicionar'} </button>
             </form>
           </div>
         </div>
 
-        <div className="lg:col-span-2 space-y-4">
-          <input type="text" placeholder="Procurar no radar..." className="w-full px-6 py-4 bg-white border border-gray-200 rounded-2xl outline-none shadow-sm" value={busca} onChange={e => setBusca(e.target.value)} />
-          <div className="grid grid-cols-1 gap-4">
-            {tarefasFiltradas.map(tarefa => (
-              <div key={tarefa.id} className={`bg-white p-5 rounded-2xl border transition-all ${editandoId === tarefa.id ? 'border-blue-500 ring-4 ring-blue-50 shadow-lg' : `${getCorTipo(tarefa.tipo)}`}`}>
-                {editandoId === tarefa.id ? (
-                  <div className="space-y-4 animate-in fade-in zoom-in duration-200">
-                    <div className="grid grid-cols-2 gap-3">
-                      <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
-                      <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white outline-none" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
-                        <option value="entrega">Entrega</option>
-                        <option value="compromisso">Compromisso</option>
-                        <option value="lembrete">Lembrete</option>
-                      </select>
-                    </div>
-                    <input type="datetime-local" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
-                    <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm outline-none resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3"/>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleSalvarEdicao(tarefa.id)} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold shadow-md">Salvar</button>
-                      <button onClick={() => setEditandoId(null)} className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-xl font-bold">Cancelar</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-3 truncate">
-                      <div className="p-2.5 bg-white rounded-xl shadow-sm border border-gray-100">{getIconeTipo(tarefa.tipo)}</div>
-                      <div className="truncate">
-                        <h3 className="font-black text-gray-800 truncate leading-tight">{tarefa.nomeTarefa || tarefa.titulo}</h3>
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                          {tarefa.tipo || 'entrega'} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem data'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => iniciarEdicao(tarefa)} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={20}/></button>
-                      <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-2.5 text-red-400 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20}/></button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
