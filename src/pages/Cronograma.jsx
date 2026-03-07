@@ -1,31 +1,86 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, MonitorPlay, BookOpen, Clock, CheckCircle2, FileText, X, GraduationCap } from 'lucide-react';
-import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestantes } from '../data/cronogramaData';
+import { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { ArrowLeft, CalendarDays, Clock, CheckCircle2, FileText, GraduationCap, Calendar, StickyNote, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Cronograma() {
-  const { escolaSelecionada } = useAuth();
-  const [abaAtiva, setAbaAtiva] = useState('assincrono');
-  const [esconderPassados, setEsconderPassados] = useState(true);
+  const { currentUser, escolaSelecionada } = useAuth();
+  const location = useLocation();
   
-  const [detalhesAdm, setDetalhesAdm] = useState(null);
+  const [esconderPassados, setEsconderPassados] = useState(true);
+  const [turmas, setTurmas] = useState([]);
+  const [turmaAtiva, setTurmaAtiva] = useState(location.state?.turmaIdSelecionada || '');
+  const [tarefas, setTarefas] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const formatarData = (dataIso) => {
-    const [ano, mes, dia] = dataIso.split('-');
-    return `${dia}/${mes}/${ano.substring(2)}`;
+  // 1. Busca as Turmas do Professor na Instituição
+  useEffect(() => {
+    async function fetchTurmas() {
+      if (!currentUser || !escolaSelecionada?.id) return;
+      try {
+        const qT = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        const snapT = await getDocs(qT);
+        const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        setTurmas(turmasData);
+        if (turmasData.length > 0 && !turmaAtiva) setTurmaAtiva(turmasData[0].id);
+      } catch (error) { console.error("Erro buscar turmas:", error); }
+    }
+    fetchTurmas();
+  }, [currentUser, escolaSelecionada]);
+
+  // 2. Busca TODAS as Tarefas da Turma Ativa
+  useEffect(() => {
+    async function fetchTarefas() {
+      if (!turmaAtiva) { setTarefas([]); setLoading(false); return; }
+      setLoading(true);
+      try {
+        const qA = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
+        const snapA = await getDocs(qA);
+        const tarefasData = snapA.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        setTarefas(tarefasData);
+      } catch (error) { console.error("Erro buscar tarefas:", error); } 
+      finally { setLoading(false); }
+    }
+    fetchTarefas();
+  }, [turmaAtiva]);
+
+  // Calculadora de Prazos Dinâmica
+  const getStatusPrazo = (ts) => {
+    if (!ts) return null;
+    const dataFim = ts.toDate ? ts.toDate() : new Date(ts);
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const fimDia = new Date(dataFim); fimDia.setHours(0, 0, 0, 0);
+    
+    const diff = fimDia.getTime() - hoje.getTime();
+    const dias = Math.ceil(diff / (1000 * 3600 * 24));
+    
+    return {
+      dataFormatada: dataFim.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      diasRestantes: dias,
+      vencido: dias < 0,
+      timestampVal: dataFim.getTime()
+    };
   };
 
-  const listaAssincrona = esconderPassados 
-    ? cronogramaAssincrono.filter(item => getStatusData(item.inicio, item.fim) !== 'passado')
-    : cronogramaAssincrono;
+  const getEstiloCartao = (tipo) => {
+    const t = (tipo || 'entrega').toLowerCase();
+    if (t === 'compromisso') return { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-900', shadow: 'shadow-[0_0_10px_rgba(168,85,247,0.4)]', badge: 'bg-purple-600', icon: <Calendar size={18}/> };
+    if (t === 'lembrete') return { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-900', shadow: 'shadow-[0_0_10px_rgba(59,130,246,0.4)]', badge: 'bg-blue-600', icon: <StickyNote size={18}/> };
+    return { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-900', shadow: 'shadow-[0_0_10px_rgba(249,115,22,0.4)]', badge: 'bg-orange-500', icon: <FileText size={18}/> };
+  };
 
-  const listaSincrona = esconderPassados 
-    ? cronogramaSincrono.filter(item => getStatusData(item.inicio, item.fim) !== 'passado')
-    : cronogramaSincrono;
+  // Separação Inteligente: O que tem data vs O que não tem
+  const itensComPrazo = tarefas
+    .filter(t => t.dataFim)
+    .map(t => ({ ...t, statusObj: getStatusPrazo(t.dataFim) }))
+    .filter(t => !esconderPassados || t.statusObj.diasRestantes >= 0)
+    .sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal); // Ordena do mais perto de vencer para o mais longe
 
-  // Defesa UX Nível 1: Exige Instituição Selecionada
+  const itensSemPrazo = tarefas.filter(t => !t.dataFim);
+    // Defesa UX Nível 1
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -44,190 +99,116 @@ export default function Cronograma() {
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         
-        {/* Cabeçalho Atualizado V3 */}
         <Breadcrumb items={[{ label: `Cronograma (${escolaSelecionada.nome})` }]} />
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-8">
           <div className="flex items-center gap-4">
             <Link to="/" className="text-gray-400 hover:text-blue-600 transition-colors bg-white p-2 rounded-xl border border-gray-200 shadow-sm hidden md:block"><ArrowLeft size={20} /></Link>
             <h2 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-              <CalendarDays className="text-blue-600" /> Cronograma Oficial
+              <CalendarDays className="text-blue-600" /> Cronograma Dinâmico
             </h2>
           </div>
           
-          <button 
-            onClick={() => setEsconderPassados(!esconderPassados)}
-            className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-colors shadow-sm self-start md:self-auto ${esconderPassados ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
-          >
-            {esconderPassados ? '👁️ Mostrar Passados' : '🙈 Ocultar Passados'}
-          </button>
+          <div className="flex items-center gap-3">
+            {turmas.length > 0 && (
+              <select className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 py-2.5 px-4 font-bold shadow-sm outline-none" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
+                {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+              </select>
+            )}
+            <button onClick={() => setEsconderPassados(!esconderPassados)} className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-colors shadow-sm ${esconderPassados ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+              {esconderPassados ? '👁️ Mostrar Passados' : '🙈 Ocultar Passados'}
+            </button>
+          </div>
         </div>
 
-        {/* Abas Superiores */}
-        <div className="flex gap-2 mb-8 bg-gray-200/50 p-1.5 rounded-2xl">
-          <button onClick={() => setAbaAtiva('assincrono')} className={`flex-1 py-3.5 rounded-xl font-black flex justify-center items-center gap-2 transition-all ${abaAtiva === 'assincrono' ? 'bg-white text-blue-700 shadow-md transform scale-[1.01]' : 'text-gray-500 hover:text-gray-700'}`}>
-            <BookOpen size={20} /> ASSÍNCRONO
-          </button>
-          <button onClick={() => setAbaAtiva('sincrono')} className={`flex-1 py-3.5 rounded-xl font-black flex justify-center items-center gap-2 transition-all ${abaAtiva === 'sincrono' ? 'bg-white text-purple-700 shadow-md transform scale-[1.01]' : 'text-gray-500 hover:text-gray-700'}`}>
-            <MonitorPlay size={20} /> SÍNCRONO
-          </button>
-        </div>
-                {/* LINHA DO TEMPO (Timeline) */}
-        <div className="relative border-l-2 border-gray-200 ml-4 md:ml-8 pl-6 md:pl-10 space-y-8">
-          
-          {abaAtiva === 'assincrono' && listaAssincrona.map((item) => {
-            const status = getStatusData(item.inicio, item.fim);
-            const isAtual = status === 'atual';
-            const diasRestantes = isAtual ? getDiasRestantes(item.fim) : 0;
-
-            return (
-              <div key={`async-${item.id}`} className={`relative p-5 rounded-2xl border transition-all ${isAtual ? 'bg-blue-50 border-blue-300 shadow-md transform scale-[1.02]' : 'bg-white border-gray-200'}`}>
-                
-                <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 ${isAtual ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : status === 'passado' ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
-
-                <button 
-                  onClick={() => setDetalhesAdm({ tipo: 'assincrono', dados: item })}
-                  className="absolute top-4 right-4 text-gray-400 hover:text-blue-600 flex items-center gap-1 text-xs font-bold transition-colors bg-gray-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg border border-gray-100"
-                >
-                  <FileText size={14} /> Adm
-                </button>
-
-                {isAtual && (
-                  <span className="absolute -top-3 left-6 bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                    <Clock size={12}/> EM ANDAMENTO (Faltam {diasRestantes} dias)
-                  </span>
-                )}
-                {status === 'passado' && <span className="absolute -top-3 right-6 md:right-auto md:left-6 bg-gray-200 text-gray-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Concluído</span>}
-
-                <div className={`mt-2 pr-16 md:pr-24 ${status === 'passado' ? 'opacity-60' : ''}`}>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">{item.eixo}</p>
-                  <h3 className={`text-lg sm:text-xl font-black mb-2 ${isAtual ? 'text-blue-900' : 'text-gray-800'}`}>{item.modulo}</h3>
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-500 bg-gray-100/50 inline-flex px-3 py-1.5 rounded-lg border border-gray-100 mt-1">
-                    <CalendarDays size={16} className="text-gray-400"/>
-                    {formatarData(item.inicio)} até {formatarData(item.fim)}
-                  </div>
+        {loading ? (
+          <div className="p-10 text-center animate-pulse font-bold text-gray-400">Montando calendário...</div>
+        ) : tarefas.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-3xl border-2 border-dashed border-gray-200">
+            <CalendarDays className="mx-auto text-gray-300 mb-4" size={48} />
+            <p className="text-gray-500 font-medium text-lg">Nenhum evento programado para esta turma.</p>
+            <p className="text-gray-400 text-sm mt-2">Vá na aba "Tarefas" para adicionar entregas, reuniões ou lembretes.</p>
+          </div>
+        ) : (
+          <div className="space-y-12">
+            
+            {/* SEÇÃO 1: O RADAR (ITENS SEM DATA) */}
+            {itensSemPrazo.length > 0 && (
+              <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
+                <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <AlertCircle size={18}/> No Radar (Sem prazo definido)
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {itensSemPrazo.map(item => {
+                    const estilo = getEstiloCartao(item.tipo);
+                    return (
+                      <div key={item.id} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-gray-50 border-gray-200 group`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={`p-1.5 rounded-lg text-white ${estilo.badge}`}>{estilo.icon}</div>
+                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{item.tipo || 'entrega'}</span>
+                        </div>
+                        <h4 className="font-bold text-gray-800 leading-tight mb-2">{item.nomeTarefa || item.titulo}</h4>
+                        <p className="text-xs text-gray-500 italic line-clamp-3">{item.enunciado}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            );
-          })}
+            )}
 
-          {abaAtiva === 'sincrono' && listaSincrona.map((item) => {
-            const status = getStatusData(item.inicio, item.fim);
-            const isAtual = status === 'atual';
-            const diasRestantes = isAtual ? getDiasRestantes(item.fim) : 0;
+            {/* SEÇÃO 2: A LINHA DO TEMPO (ITENS COM DATA) */}
+            {itensComPrazo.length > 0 && (
+              <div className="relative border-l-2 border-gray-200 ml-4 md:ml-8 pl-6 md:pl-10 space-y-8">
+                {itensComPrazo.map((item) => {
+                  const status = item.statusObj;
+                  const isAtual = status.diasRestantes >= 0 && status.diasRestantes <= 7; // Destaca o que vence nos próximos 7 dias
+                  const isPassado = status.vencido;
+                  const estilo = getEstiloCartao(item.tipo);
 
-            return (
-              <div key={`sync-${item.semana}`} className={`relative p-5 rounded-2xl border transition-all ${isAtual ? 'bg-purple-50 border-purple-300 shadow-md transform scale-[1.02]' : 'bg-white border-gray-200'}`}>
-                
-                <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 ${isAtual ? 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]' : status === 'passado' ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
+                  return (
+                    <div key={item.id} className={`relative p-5 rounded-2xl border transition-all ${isAtual ? `${estilo.bg} ${estilo.border} shadow-md transform scale-[1.02]` : 'bg-white border-gray-200'}`}>
+                      
+                      {/* Bolinha da Timeline */}
+                      <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 ${isAtual ? `${estilo.badge} ${estilo.shadow}` : isPassado ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
 
-                <button 
-                  onClick={() => setDetalhesAdm({ tipo: 'sincrono', dados: item })}
-                  className="absolute top-4 right-4 text-gray-400 hover:text-purple-600 flex items-center gap-1 text-xs font-bold transition-colors bg-gray-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg border border-gray-100"
-                >
-                  <FileText size={14} /> Adm
-                </button>
+                      {/* Badge Superior */}
+                      {isAtual && (
+                        <span className={`absolute -top-3 left-6 text-white px-3 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-sm ${estilo.badge}`}>
+                          <Clock size={12}/> VENCE EM {status.diasRestantes} DIAS
+                        </span>
+                      )}
+                      {isPassado && <span className="absolute -top-3 left-6 bg-gray-200 text-gray-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Passado / Vencido</span>}
+                      {!isAtual && !isPassado && <span className="absolute -top-3 left-6 bg-gray-100 text-gray-500 border border-gray-200 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1"><CalendarDays size={12}/> Faltam {status.diasRestantes} dias</span>}
 
-                {isAtual && (
-                  <span className="absolute -top-3 left-6 bg-purple-600 text-white px-3 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                    <Clock size={12}/> SEMANA ATUAL (Faltam {diasRestantes} dias)
-                  </span>
-                )}
+                      <div className={`mt-2 ${isPassado ? 'opacity-60' : ''}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          {estilo.icon}
+                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{item.tipo || 'entrega'}</span>
+                        </div>
+                        
+                        <h3 className={`text-lg sm:text-xl font-black mb-2 ${isAtual ? estilo.text : 'text-gray-800'}`}>
+                          {item.nomeTarefa || item.titulo}
+                        </h3>
+                        
+                        <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-500 bg-gray-100/50 inline-flex px-3 py-1.5 rounded-lg border border-gray-100 mt-1">
+                          <Clock size={16} className="text-gray-400"/>
+                          Data final: {status.dataFormatada}
+                        </div>
 
-                <div className={`mt-2 pr-16 md:pr-24 ${status === 'passado' ? 'opacity-60' : ''}`}>
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className={`text-lg sm:text-xl font-black ${isAtual ? 'text-purple-900' : 'text-gray-800'}`}>Semana {item.semana}</h3>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-bold text-gray-500 bg-gray-100/50 inline-flex px-2 py-1 mb-4 rounded-lg border border-gray-100">
-                    <CalendarDays size={14} className="text-gray-400"/> {formatarData(item.inicio)} a {formatarData(item.fim)}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-100 text-sm shadow-sm">
-                      <span className="font-bold text-gray-400 text-[10px] sm:text-xs uppercase block mb-1">Encontro 1 (Vídeo)</span>
-                      <span className="font-medium text-gray-700">{item.tema1}</span>
+                        {item.enunciado && (
+                          <div className="mt-4 p-3 bg-white rounded-xl border border-gray-100 text-sm shadow-sm font-medium text-gray-600">
+                            {item.enunciado}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-100 text-sm shadow-sm">
-                      <span className="font-bold text-gray-400 text-[10px] sm:text-xs uppercase block mb-1">Encontro 2 (Sala Invertida)</span>
-                      <span className="font-medium text-gray-700">{item.tema2}</span>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-
-        {/* MODAL ADMINISTRATIVO */}
-        {detalhesAdm && (
-          <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setDetalhesAdm(null)}>
-            <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-              
-              <div className="bg-gray-800 p-4 flex justify-between items-center text-white">
-                <h3 className="font-bold flex items-center gap-2"><FileText size={18}/> Ficha Técnica Oficial (PDF)</h3>
-                <button onClick={() => setDetalhesAdm(null)} className="text-gray-400 hover:text-white transition-colors bg-gray-700 p-1 rounded-lg"><X size={20}/></button>
-              </div>
-
-              <div className="p-6">
-                {detalhesAdm.tipo === 'assincrono' && (
-                  <div className="space-y-4">
-                    <div>
-                      <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Eixo e Módulo Oficial</span>
-                      <p className="font-medium text-gray-900 bg-gray-50 p-4 rounded-xl border border-gray-200 whitespace-pre-line leading-relaxed shadow-inner">
-                        {detalhesAdm.dados.tituloCompleto}
-                      </p>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-                      <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-center">
-                        <span className="block text-[10px] font-black text-blue-500 uppercase">Carga Horária</span>
-                        <span className="text-lg font-black text-blue-900">{detalhesAdm.dados.ch}h</span>
-                      </div>
-                      <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-center">
-                        <span className="block text-[10px] font-black text-blue-500 uppercase">Créditos</span>
-                        <span className="text-lg font-black text-blue-900">{detalhesAdm.dados.creditos}</span>
-                      </div>
-                      <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-center">
-                        <span className="block text-[10px] font-black text-blue-500 uppercase">Semanas</span>
-                        <span className="text-lg font-black text-blue-900">{detalhesAdm.dados.semanas}</span>
-                      </div>
-                      <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-center">
-                        <span className="block text-[10px] font-black text-blue-500 uppercase">Duração</span>
-                        <span className="text-lg font-black text-blue-900">{detalhesAdm.dados.dias} <span className="text-xs">dias</span></span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {detalhesAdm.tipo === 'sincrono' && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                       <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 text-center">
-                        <span className="block text-[10px] font-black text-purple-500 uppercase">Carga Horária (Módulo)</span>
-                        <span className="text-lg font-black text-purple-900">90h</span>
-                      </div>
-                      <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 text-center">
-                        <span className="block text-[10px] font-black text-purple-500 uppercase">Créditos (Módulo)</span>
-                        <span className="text-lg font-black text-purple-900">6</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Encontro 1 - Texto Integral</span>
-                      <p className="text-sm font-medium text-gray-800 bg-gray-50 p-3.5 rounded-xl border border-gray-100 shadow-inner">{detalhesAdm.dados.tema1Completo}</p>
-                    </div>
-                    <div>
-                      <span className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Encontro 2 - Texto Integral</span>
-                      <p className="text-sm font-medium text-gray-800 bg-gray-50 p-3.5 rounded-xl border border-gray-100 shadow-inner">{detalhesAdm.dados.tema2Completo}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
           </div>
         )}
-
       </div>
     </div>
   );
-                  }
+        }
