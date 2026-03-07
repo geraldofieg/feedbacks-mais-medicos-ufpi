@@ -26,7 +26,6 @@ export default function BotaoGlobal() {
   if (!escolaSelecionada?.id || location.pathname === '/login') return null;
 
   return (
-    {/* A MÁGICA ESTÁ AQUI: pointer-events-none mata a barreira invisível */}
     <div ref={menuRef} className="fixed bottom-6 right-6 md:bottom-10 md:right-10 z-50 flex flex-col items-end pointer-events-none">
       
       <div 
@@ -52,7 +51,6 @@ export default function BotaoGlobal() {
 
       <button
         onClick={() => setAberto(!aberto)}
-        {/* A MÁGICA PARTE 2: pointer-events-auto garante que apenas o botão recebe clique */}
         className={`pointer-events-auto p-4 rounded-full shadow-xl transition-all duration-300 flex items-center justify-center ${
           aberto ? 'bg-red-500 hover:bg-red-600 rotate-90 scale-95' : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 hover:shadow-2xl'
         } text-white`}
