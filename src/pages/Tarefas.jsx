@@ -19,7 +19,6 @@ export default function Tarefas() {
   const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataFim: '', tipo: 'entrega' });
   const [salvando, setSalvando] = useState(false);
 
-  // Estados de Edição
   const [editandoId, setEditandoId] = useState(null);
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
@@ -35,7 +34,7 @@ export default function Tarefas() {
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
         if (turmasData.length > 0 && !turmaAtiva) setTurmaAtiva(turmasData[0].id);
-      } catch (error) { console.error("Erro turmas:", error); }
+      } catch (error) { console.error("Erro fetch turmas:", error); }
     }
     fetchTurmas();
   }, [currentUser, escolaSelecionada]);
@@ -49,13 +48,12 @@ export default function Tarefas() {
         const snapA = await getDocs(qA);
         const tarefasData = snapA.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTarefas(tarefasData.sort((a, b) => (b.dataCriacao?.toMillis() || 0) - (a.dataCriacao?.toMillis() || 0)));
-      } catch (error) { console.error("Erro tarefas:", error); } 
+      } catch (error) { console.error("Erro fetch tarefas:", error); } 
       finally { setLoading(false); }
     }
     fetchTarefas();
   }, [turmaAtiva, escolaSelecionada]);
 
-  // Conversor Universal de Data: Ignora erros de formato para não travar o código
   const tsToInput = (ts) => {
     if (!ts) return "";
     try {
@@ -69,7 +67,6 @@ export default function Tarefas() {
     } catch (e) { return ""; }
   };
 
-  // FUNÇÃO DE ATIVAÇÃO: Prepara os dados e abre o formulário de edição
   const iniciarEdicao = (t) => {
     const tiposValidos = ['entrega', 'compromisso', 'lembrete'];
     const tipoNormalizado = (t.tipo || 'entrega').toLowerCase();
@@ -78,7 +75,7 @@ export default function Tarefas() {
     setEnunciadoEdicao(t.enunciado || '');
     setDataFimEdicao(tsToInput(t.dataFim));
     setTipoEdicao(tiposValidos.includes(tipoNormalizado) ? tipoNormalizado : 'entrega');
-    setEditandoId(t.id); // Ativa a visualização do formulário
+    setEditandoId(t.id); 
   };
 
   async function handleSalvarEdicao(id) {
@@ -149,13 +146,14 @@ export default function Tarefas() {
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Gestão e Cronograma' }]} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-1">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm sticky top-24">
+          {/* A CORREÇÃO ESTÁ AQUI: lg:sticky e lg:top-24 matam o fantasma no celular */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm lg:sticky lg:top-24">
             <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Turma Ativa</label>
-            <select className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl mb-6 font-black text-blue-700" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
+            <select className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl mb-6 font-black text-blue-700 outline-none" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
               {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
             </select>
             <form onSubmit={handleCriar} className="space-y-4">
-              <select className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700" value={novaTarefa.tipo} onChange={e => setNovaTarefa({...novaTarefa, tipo: e.target.value})}>
+              <select className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700 outline-none" value={novaTarefa.tipo} onChange={e => setNovaTarefa({...novaTarefa, tipo: e.target.value})}>
                 <option value="entrega">📝 Entrega (Desafio)</option>
                 <option value="compromisso">📅 Compromisso (Aula)</option>
                 <option value="lembrete">💡 Lembrete (Post-it)</option>
@@ -176,14 +174,14 @@ export default function Tarefas() {
                 {editandoId === tarefa.id ? (
                   <div className="space-y-4 animate-in fade-in zoom-in duration-200">
                     <div className="grid grid-cols-2 gap-3">
-                      <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
-                      <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
+                      <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
+                      <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white outline-none" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
                         <option value="entrega">Entrega</option>
                         <option value="compromisso">Compromisso</option>
                         <option value="lembrete">Lembrete</option>
                       </select>
                     </div>
-                    <input type="datetime-local" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
+                    <input type="datetime-local" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
                     <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm outline-none resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3"/>
                     <div className="flex gap-2">
                       <button onClick={() => handleSalvarEdicao(tarefa.id)} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold shadow-md">Salvar</button>
@@ -214,4 +212,4 @@ export default function Tarefas() {
       </div>
     </div>
   );
-                          }
+}
