@@ -14,7 +14,11 @@ export default function Tarefas() {
   const [tarefas, setTarefas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
-  const [turmaAtiva, setTurmaAtiva] = useState(location.state?.turmaIdSelecionada || '');
+  
+  // A MÁGICA DA MEMÓRIA: Verifica localStorage antes de ficar vazio
+  const [turmaAtiva, setTurmaAtiva] = useState(() => {
+    return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
+  });
 
   const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataFim: '', tipo: 'entrega' });
   const [salvando, setSalvando] = useState(false);
@@ -25,12 +29,17 @@ export default function Tarefas() {
   const [dataFimEdicao, setDataFimEdicao] = useState('');
   const [tipoEdicao, setTipoEdicao] = useState('entrega');
 
-  // CORREÇÃO DO BUG: O "Espião" que força a mudança de turma quando você clica no Dashboard
+  // ESPIÃO DE CLIQUES
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
       setTurmaAtiva(location.state.turmaIdSelecionada);
     }
   }, [location.state]);
+
+  // SALVA NA MEMÓRIA: Toda vez que mexer aqui, as outras abas vão saber!
+  useEffect(() => {
+    if (turmaAtiva) localStorage.setItem('ultimaTurmaAtiva', turmaAtiva);
+  }, [turmaAtiva]);
 
   useEffect(() => {
     async function fetchTurmas() {
@@ -41,18 +50,19 @@ export default function Tarefas() {
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
         
-        // Lógica de "Memória" corrigida
-        if (turmasData.length > 0) {
-          if (location.state?.turmaIdSelecionada) {
-            setTurmaAtiva(location.state.turmaIdSelecionada);
-          } else if (!turmaAtiva) {
-            setTurmaAtiva(turmasData[0].id);
-          }
+        // Aplica a Memória Global
+        const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || turmaAtiva;
+        const isValid = turmasData.some(t => t.id === targetTurma);
+        
+        if (isValid) {
+          if (targetTurma !== turmaAtiva) setTurmaAtiva(targetTurma);
+        } else if (turmasData.length > 0) {
+          setTurmaAtiva(turmasData[0].id);
         }
       } catch (error) { console.error("Erro fetch turmas:", error); }
     }
     fetchTurmas();
-  }, [currentUser, escolaSelecionada, location.state]);
+  }, [currentUser, escolaSelecionada]);
 
   useEffect(() => {
     async function fetchTarefas() {
@@ -131,7 +141,7 @@ export default function Tarefas() {
       setTarefas(tarefas.filter(t => t.id !== id));
     } catch (error) { console.error("Erro remover:", error); }
   }
-    const formatarDataLocal = (ts) => {
+   const formatarDataLocal = (ts) => {
     if (!ts) return "";
     try {
       let d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -160,7 +170,6 @@ export default function Tarefas() {
     <div className="max-w-7xl mx-auto px-4 py-6">
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Gestão e Cronograma' }]} />
       
-      {/* 1. SELETOR DE TURMA ISOLADO NO TOPO */}
       <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600"><GraduationCap size={24}/></div>
@@ -176,10 +185,8 @@ export default function Tarefas() {
         )}
       </div>
 
-      {/* 2. GRID INVERTIDO (A Lista vem antes do Formulário) */}
       <div className="flex flex-col lg:flex-row gap-6 mt-6">
         
-        {/* COLUNA ESQUERDA: A LISTA (Fica no topo no celular) */}
         <div className="flex-1 lg:w-2/3 space-y-4">
           <input type="text" placeholder="Procurar no radar da turma..." className="w-full px-6 py-4 bg-white border border-gray-200 rounded-2xl outline-none shadow-sm focus:ring-2 focus:ring-blue-500" value={busca} onChange={e => setBusca(e.target.value)} />
           
@@ -233,7 +240,6 @@ export default function Tarefas() {
           </div>
         </div>
 
-        {/* COLUNA DIREITA: O FORMULÁRIO (Fica no fundo no celular) */}
         <div className="lg:w-1/3">
           <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-sm lg:sticky lg:top-24">
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
