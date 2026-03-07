@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Users, Plus, ArrowRight, Pencil, Trash2, X, Check } from 'lucide-react';
+import { BookOpen, Users, Plus, ArrowRight, Pencil, Trash2, X, Check, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -106,10 +106,9 @@ export default function Turmas() {
         </div>
       </div>
 
-      {/* INVERSÃO DE LAYOUT: flex-col para o celular colocar a Lista em cima e o Formulário embaixo */}
       <div className="flex flex-col lg:flex-row gap-8">
         
-        {/* BLOCO 1 (DESTAQUE): Lista de Turmas */}
+        {/* BLOCO 1: Lista de Turmas */}
         <div className="w-full lg:w-2/3 order-1">
           {loading ? (
              <div className="text-gray-400 font-medium animate-pulse text-center py-10">Carregando suas turmas...</div>
@@ -160,12 +159,13 @@ export default function Turmas() {
                     <p className="text-xs text-gray-400 font-medium">Turma Ativa</p>
                   </div>
                   
+                  {/* O ERRO FOI CORRIGIDO AQUI NO LINK DE TAREFAS */}
                   <div className="bg-gray-50 border-t border-gray-100 p-3 grid grid-cols-2 gap-2">
                     <Link to="/alunos" className="flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 hover:text-blue-600 hover:bg-blue-50 py-2 rounded-lg transition-colors">
                       <Users size={16}/> Alunos
                     </Link>
                     <Link to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="flex items-center justify-center gap-1.5 text-sm font-bold text-blue-600 hover:bg-blue-50 py-2 rounded-lg transition-colors">
-                      Tarefas <ArrowRight size={16}/>
+                      <FileText size={16}/> Tarefas <ArrowRight size={14}/>
                     </Link>
                   </div>
                 </div>
@@ -174,7 +174,7 @@ export default function Turmas() {
           )}
         </div>
 
-        {/* BLOCO 2 (SECUNDÁRIO): Formulário de Criação */}
+        {/* BLOCO 2: Formulário de Criação */}
         <div className="w-full lg:w-1/3 order-2">
           <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 sticky top-24">
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -196,4 +196,4 @@ export default function Turmas() {
       </div>
     </div>
   );
-      }
+}
