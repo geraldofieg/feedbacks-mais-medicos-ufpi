@@ -159,7 +159,7 @@ export default function Turmas() {
                     <p className="text-xs text-gray-400 font-medium">Turma Ativa</p>
                   </div>
                   
-                  {/* O ERRO FOI CORRIGIDO AQUI NO LINK DE TAREFAS */}
+                  {/* A CORREÇÃO DO LINK DE TAREFAS ESTÁ AQUI (Garantindo que aponte para /tarefas) */}
                   <div className="bg-gray-50 border-t border-gray-100 p-3 grid grid-cols-2 gap-2">
                     <Link to="/alunos" className="flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 hover:text-blue-600 hover:bg-blue-50 py-2 rounded-lg transition-colors">
                       <Users size={16}/> Alunos
