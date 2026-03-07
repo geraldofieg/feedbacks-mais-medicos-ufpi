@@ -12,9 +12,25 @@ export default function Cronograma() {
   
   const [esconderPassados, setEsconderPassados] = useState(true);
   const [turmas, setTurmas] = useState([]);
-  const [turmaAtiva, setTurmaAtiva] = useState(location.state?.turmaIdSelecionada || '');
+  
+  // A MÁGICA DA MEMÓRIA: Verifica o localStorage antes de ficar vazio
+  const [turmaAtiva, setTurmaAtiva] = useState(() => {
+    return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
+  });
   const [tarefas, setTarefas] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // O ESPIÃO DE CLIQUES: Força a atualização se a URL trouxer uma turma nova
+  useEffect(() => {
+    if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
+      setTurmaAtiva(location.state.turmaIdSelecionada);
+    }
+  }, [location.state]);
+
+  // SALVA NA MEMÓRIA: Toda vez que a turma ativa mudar, guarda no celular
+  useEffect(() => {
+    if (turmaAtiva) localStorage.setItem('ultimaTurmaAtiva', turmaAtiva);
+  }, [turmaAtiva]);
 
   // 1. Busca as Turmas do Professor na Instituição
   useEffect(() => {
@@ -25,7 +41,16 @@ export default function Cronograma() {
         const snapT = await getDocs(qT);
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
-        if (turmasData.length > 0 && !turmaAtiva) setTurmaAtiva(turmasData[0].id);
+        
+        // Verifica se a turma na memória ainda existe e pertence a essa instituição
+        const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || turmaAtiva;
+        const isValid = turmasData.some(t => t.id === targetTurma);
+        
+        if (isValid) {
+          if (targetTurma !== turmaAtiva) setTurmaAtiva(targetTurma);
+        } else if (turmasData.length > 0) {
+          setTurmaAtiva(turmasData[0].id); // Se não for válida, pega a primeira
+        }
       } catch (error) { console.error("Erro buscar turmas:", error); }
     }
     fetchTurmas();
@@ -53,10 +78,8 @@ export default function Cronograma() {
     const dataFim = ts.toDate ? ts.toDate() : new Date(ts);
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     const fimDia = new Date(dataFim); fimDia.setHours(0, 0, 0, 0);
-    
     const diff = fimDia.getTime() - hoje.getTime();
     const dias = Math.ceil(diff / (1000 * 3600 * 24));
-    
     return {
       dataFormatada: dataFim.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
       diasRestantes: dias,
@@ -72,16 +95,9 @@ export default function Cronograma() {
     return { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-900', shadow: 'shadow-[0_0_10px_rgba(249,115,22,0.4)]', badge: 'bg-orange-500', icon: <FileText size={18}/> };
   };
 
-  // Separação Inteligente: O que tem data vs O que não tem
-  const itensComPrazo = tarefas
-    .filter(t => t.dataFim)
-    .map(t => ({ ...t, statusObj: getStatusPrazo(t.dataFim) }))
-    .filter(t => !esconderPassados || t.statusObj.diasRestantes >= 0)
-    .sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal); // Ordena do mais perto de vencer para o mais longe
-
+  const itensComPrazo = tarefas.filter(t => t.dataFim).map(t => ({ ...t, statusObj: getStatusPrazo(t.dataFim) })).filter(t => !esconderPassados || t.statusObj.diasRestantes >= 0).sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal); 
   const itensSemPrazo = tarefas.filter(t => !t.dataFim);
-    // Defesa UX Nível 1
-  if (!escolaSelecionada?.id) {
+    if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Breadcrumb items={[{ label: 'Cronograma' }]} />
@@ -161,17 +177,17 @@ export default function Cronograma() {
               <div className="relative border-l-2 border-gray-200 ml-4 md:ml-8 pl-6 md:pl-10 space-y-8">
                 {itensComPrazo.map((item) => {
                   const status = item.statusObj;
-                  const isAtual = status.diasRestantes >= 0 && status.diasRestantes <= 7; // Destaca o que vence nos próximos 7 dias
+                  const isAtual = status.diasRestantes >= 0 && status.diasRestantes <= 7;
                   const isPassado = status.vencido;
                   const estilo = getEstiloCartao(item.tipo);
+                  
+                  // A MÁGICA DO TELETRANSPORTE ACONTECE AQUI
+                  const isEntrega = (item.tipo || 'entrega').toLowerCase() === 'entrega';
 
-                  return (
-                    <div key={item.id} className={`relative p-5 rounded-2xl border transition-all ${isAtual ? `${estilo.bg} ${estilo.border} shadow-md transform scale-[1.02]` : 'bg-white border-gray-200'}`}>
-                      
-                      {/* Bolinha da Timeline */}
+                  const ConteudoCartao = (
+                    <>
                       <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 ${isAtual ? `${estilo.badge} ${estilo.shadow}` : isPassado ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
 
-                      {/* Badge Superior */}
                       {isAtual && (
                         <span className={`absolute -top-3 left-6 text-white px-3 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-sm ${estilo.badge}`}>
                           <Clock size={12}/> VENCE EM {status.diasRestantes} DIAS
@@ -181,12 +197,15 @@ export default function Cronograma() {
                       {!isAtual && !isPassado && <span className="absolute -top-3 left-6 bg-gray-100 text-gray-500 border border-gray-200 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1"><CalendarDays size={12}/> Faltam {status.diasRestantes} dias</span>}
 
                       <div className={`mt-2 ${isPassado ? 'opacity-60' : ''}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          {estilo.icon}
-                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{item.tipo || 'entrega'}</span>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            {estilo.icon}
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{item.tipo || 'entrega'}</span>
+                          </div>
+                          {isEntrega && <span className="text-[10px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hidden md:block">Abrir Correção &rarr;</span>}
                         </div>
                         
-                        <h3 className={`text-lg sm:text-xl font-black mb-2 ${isAtual ? estilo.text : 'text-gray-800'}`}>
+                        <h3 className={`text-lg sm:text-xl font-black mb-2 ${isAtual ? estilo.text : 'text-gray-800'} ${isEntrega ? 'group-hover:underline' : ''}`}>
                           {item.nomeTarefa || item.titulo}
                         </h3>
                         
@@ -201,6 +220,17 @@ export default function Cronograma() {
                           </div>
                         )}
                       </div>
+                    </>
+                  );
+
+                  // RENDERIZAÇÃO INTELIGENTE (Link ou Div)
+                  return isEntrega ? (
+                    <Link key={item.id} to={`/revisar/${item.id}`} className={`block relative p-5 rounded-2xl border transition-all group cursor-pointer ${isAtual ? `${estilo.bg} ${estilo.border} shadow-md transform scale-[1.02] hover:border-orange-400` : 'bg-white border-gray-200 hover:border-orange-300 hover:shadow-md'}`}>
+                      {ConteudoCartao}
+                    </Link>
+                  ) : (
+                    <div key={item.id} className={`relative p-5 rounded-2xl border transition-all ${isAtual ? `${estilo.bg} ${estilo.border} shadow-md transform scale-[1.02]` : 'bg-white border-gray-200'}`}>
+                      {ConteudoCartao}
                     </div>
                   );
                 })}
@@ -211,4 +241,4 @@ export default function Cronograma() {
       </div>
     </div>
   );
-        }
+}
