@@ -65,7 +65,10 @@ export default function Pendencias() {
 
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
-        const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        
+        // CORREÇÃO DO BUG: Filtramos apenas itens do tipo 'entrega' (ou sem tipo, para tarefas antigas)
+        const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo));
 
         const tarefasOrdenadas = tarefasData.sort((a, b) => {
           const timeA = a.dataFim?.toMillis() || (a.dataCriacao?.toMillis() || 0);
@@ -101,37 +104,30 @@ export default function Pendencias() {
 
     fetchPendencias();
   }, [turmaAtiva]); 
-
   const getStatusPrazo = (timestampFim) => {
     if (!timestampFim || !timestampFim.toDate) return null;
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const dataFim = timestampFim.toDate();
-    
     const dataFimDia = new Date(dataFim);
     dataFimDia.setHours(0, 0, 0, 0);
-    
     const diferencaTime = dataFimDia.getTime() - hoje.getTime();
     const dias = Math.ceil(diferencaTime / (1000 * 3600 * 24));
-    
-    return {
-      dataFormatada: dataFim.toLocaleDateString('pt-BR'),
-      diasRestantes: dias,
-      vencido: dias < 0
-    };
+    return { dataFormatada: dataFim.toLocaleDateString('pt-BR'), diasRestantes: dias, vencido: dias < 0 };
   };
 
   const isCarregando = loadingTurmas || loadingDados;
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
-    if (!escolaSelecionada?.id) {
+
+  if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Breadcrumb items={[{ label: 'Pendências' }]} />
         <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10 shadow-sm">
           <GraduationCap className="mx-auto text-blue-400 mb-4" size={56} />
           <h2 className="text-2xl font-black text-blue-800 mb-2">Instituição não selecionada</h2>
-          <p className="text-blue-600 mb-8 font-medium text-lg">Para gerenciar pendências, o sistema precisa saber em qual instituição você quer trabalhar.</p>
-          <Link to="/" className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-xl hover:bg-blue-700 transition-all shadow-lg">Ir para o Centro de Comando</Link>
+          <p className="text-blue-600 mb-8 font-medium text-lg">Para gerenciar pendências, selecione uma instituição.</p>
+          <Link to="/" className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-xl hover:bg-blue-700 shadow-lg">Ir para o Centro de Comando</Link>
         </div>
       </div>
     );
@@ -139,24 +135,16 @@ export default function Pendencias() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
-      
       <div className="mb-6">
         <Breadcrumb items={[{ label: `Pendências (${escolaSelecionada.nome})` }]} />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
           <h1 className="text-xl font-black text-red-600 flex items-center gap-2 tracking-tight">
             <AlertTriangle className="text-red-500" size={24} /> Relatório de Pendências
           </h1>
-
           {!isCarregando && turmas.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest hidden sm:block">Filtro:</span>
-              <select 
-                className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl focus:ring-2 focus:ring-red-500 py-2 px-3 font-bold shadow-sm cursor-pointer w-full sm:w-auto"
-                value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}
-              >
-                {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-              </select>
-            </div>
+            <select className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl focus:ring-2 focus:ring-red-500 py-2 px-3 font-bold shadow-sm cursor-pointer w-full sm:w-auto" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
+              {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
           )}
         </div>
       </div>
@@ -164,31 +152,18 @@ export default function Pendencias() {
       {isCarregando ? (
         <div className="p-20 text-center animate-pulse flex flex-col items-center gap-3">
           <AlertTriangle className="text-red-300" size={48} />
-          <p className="font-bold text-red-400">Cruzando dados e calculando prazos...</p>
-        </div>
-      ) : erro ? (
-        <div className="bg-red-50 border-2 border-dashed border-red-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10">
-          <p className="text-red-600 font-bold mb-4">{erro}</p>
-          <button onClick={() => window.location.reload()} className="bg-red-600 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto hover:bg-red-700"><RefreshCw size={18} /> Tentar Novamente</button>
-        </div>
-      ) : turmas.length === 0 ? (
-        <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10">
-          <BookOpen className="mx-auto text-blue-400 mb-4" size={48} />
-          <h2 className="text-xl font-black text-blue-800 mb-2">Sem turmas ativas</h2>
-          <p className="text-blue-600 mb-6 font-medium">Você precisa criar uma turma antes de buscar pendências.</p>
-          <Link to="/turmas" className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-all shadow-md">Criar Turma</Link>
+          <p className="font-bold text-red-400">Filtrando entregas de alunos...</p>
         </div>
       ) : pendencias.length === 0 ? (
         <div className="bg-green-50 p-12 rounded-3xl text-center border-2 border-dashed border-green-200 shadow-sm mt-10">
           <div className="text-6xl mb-4">🎉</div>
           <h2 className="text-2xl font-black text-green-700 mb-2">Turma em Dia!</h2>
-          <p className="text-green-600 font-bold">Uau! Nenhuma pendência nas tarefas da turma {getNomeTurmaAtiva()}.</p>
+          <p className="text-green-600 font-bold">Nenhum aluno deve tarefas de entrega no momento.</p>
         </div>
       ) : (
         <div className="space-y-6 mt-4">
           {pendencias.map((item, idx) => {
             const status = getStatusPrazo(item.tarefa.dataFim);
-
             return (
               <div key={idx} className="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden hover:shadow-md transition-shadow">
                 <div className="bg-red-50/50 p-4 border-b border-red-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -199,38 +174,20 @@ export default function Pendencias() {
                       <p className="text-xs font-bold text-red-500 uppercase tracking-widest mt-0.5">{item.devedores.length} devedores identificados</p>
                     </div>
                   </div>
-                  
                   <div className="shrink-0 flex items-center gap-3">
                     {status ? (
                       <div className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 ${status.vencido ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}`}>
-                        <CalendarClock size={14} /> 
-                        {status.vencido ? `Vencido em ${status.dataFormatada}` : `Vence em ${status.dataFormatada}`}
+                        <CalendarClock size={14} /> {status.vencido ? `Vencido em ${status.dataFormatada}` : `Vence em ${status.dataFormatada}`}
                       </div>
-                    ) : (
-                      <div className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-gray-100 text-gray-500 border border-gray-200">
-                        <CalendarClock size={14} /> Sem prazo definido
-                      </div>
-                    )}
+                    ) : ( <div className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-gray-100 text-gray-500 border border-gray-200"> <CalendarClock size={14} /> Sem prazo definido </div> )}
                   </div>
                 </div>
-                
                 <div className="p-5 bg-white">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {item.devedores.map(aluno => (
-                      <div 
-                        key={aluno.id} 
-                        onClick={() => navigate('/comunicacao', { state: { turmaIdSelecionada: turmaAtiva, alunoAlvo: aluno.nome } })}
-                        className="flex items-center justify-between gap-2 text-sm font-bold text-gray-700 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 p-3 rounded-xl border border-gray-100 transition-colors group cursor-pointer"
-                        title="Ir para a Central de Comunicação"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <User size={16} className="text-gray-400 group-hover:text-blue-500 shrink-0"/> 
-                          <span className="truncate">{aluno.nome}</span>
-                        </div>
-                        
-                        <div className="bg-white p-2 md:p-1.5 rounded-md border border-blue-200 md:border-gray-200 text-blue-600 md:text-gray-400 group-hover:text-blue-600 group-hover:border-blue-300 shadow-sm transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 shrink-0 flex items-center gap-1">
-                          <MessageCircle size={14}/> <span className="text-[10px] uppercase font-black tracking-widest md:hidden">Cobrar</span>
-                        </div>
+                      <div key={aluno.id} onClick={() => navigate('/comunicacao', { state: { turmaIdSelecionada: turmaAtiva, alunoAlvo: aluno.nome } })} className="flex items-center justify-between gap-2 text-sm font-bold text-gray-700 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 p-3 rounded-xl border border-gray-100 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-2 truncate"> <User size={16} className="text-gray-400 group-hover:text-blue-500 shrink-0"/> <span className="truncate">{aluno.nome}</span> </div>
+                        <div className="bg-white p-2 md:p-1.5 rounded-md border border-blue-200 text-blue-600 shadow-sm flex items-center gap-1"> <MessageCircle size={14}/> <span className="text-[10px] uppercase font-black tracking-widest md:hidden">Cobrar</span> </div>
                       </div>
                     ))}
                   </div>
@@ -242,4 +199,4 @@ export default function Pendencias() {
       )}
     </div>
   );
-                        }
+}
