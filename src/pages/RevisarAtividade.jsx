@@ -3,7 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3, CalendarDays, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
+// CORREÇÃO: O ícone 'Clock' foi adicionado no final desta linha para curar a tela cinza
+import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3, CalendarDays, ChevronLeft, ChevronRight, AlertCircle, Clock } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function RevisarAtividade() {
@@ -107,7 +108,7 @@ export default function RevisarAtividade() {
     if (window.confirm("Devolver para Revisão?")) { setSalvandoAcao(true); try { await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: null, dataPostagem: null }); setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false, dataAprovacao: null, dataPostagem: null } })); } catch (error) { alert("Erro ao reverter."); } finally { setSalvandoAcao(false); } }
   }
 
-  // CORREÇÃO: Conversor de Data Blindado para evitar Tela Branca
+  // Conversor de Data Blindado para evitar Tela Branca
   const formatarData = (ts) => {
     if (!ts) return null;
     try {
@@ -222,4 +223,5 @@ export default function RevisarAtividade() {
       </div>
     </div>
   );
-      }
+                                                                                                                    }
+                                                                                                                                                                                                                                   
