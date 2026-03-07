@@ -12,12 +12,28 @@ export default function Pendencias() {
   const navigate = useNavigate(); 
   
   const [turmas, setTurmas] = useState([]);
-  const [turmaAtiva, setTurmaAtiva] = useState(location.state?.turmaIdSelecionada || '');
+  
+  // A MÁGICA DA MEMÓRIA: Verifica localStorage antes de ficar vazio
+  const [turmaAtiva, setTurmaAtiva] = useState(() => {
+    return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
+  });
   
   const [pendencias, setPendencias] = useState([]);
   const [loadingTurmas, setLoadingTurmas] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
   const [erro, setErro] = useState(null);
+
+  // O ESPIÃO DE CLIQUES: Força a atualização se a URL trouxer uma turma nova
+  useEffect(() => {
+    if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
+      setTurmaAtiva(location.state.turmaIdSelecionada);
+    }
+  }, [location.state]);
+
+  // SALVA NA MEMÓRIA: Toda vez que a turma ativa mudar, guarda no celular
+  useEffect(() => {
+    if (turmaAtiva) localStorage.setItem('ultimaTurmaAtiva', turmaAtiva);
+  }, [turmaAtiva]);
 
   useEffect(() => {
     async function fetchTurmas() {
@@ -33,8 +49,14 @@ export default function Pendencias() {
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
         
-        if (turmasData.length > 0 && !turmaAtiva) {
-          setTurmaAtiva(turmasData[0].id);
+        // Verifica se a turma na memória ainda existe e pertence a essa instituição
+        const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || turmaAtiva;
+        const isValid = turmasData.some(t => t.id === targetTurma);
+        
+        if (isValid) {
+          if (targetTurma !== turmaAtiva) setTurmaAtiva(targetTurma);
+        } else if (turmasData.length > 0) {
+          setTurmaAtiva(turmasData[0].id); // Se não for válida, pega a primeira
         }
       } catch (error) {
         setErro("Falha de conexão com o banco de dados.");
@@ -66,7 +88,6 @@ export default function Pendencias() {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         
-        // CORREÇÃO DO BUG: Filtramos apenas itens do tipo 'entrega' (ou sem tipo, para tarefas antigas)
         const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo));
 
@@ -142,7 +163,7 @@ export default function Pendencias() {
             <AlertTriangle className="text-red-500" size={24} /> Relatório de Pendências
           </h1>
           {!isCarregando && turmas.length > 0 && (
-            <select className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl focus:ring-2 focus:ring-red-500 py-2 px-3 font-bold shadow-sm cursor-pointer w-full sm:w-auto" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
+            <select className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl focus:ring-2 focus:ring-red-500 py-2 px-3 font-bold shadow-sm cursor-pointer w-full sm:w-auto outline-none" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
               {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
             </select>
           )}
