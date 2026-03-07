@@ -21,7 +21,6 @@ export default function Dashboard() {
   const [estatisticas, setEstatisticas] = useState({ alunos: 0, pendencias: 0 });
   const [loadingDados, setLoadingDados] = useState(false);
   
-  // Novo Estado para o Mini-Cronograma
   const [proximosEventos, setProximosEventos] = useState([]);
 
   useEffect(() => {
@@ -65,12 +64,11 @@ export default function Dashboard() {
           const snapAlunos = await getDocs(qAlunos);
           totalAlunos = snapAlunos.docs.filter(a => turmasIds.includes(a.data().turmaId) && a.data().status !== 'lixeira').length;
 
-          // Busca de Tarefas para o Mini-Cronograma (Pega todas as turmas ativas)
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
           
           const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-          const limite = new Date(hoje); limite.setDate(hoje.getDate() + 7); // Busca apenas 7 dias pra frente
+          const limite = new Date(hoje); limite.setDate(hoje.getDate() + 7); 
 
           const tarefasFiltradas = snapTarefas.docs
             .map(d => ({ id: d.id, ...d.data() }))
@@ -82,7 +80,7 @@ export default function Dashboard() {
             })
             .filter(t => t.timestamp >= hoje.getTime() && t.timestamp <= limite.getTime())
             .sort((a, b) => a.timestamp - b.timestamp)
-            .slice(0, 3); // Pega só os 3 primeiros
+            .slice(0, 3); 
             
           setProximosEventos(tarefasFiltradas);
         } else {
@@ -90,14 +88,13 @@ export default function Dashboard() {
           setProximosEventos([]);
         }
 
-        setEstatisticas({ alunos: totalAlunos, pendencias: 0 }); // Deixando pendencias pra V4
+        setEstatisticas({ alunos: totalAlunos, pendencias: 0 }); 
       } catch (error) { console.error("Erro buscar dados:", error); } 
       finally { setLoadingDados(false); }
     }
     if (escolaSelecionada) fetchDadosDashboard();
   }, [currentUser, escolaSelecionada]);
 
-  // Funções de CRUD Instituição (Mantidas)
   async function handleCriarAcessar(e) {
     e.preventDefault(); const nomeInst = novaInstituicao.trim(); if (!nomeInst) return;
     try { setSalvando(true); const docRef = await addDoc(collection(db, 'instituicoes'), { nome: nomeInst, professorUid: currentUser.uid, status: 'ativa', dataCriacao: serverTimestamp() }); setEscolaSelecionada({ id: docRef.id, nome: nomeInst }); } 
@@ -115,8 +112,7 @@ export default function Dashboard() {
   }
   
   const temTurmas = minhasTurmas.length > 0;
-    // TELA 1: O PORTEIRO (Sem Instituição)
-  if (!escolaSelecionada) {
+    if (!escolaSelecionada) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 mt-4 md:mt-8">
         <div className="text-center mb-10">
@@ -167,7 +163,6 @@ export default function Dashboard() {
     );
   }
 
-  // TELA 2: O DASHBOARD REAL (Centro de Comando)
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       
@@ -191,7 +186,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* CONDICIONAL: SE NÃO TEM TURMAS (ESTADO VAZIO) */}
       {!temTurmas && !loadingDados && (
         <div className="mb-10 text-center bg-blue-50 border-2 border-dashed border-blue-200 p-10 rounded-3xl max-w-2xl mx-auto">
           <Building2 className="mx-auto text-blue-400 mb-4" size={48}/>
@@ -201,11 +195,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* CONDICIONAL: SE TEM TURMAS (USO CONTÍNUO) */}
       {temTurmas && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
           
-          {/* COLUNA 1: TURMAS ATIVAS (Tamanho Maior) */}
           <div className="lg:col-span-2">
             <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
               Minhas Turmas <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-black">{minhasTurmas.length}</span>
@@ -223,7 +215,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* COLUNA 2: MINI-CRONOGRAMA */}
           <div className="lg:col-span-1">
             <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Calendar size={18}/> Radar da Semana
@@ -236,18 +227,35 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100">
-                  {proximosEventos.map(evento => (
-                    <div key={evento.id} className="p-4 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`w-2 h-2 rounded-full ${evento.tipo === 'compromisso' ? 'bg-purple-500' : 'bg-orange-500'}`}></span>
-                        <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{evento.tipo || 'entrega'}</span>
+                  {/* A MÁGICA DOS LINKS ACONTECE AQUI */}
+                  {proximosEventos.map(evento => {
+                    const isEntrega = (evento.tipo || 'entrega').toLowerCase() === 'entrega';
+                    const ConteudoCartao = (
+                      <>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`w-2 h-2 rounded-full ${evento.tipo === 'compromisso' ? 'bg-purple-500' : 'bg-orange-500'}`}></span>
+                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{evento.tipo || 'entrega'}</span>
+                        </div>
+                        <h4 className={`font-bold text-sm truncate ${isEntrega ? 'text-orange-700 group-hover:underline' : 'text-gray-800'}`}>
+                          {evento.nomeTarefa || evento.titulo}
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-1 font-medium flex items-center gap-1">
+                          <Clock size={12}/> {evento.objDataFim.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                        </p>
+                      </>
+                    );
+
+                    // Se for Entrega, o cartão vira um Link. Se não, é só uma div normal.
+                    return isEntrega ? (
+                      <Link key={evento.id} to={`/revisar/${evento.id}`} className="block p-4 hover:bg-orange-50 transition-colors group cursor-pointer border-l-2 border-transparent hover:border-orange-400">
+                        {ConteudoCartao}
+                      </Link>
+                    ) : (
+                      <div key={evento.id} className="p-4 hover:bg-gray-50 transition-colors">
+                        {ConteudoCartao}
                       </div>
-                      <h4 className="font-bold text-gray-800 text-sm truncate">{evento.nomeTarefa || evento.titulo}</h4>
-                      <p className="text-xs text-gray-500 mt-1 font-medium flex items-center gap-1">
-                        <Clock size={12}/> {evento.objDataFim.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               <Link to="/datas" className="block w-full text-center bg-gray-50 p-3 text-xs font-bold text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-colors uppercase tracking-widest border-t border-gray-100">
@@ -259,7 +267,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* RODAPÉ: ESTATÍSTICAS RÁPIDAS */}
       <div className="border-t border-gray-200 pt-8 opacity-70 hover:opacity-100 transition-opacity">
         <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Visão Geral</h2>
         <div className="flex flex-wrap gap-4">
