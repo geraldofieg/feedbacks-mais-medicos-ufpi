@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-// CORREÇÃO: O 'Link' foi adicionado aqui na linha de baixo para curar a tela cinza!
 import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -16,7 +15,7 @@ export default function Tarefas() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   
-  // A MÁGICA DA MEMÓRIA: Verifica localStorage antes de ficar vazio
+  // A MÁGICA DA MEMÓRIA
   const [turmaAtiva, setTurmaAtiva] = useState(() => {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
@@ -30,14 +29,12 @@ export default function Tarefas() {
   const [dataFimEdicao, setDataFimEdicao] = useState('');
   const [tipoEdicao, setTipoEdicao] = useState('entrega');
 
-  // ESPIÃO DE CLIQUES
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
       setTurmaAtiva(location.state.turmaIdSelecionada);
     }
   }, [location.state]);
 
-  // SALVA NA MEMÓRIA: Toda vez que mexer aqui, as outras abas vão saber!
   useEffect(() => {
     if (turmaAtiva) localStorage.setItem('ultimaTurmaAtiva', turmaAtiva);
   }, [turmaAtiva]);
@@ -51,7 +48,6 @@ export default function Tarefas() {
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
         
-        // Aplica a Memória Global
         const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || turmaAtiva;
         const isValid = turmasData.some(t => t.id === targetTurma);
         
@@ -166,6 +162,14 @@ export default function Tarefas() {
     return 'border-orange-200 bg-orange-50/20';
   };
 
+  // NOVA FUNÇÃO: Traduz o nome técnico do banco para o visual limpo
+  const getNomeVisivelTipo = (tipo) => {
+    const t = (tipo || 'entrega').toLowerCase();
+    if (t === 'compromisso') return 'Compromisso';
+    if (t === 'lembrete') return 'Post-it';
+    return 'Entrega';
+  };
+
   const tarefasFiltradas = tarefas.filter(t => (t.nomeTarefa || t.titulo || '').toLowerCase().includes(busca.toLowerCase()));
 
   return (
@@ -206,10 +210,12 @@ export default function Tarefas() {
                     <div className="space-y-4 animate-in fade-in zoom-in duration-200">
                       <div className="grid grid-cols-2 gap-3">
                         <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
-                        <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white outline-none" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
-                          <option value="entrega">Entrega</option>
+                        
+                        {/* UPDATE NO SELECT DE EDIÇÃO */}
+                        <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white outline-none cursor-pointer" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
+                          <option value="entrega">Entrega (Desafio)</option>
                           <option value="compromisso">Compromisso</option>
-                          <option value="lembrete">Lembrete</option>
+                          <option value="lembrete">Post-it</option>
                         </select>
                       </div>
                       <input type="datetime-local" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
@@ -224,7 +230,6 @@ export default function Tarefas() {
                       <div className="flex items-center gap-3 truncate">
                         <div className="p-2.5 bg-white rounded-xl shadow-sm border border-gray-100">{getIconeTipo(tarefa.tipo)}</div>
                         <div className="truncate">
-                          {/* A MÁGICA DO TELETRANSPORTE AQUI! */}
                           {(tarefa.tipo === 'entrega' || !tarefa.tipo) ? (
                             <Link to={`/revisar/${tarefa.id}`} className="font-black text-orange-700 hover:text-orange-800 hover:underline truncate leading-tight flex items-center gap-1 group/link">
                               {tarefa.nomeTarefa || tarefa.titulo} <ArrowRight size={14} className="opacity-0 group-hover/link:opacity-100 transition-opacity hidden md:block"/>
@@ -232,8 +237,10 @@ export default function Tarefas() {
                           ) : (
                             <h3 className="font-black text-gray-800 truncate leading-tight">{tarefa.nomeTarefa || tarefa.titulo}</h3>
                           )}
+                          
+                          {/* TAG DE IDENTIFICAÇÃO VISUAL COM O NOME NOVO */}
                           <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                            {tarefa.tipo || 'entrega'} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem data'}
+                            {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem data'}
                           </div>
                         </div>
                       </div>
@@ -255,11 +262,14 @@ export default function Tarefas() {
               <Plus size={16}/> Adicionar à Turma
             </h2>
             <form onSubmit={handleCriar} className="space-y-4">
-              <select className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.tipo} onChange={e => setNovaTarefa({...novaTarefa, tipo: e.target.value})}>
+              
+              {/* UPDATE NO SELECT DE CRIAÇÃO */}
+              <select className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" value={novaTarefa.tipo} onChange={e => setNovaTarefa({...novaTarefa, tipo: e.target.value})}>
                 <option value="entrega">📝 Entrega (Desafio)</option>
-                <option value="compromisso">📅 Compromisso (Aula)</option>
-                <option value="lembrete">💡 Lembrete (Post-it)</option>
+                <option value="compromisso">📅 Compromisso</option>
+                <option value="lembrete">💡 Post-it</option>
               </select>
+              
               <input type="text" required placeholder="Título..." className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} />
               <input type="datetime-local" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-gray-700" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})} />
               <textarea placeholder="Observações..." rows="3" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none resize-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
@@ -271,5 +281,4 @@ export default function Tarefas() {
       </div>
     </div>
   );
-                   }
-      
+                                                 }
