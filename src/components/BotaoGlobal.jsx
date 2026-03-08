@@ -33,19 +33,22 @@ export default function BotaoGlobal() {
           aberto ? 'scale-100 opacity-100 translate-y-0 pointer-events-auto' : 'scale-75 opacity-0 translate-y-10 pointer-events-none'
         }`}
       >
-        <Link to="/turmas" className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 hover:bg-blue-50 transition-all pointer-events-auto group">
-          <span className="font-bold text-gray-600 text-sm group-hover:text-blue-700">Nova Turma</span>
-          <div className="bg-blue-100 text-blue-600 p-2 rounded-xl"><GraduationCap size={18} /></div>
-        </Link>
-
+        {/* 1º LUGAR (TOPO): NOVO REGISTRO (Mais Usado) */}
         <Link to="/tarefas" className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 hover:bg-orange-50 transition-all pointer-events-auto group">
           <span className="font-bold text-gray-600 text-sm group-hover:text-orange-700">Novo Registro</span>
           <div className="bg-orange-100 text-orange-600 p-2 rounded-xl"><FileText size={18} /></div>
         </Link>
 
+        {/* 2º LUGAR: NOVO ALUNO */}
         <Link to="/alunos" className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 hover:bg-green-50 transition-all pointer-events-auto group">
           <span className="font-bold text-gray-600 text-sm group-hover:text-green-700">Novo Aluno</span>
           <div className="bg-green-100 text-green-600 p-2 rounded-xl"><UserPlus size={18} /></div>
+        </Link>
+
+        {/* 3º LUGAR: NOVA TURMA (Menos Usado) */}
+        <Link to="/turmas" className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 hover:bg-blue-50 transition-all pointer-events-auto group">
+          <span className="font-bold text-gray-600 text-sm group-hover:text-blue-700">Nova Turma</span>
+          <div className="bg-blue-100 text-blue-600 p-2 rounded-xl"><GraduationCap size={18} /></div>
         </Link>
       </div>
 
