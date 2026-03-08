@@ -112,7 +112,16 @@ export default function Dashboard() {
   }
   
   const temTurmas = minhasTurmas.length > 0;
-    if (!escolaSelecionada) {
+
+  // FUNÇÃO DE TRADUÇÃO VISUAL (Igual à da página de Tarefas)
+  const getNomeVisivelTipo = (tipo) => {
+    const t = (tipo || 'entrega').toLowerCase();
+    if (t === 'compromisso') return 'Compromisso';
+    if (t === 'lembrete') return 'Post-it';
+    return 'Tarefa do Aluno';
+  };
+
+  if (!escolaSelecionada) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 mt-4 md:mt-8">
         <div className="text-center mb-10">
@@ -227,14 +236,14 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100">
-                  {/* A MÁGICA DOS LINKS ACONTECE AQUI */}
                   {proximosEventos.map(evento => {
                     const isEntrega = (evento.tipo || 'entrega').toLowerCase() === 'entrega';
                     const ConteudoCartao = (
                       <>
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`w-2 h-2 rounded-full ${evento.tipo === 'compromisso' ? 'bg-purple-500' : 'bg-orange-500'}`}></span>
-                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{evento.tipo || 'entrega'}</span>
+                          {/* APLICANDO A TRADUÇÃO VISUAL AQUI */}
+                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{getNomeVisivelTipo(evento.tipo)}</span>
                         </div>
                         <h4 className={`font-bold text-sm truncate ${isEntrega ? 'text-orange-700 group-hover:underline' : 'text-gray-800'}`}>
                           {evento.nomeTarefa || evento.titulo}
@@ -245,7 +254,6 @@ export default function Dashboard() {
                       </>
                     );
 
-                    // Se for Entrega, o cartão vira um Link. Se não, é só uma div normal.
                     return isEntrega ? (
                       <Link key={evento.id} to={`/revisar/${evento.id}`} className="block p-4 hover:bg-orange-50 transition-colors group cursor-pointer border-l-2 border-transparent hover:border-orange-400">
                         {ConteudoCartao}
@@ -283,4 +291,4 @@ export default function Dashboard() {
 
     </div>
   );
-}
+                      }
