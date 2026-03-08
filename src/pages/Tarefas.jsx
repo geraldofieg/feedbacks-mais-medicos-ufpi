@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+// CORREÇÃO: O 'Link' foi adicionado aqui na linha de baixo para curar a tela cinza!
+import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -141,7 +142,8 @@ export default function Tarefas() {
       setTarefas(tarefas.filter(t => t.id !== id));
     } catch (error) { console.error("Erro remover:", error); }
   }
-    const formatarDataLocal = (ts) => {
+  
+  const formatarDataLocal = (ts) => {
     if (!ts) return "";
     try {
       let d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -269,4 +271,5 @@ export default function Tarefas() {
       </div>
     </div>
   );
-                      }
+                   }
+      
