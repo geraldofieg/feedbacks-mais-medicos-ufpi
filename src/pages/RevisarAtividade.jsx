@@ -3,8 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-// CORREÇÃO: O ícone 'Clock' foi adicionado no final desta linha para curar a tela cinza
-import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3, CalendarDays, ChevronLeft, ChevronRight, AlertCircle, Clock } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3, CalendarDays, ChevronLeft, ChevronRight, AlertCircle, Clock, GraduationCap } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function RevisarAtividade() {
@@ -19,6 +18,7 @@ export default function RevisarAtividade() {
   const [alunoAtualIndex, setAlunoAtualIndex] = useState(0);
   
   const [feedbackEditado, setFeedbackEditado] = useState('');
+  const [notaAluno, setNotaAluno] = useState(''); 
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [copiado, setCopiado] = useState(false);
@@ -58,6 +58,7 @@ export default function RevisarAtividade() {
   useEffect(() => {
     setSalvando(false); setMarcandoPostado(false); setExcluindo(false); setSalvandoAcao(false); setCopiado(false);
     setFeedbackEditado(atividadeAtual?.feedbackSugerido || '');
+    setNotaAluno(atividadeAtual?.nota || '');
   }, [alunoAtualIndex, atividadeAtual]);
 
   const irParaProximo = () => { if (alunoAtualIndex < alunos.length - 1) setAlunoAtualIndex(prev => prev + 1); };
@@ -67,9 +68,28 @@ export default function RevisarAtividade() {
     if (salvando || !atividadeAtual) return;
     setSalvando(true);
     try {
-      await updateDoc(doc(db, 'atividades', atividadeAtual.id), { feedbackFinal: feedbackEditado, status: 'aprovado', postado: false, dataAprovacao: new Date() });
-      setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], feedbackFinal: feedbackEditado, status: 'aprovado', postado: false, dataAprovacao: new Date() } }));
-      if (alunoAtualIndex < alunos.length - 1) irParaProximo(); else alert("Todos revisados!");
+      await updateDoc(doc(db, 'atividades', atividadeAtual.id), { 
+        feedbackFinal: feedbackEditado, 
+        nota: notaAluno.trim() || null, 
+        status: 'aprovado', 
+        postado: false, 
+        dataAprovacao: new Date() 
+      });
+      
+      setAtividadesMap(prev => ({ 
+        ...prev, 
+        [alunoAtual.id]: { 
+          ...prev[alunoAtual.id], 
+          feedbackFinal: feedbackEditado, 
+          nota: notaAluno.trim() || null,
+          status: 'aprovado', 
+          postado: false, 
+          dataAprovacao: new Date() 
+        } 
+      }));
+      
+      if (alunoAtualIndex < alunos.length - 1) irParaProximo(); 
+      else alert("Todos revisados!");
     } catch (error) { alert("Erro ao salvar."); } finally { setSalvando(false); }
   }
 
@@ -94,7 +114,11 @@ export default function RevisarAtividade() {
 
   function handleCopiar() {
     if (!atividadeAtual) return;
-    navigator.clipboard.writeText(atividadeAtual.feedbackFinal || atividadeAtual.feedbackSugerido);
+    const textoCopia = atividadeAtual.nota 
+      ? `Nota: ${atividadeAtual.nota}\n\n${atividadeAtual.feedbackFinal || atividadeAtual.feedbackSugerido}`
+      : atividadeAtual.feedbackFinal || atividadeAtual.feedbackSugerido;
+      
+    navigator.clipboard.writeText(textoCopia);
     setCopiado(true); setTimeout(() => setCopiado(false), 2000);
   }
 
@@ -108,7 +132,6 @@ export default function RevisarAtividade() {
     if (window.confirm("Devolver para Revisão?")) { setSalvandoAcao(true); try { await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: null, dataPostagem: null }); setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false, dataAprovacao: null, dataPostagem: null } })); } catch (error) { alert("Erro ao reverter."); } finally { setSalvandoAcao(false); } }
   }
 
-  // Conversor de Data Blindado para evitar Tela Branca
   const formatarData = (ts) => {
     if (!ts) return null;
     try {
@@ -127,8 +150,7 @@ export default function RevisarAtividade() {
   const isFaltaPostar = isEnviado && (!!atividadeAtual.dataAprovacao && !atividadeAtual.dataPostagem && atividadeAtual.status !== 'postado');
   const isFinalizado = isEnviado && (!!atividadeAtual.dataPostagem || atividadeAtual.status === 'postado');
   const foiEditado = isEnviado && atividadeAtual.feedbackFinal?.trim() !== atividadeAtual.feedbackSugerido?.trim();
-
-  return (
+   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 pb-24">
       <div className="max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -188,9 +210,24 @@ export default function RevisarAtividade() {
                 <Clock className="mx-auto text-gray-400 mb-3" size={40}/><h3 className="font-bold text-gray-600 mb-2">Ação Indisponível</h3><p className="text-sm text-gray-500">Aguarde o aluno enviar a resposta para gerar e revisar o feedback.</p>
               </div>
             ) : isPendente ? (
-              <div className="bg-blue-600 p-6 rounded-2xl shadow-md text-white animate-in fade-in duration-300">
+              <div className="bg-blue-600 p-6 rounded-2xl shadow-md text-white animate-in fade-in duration-300 flex flex-col h-full">
                 <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-blue-500 pb-2"><CheckCircle size={20} />3. Aprovar Feedback</h3>
-                <textarea rows="8" className="w-full p-4 rounded-xl text-gray-800 font-medium mb-4 shadow-inner outline-none focus:ring-4 focus:ring-blue-300" value={feedbackEditado} onChange={(e) => setFeedbackEditado(e.target.value)}></textarea>
+                <textarea rows="8" className="w-full flex-1 min-h-[150px] p-4 rounded-xl text-gray-800 font-medium mb-4 shadow-inner outline-none focus:ring-4 focus:ring-blue-300" value={feedbackEditado} onChange={(e) => setFeedbackEditado(e.target.value)}></textarea>
+                
+                <div className="bg-blue-700/50 p-3 rounded-xl mb-4 border border-blue-500 flex items-center gap-3">
+                  <GraduationCap className="text-blue-200 shrink-0" size={24} />
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Nota do Aluno (Opcional)</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: 9,5" 
+                      className="w-full bg-white text-gray-900 font-bold px-3 py-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-300"
+                      value={notaAluno}
+                      onChange={(e) => setNotaAluno(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <button onClick={handleAprovar} disabled={salvando} className="w-full bg-white text-blue-700 font-black text-lg py-4 rounded-xl hover:bg-gray-100 active:scale-95 transition-all shadow-lg flex justify-center items-center gap-2">{salvando ? 'Salvando...' : 'Aprovar e Avançar'} <ChevronRight size={20}/></button>
               </div>
             ) : (
@@ -199,13 +236,24 @@ export default function RevisarAtividade() {
                   <CheckCircle size={20} />Aprovado
                   {foiEditado ? ( <span className="ml-auto text-[10px] font-black uppercase tracking-wider bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full flex items-center gap-1"><Edit3 size={12}/> Editado</span> ) : ( <span className="ml-auto text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full flex items-center gap-1"><Sparkles size={12}/> 100% IA</span> )}
                 </h3>
+                
+                {atividadeAtual.nota && (
+                  <div className="bg-green-500/20 border border-green-500/30 text-green-300 px-4 py-3 rounded-xl mb-3 flex items-center gap-3">
+                    <GraduationCap size={20} />
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-widest block opacity-80">Nota Final</span>
+                      <span className="font-black text-lg">{atividadeAtual.nota}</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-white text-gray-800 p-4 rounded-xl text-sm mb-4 min-h-[150px] whitespace-pre-wrap font-medium shadow-inner">{atividadeAtual.feedbackFinal || atividadeAtual.feedbackSugerido}</div>
                 <button onClick={handleCopiar} className="w-full bg-white text-gray-800 font-black text-lg py-4 rounded-xl hover:bg-gray-100 active:scale-95 transition-all shadow-lg flex justify-center items-center gap-2 mb-4"><Copy size={24} /> {copiado ? 'Texto Copiado!' : 'Copiar Feedback'}</button>
-                {isAdmin && isFaltaPostar && ( <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-blue-600 text-white font-black text-md py-4 rounded-xl hover:bg-blue-700 transition-all border border-blue-500 flex justify-center items-center gap-2">{marcandoPostado ? 'Salvando...' : <><Send size={20}/> Marcar como Postado</>}</button> )}
-                {isFinalizado && ( <div className="w-full bg-green-900 text-green-100 font-bold text-sm py-3 rounded-xl flex justify-center items-center gap-2 border border-green-700"><CheckCheck size={18} /> Postado no Mais Médicos</div> )}
+                {isAdmin && isFaltaPostar && ( <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-blue-600 text-white font-black text-md py-4 rounded-xl hover:bg-blue-700 transition-all border border-blue-500 flex justify-center items-center gap-2">{marcandoPostado ? 'Salvando...' : <><Send size={20}/> Marcar como Lançado</>}</button> )}
+                {isFinalizado && ( <div className="w-full bg-green-900 text-green-100 font-bold text-sm py-3 rounded-xl flex justify-center items-center gap-2 border border-green-700"><CheckCheck size={18} /> Feedback lançado (Moodle, Sigaa...)</div> )}
                 <div className="mt-4 pt-4 border-t border-gray-700 space-y-2 text-xs text-gray-400 font-medium">
                   {atividadeAtual.dataAprovacao && ( <p className="flex items-center gap-2"><CalendarDays size={14}/> Revisado: {formatarData(atividadeAtual.dataAprovacao)}</p> )}
-                  {isFinalizado && atividadeAtual.dataPostagem && ( <p className="flex items-center gap-2 text-gray-300"><CalendarDays size={14}/> Postado: {formatarData(atividadeAtual.dataPostagem)}</p> )}
+                  {isFinalizado && atividadeAtual.dataPostagem && ( <p className="flex items-center gap-2 text-gray-300"><CalendarDays size={14}/> Lançado: {formatarData(atividadeAtual.dataPostagem)}</p> )}
                 </div>
               </div>
             )}
@@ -213,7 +261,7 @@ export default function RevisarAtividade() {
             {isAdmin && isEnviado && (
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 text-center border-b border-gray-100 pb-2">Controles Gerenciais</h4>
-                {isFinalizado && ( <button onClick={handleReverterPostagem} disabled={salvandoAcao} className="w-full flex items-center justify-center gap-2 text-orange-600 hover:bg-orange-50 py-3 rounded-xl font-bold transition-colors text-sm disabled:opacity-50"><RotateCcw size={18} /> Desfazer Postagem</button> )}
+                {isFinalizado && ( <button onClick={handleReverterPostagem} disabled={salvandoAcao} className="w-full flex items-center justify-center gap-2 text-orange-600 hover:bg-orange-50 py-3 rounded-xl font-bold transition-colors text-sm disabled:opacity-50"><RotateCcw size={18} /> Desfazer Lançamento</button> )}
                 {!isPendente && ( <button onClick={handleReverterRevisao} disabled={salvandoAcao} className="w-full flex items-center justify-center gap-2 text-yellow-600 hover:bg-yellow-50 py-3 rounded-xl font-bold transition-colors text-sm disabled:opacity-50"><RotateCcw size={18} /> Devolver p/ Revisão</button> )}
                 <button onClick={handleExcluir} disabled={excluindo} className="w-full flex items-center justify-center gap-2 text-red-500 hover:bg-red-50 py-3 rounded-xl font-bold transition-colors text-sm"><Trash2 size={18} /> Excluir Resposta do Aluno</button>
               </div>
@@ -223,5 +271,4 @@ export default function RevisarAtividade() {
       </div>
     </div>
   );
-                                                                                                                    }
-                                                                                                                                                                                                                                   
+}
