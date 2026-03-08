@@ -162,12 +162,12 @@ export default function Tarefas() {
     return 'border-orange-200 bg-orange-50/20';
   };
 
-  // NOVA FUNÇÃO: Traduz o nome técnico do banco para o visual limpo
+  // FUNÇÃO DE TRADUÇÃO VISUAL
   const getNomeVisivelTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return 'Compromisso';
     if (t === 'lembrete') return 'Post-it';
-    return 'Entrega';
+    return 'Tarefa do Aluno';
   };
 
   const tarefasFiltradas = tarefas.filter(t => (t.nomeTarefa || t.titulo || '').toLowerCase().includes(busca.toLowerCase()));
@@ -211,9 +211,8 @@ export default function Tarefas() {
                       <div className="grid grid-cols-2 gap-3">
                         <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
                         
-                        {/* UPDATE NO SELECT DE EDIÇÃO */}
                         <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white outline-none cursor-pointer" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
-                          <option value="entrega">Entrega (Desafio)</option>
+                          <option value="entrega">Tarefa do Aluno</option>
                           <option value="compromisso">Compromisso</option>
                           <option value="lembrete">Post-it</option>
                         </select>
@@ -238,7 +237,6 @@ export default function Tarefas() {
                             <h3 className="font-black text-gray-800 truncate leading-tight">{tarefa.nomeTarefa || tarefa.titulo}</h3>
                           )}
                           
-                          {/* TAG DE IDENTIFICAÇÃO VISUAL COM O NOME NOVO */}
                           <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
                             {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem data'}
                           </div>
@@ -263,9 +261,8 @@ export default function Tarefas() {
             </h2>
             <form onSubmit={handleCriar} className="space-y-4">
               
-              {/* UPDATE NO SELECT DE CRIAÇÃO */}
               <select className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" value={novaTarefa.tipo} onChange={e => setNovaTarefa({...novaTarefa, tipo: e.target.value})}>
-                <option value="entrega">📝 Entrega (Desafio)</option>
+                <option value="entrega">📝 Tarefa do Aluno</option>
                 <option value="compromisso">📅 Compromisso</option>
                 <option value="lembrete">💡 Post-it</option>
               </select>
@@ -281,4 +278,4 @@ export default function Tarefas() {
       </div>
     </div>
   );
-                                                 }
+}
