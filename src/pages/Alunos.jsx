@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, Plus, Search, Pencil, Trash2, Check, X, GraduationCap, Phone } from 'lucide-react';
+import { Users, Plus, Search, Pencil, Trash2, Check, X, GraduationCap, Phone, Mail } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Alunos() {
@@ -15,15 +15,32 @@ export default function Alunos() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
 
-  const [filtroTurma, setFiltroTurma] = useState(location.state?.turmaIdSelecionada || 'todas');
+  const [filtroTurma, setFiltroTurma] = useState(() => {
+    return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || 'todas';
+  });
 
-  const [novoAluno, setNovoAluno] = useState({ nome: '', whatsapp: '', turmaId: '' });
+  // Novo estado incluindo o e-mail
+  const [novoAluno, setNovoAluno] = useState({ nome: '', whatsapp: '', email: '', turmaId: '' });
   const [salvando, setSalvando] = useState(false);
 
   const [editandoId, setEditandoId] = useState(null);
   const [nomeEdicao, setNomeEdicao] = useState('');
   const [whatsappEdicao, setWhatsappEdicao] = useState('');
+  const [emailEdicao, setEmailEdicao] = useState('');
   const [turmaIdEdicao, setTurmaIdEdicao] = useState('');
+
+  useEffect(() => {
+    if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== filtroTurma) {
+      setFiltroTurma(location.state.turmaIdSelecionada);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    if (filtroTurma && filtroTurma !== 'todas') {
+      localStorage.setItem('ultimaTurmaAtiva', filtroTurma);
+      setNovoAluno(prev => ({ ...prev, turmaId: filtroTurma }));
+    }
+  }, [filtroTurma]);
 
   useEffect(() => {
     async function fetchData() {
@@ -38,7 +55,13 @@ export default function Alunos() {
         const turmasData = snapTurmas.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
         
-        if (turmasData.length > 0) {
+        const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || filtroTurma;
+        const isValid = turmasData.some(t => t.id === targetTurma);
+        
+        if (isValid) {
+          if (targetTurma !== filtroTurma) setFiltroTurma(targetTurma);
+          setNovoAluno(prev => ({ ...prev, turmaId: targetTurma }));
+        } else if (turmasData.length > 0) {
           setNovoAluno(prev => ({ ...prev, turmaId: turmasData[0].id }));
         }
 
@@ -67,6 +90,7 @@ export default function Alunos() {
       const alunoData = {
         nome: novoAluno.nome.trim(),
         whatsapp: novoAluno.whatsapp.trim(),
+        email: novoAluno.email.trim(),
         turmaId: novoAluno.turmaId,
         instituicaoId: escolaSelecionada.id,
         professorUid: currentUser.uid,
@@ -78,7 +102,7 @@ export default function Alunos() {
       const novaLista = [{ id: docRef.id, ...alunoData }, ...alunos];
       setAlunos(novaLista.sort((a, b) => a.nome.localeCompare(b.nome)));
       
-      setNovoAluno(prev => ({ ...prev, nome: '', whatsapp: '' }));
+      setNovoAluno(prev => ({ ...prev, nome: '', whatsapp: '', email: '' }));
     } catch (error) {
       console.error("Erro ao criar aluno:", error);
     } finally {
@@ -92,6 +116,7 @@ export default function Alunos() {
       await updateDoc(doc(db, 'alunos', id), { 
         nome: nomeEdicao.trim(),
         whatsapp: whatsappEdicao.trim(),
+        email: emailEdicao.trim(),
         turmaId: turmaIdEdicao
       });
       
@@ -99,6 +124,7 @@ export default function Alunos() {
         ...a, 
         nome: nomeEdicao.trim(), 
         whatsapp: whatsappEdicao.trim(),
+        email: emailEdicao.trim(),
         turmaId: turmaIdEdicao
       } : a);
       
@@ -126,7 +152,8 @@ export default function Alunos() {
   });
 
   const getNomeTurma = (idTurma) => turmas.find(t => t.id === idTurma)?.nome || 'Turma não encontrada';
-    return (
+  
+  return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="mb-6">
         <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Alunos' }]} />
@@ -178,7 +205,15 @@ export default function Alunos() {
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl mt-1 focus:ring-2 focus:ring-green-500 outline-none font-medium text-gray-800"
                       value={novoAluno.whatsapp} onChange={e => setNovoAluno({...novoAluno, whatsapp: e.target.value})}
                     />
-                    <p className="text-[9px] text-gray-400 mt-1 ml-1 leading-tight">Apenas números. Usado para cobranças no WhatsApp.</p>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-1 flex items-center gap-1"><Mail size={12}/> E-mail (Opcional)</label>
+                    <input
+                      type="email" placeholder="Ex: aluno@email.com"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl mt-1 focus:ring-2 focus:ring-green-500 outline-none font-medium text-gray-800"
+                      value={novoAluno.email} onChange={e => setNovoAluno({...novoAluno, email: e.target.value})}
+                    />
                   </div>
 
                   <button disabled={salvando || !novoAluno.turmaId} className="w-full bg-green-600 text-white font-black py-4 rounded-xl hover:bg-green-700 transition-all shadow-md flex items-center justify-center gap-2 mt-2 disabled:opacity-50">
@@ -237,6 +272,10 @@ export default function Alunos() {
                         <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none" value={whatsappEdicao} onChange={e => setWhatsappEdicao(e.target.value)}/>
                       </div>
                       <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">E-mail</label>
+                        <input type="email" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none" value={emailEdicao} onChange={e => setEmailEdicao(e.target.value)}/>
+                      </div>
+                      <div>
                         <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Turma</label>
                         <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none bg-white cursor-pointer" value={turmaIdEdicao} onChange={e => setTurmaIdEdicao(e.target.value)}>
                           {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -255,7 +294,7 @@ export default function Alunos() {
                         </div>
                         <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <button 
-                            onClick={() => { setEditandoId(aluno.id); setNomeEdicao(aluno.nome); setWhatsappEdicao(aluno.whatsapp || ''); setTurmaIdEdicao(aluno.turmaId); }}
+                            onClick={() => { setEditandoId(aluno.id); setNomeEdicao(aluno.nome); setWhatsappEdicao(aluno.whatsapp || ''); setEmailEdicao(aluno.email || ''); setTurmaIdEdicao(aluno.turmaId); }}
                             className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar"
                           ><Pencil size={18}/></button>
                           <button 
@@ -274,7 +313,13 @@ export default function Alunos() {
                         
                         {aluno.whatsapp && (
                           <div className="flex items-center gap-1.5 text-gray-500 text-xs font-bold mt-1 bg-gray-50 p-1.5 rounded-md border border-gray-100">
-                            <Phone size={12} className="text-green-500"/> {aluno.whatsapp}
+                            <Phone size={12} className="text-green-500 shrink-0"/> <span className="truncate">{aluno.whatsapp}</span>
+                          </div>
+                        )}
+
+                        {aluno.email && (
+                          <div className="flex items-center gap-1.5 text-gray-500 text-xs font-bold mt-1 bg-gray-50 p-1.5 rounded-md border border-gray-100">
+                            <Mail size={12} className="text-blue-500 shrink-0"/> <span className="truncate" title={aluno.email}>{aluno.email}</span>
                           </div>
                         )}
                       </div>
@@ -289,4 +334,4 @@ export default function Alunos() {
       </div>
     </div>
   );
-}
+                                        }
