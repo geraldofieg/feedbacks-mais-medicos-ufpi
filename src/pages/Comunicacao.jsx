@@ -10,11 +10,14 @@ export default function Comunicacao() {
   const { currentUser, escolaSelecionada } = useAuth();
   const location = useLocation();
   
-  const turmaPreSelecionada = location.state?.turmaIdSelecionada || '';
   const alunoAlvo = location.state?.alunoAlvo || null;
 
   const [turmas, setTurmas] = useState([]);
-  const [turmaAtiva, setTurmaAtiva] = useState(turmaPreSelecionada);
+  
+  // A MÁGICA DA MEMÓRIA
+  const [turmaAtiva, setTurmaAtiva] = useState(() => {
+    return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
+  });
   
   const [tarefasDaTurma, setTarefasDaTurma] = useState([]);
   const [tarefaAtivaId, setTarefaAtivaId] = useState('');
@@ -25,6 +28,17 @@ export default function Comunicacao() {
   const [loadingDados, setLoadingDados] = useState(false);
   const [erro, setErro] = useState(null);
   const [copiado, setCopiado] = useState(null);
+
+  // ESPIÃO DE CLIQUES E SALVAMENTO NA MEMÓRIA
+  useEffect(() => {
+    if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
+      setTurmaAtiva(location.state.turmaIdSelecionada);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    if (turmaAtiva) localStorage.setItem('ultimaTurmaAtiva', turmaAtiva);
+  }, [turmaAtiva]);
 
   useEffect(() => {
     async function fetchTurmas() {
@@ -39,7 +53,16 @@ export default function Comunicacao() {
         const snapT = await getDocs(qT);
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
-        if (turmasData.length > 0 && !turmaAtiva) setTurmaAtiva(turmasData[0].id);
+        
+        // Aplica a Memória Global
+        const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || turmaAtiva;
+        const isValid = turmasData.some(t => t.id === targetTurma);
+        
+        if (isValid) {
+          if (targetTurma !== turmaAtiva) setTurmaAtiva(targetTurma);
+        } else if (turmasData.length > 0) {
+          setTurmaAtiva(turmasData[0].id);
+        }
       } catch (error) {
         setErro("Falha de conexão com o banco de dados.");
       } finally {
@@ -59,7 +82,11 @@ export default function Comunicacao() {
       try {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
-        const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        
+        // FILTRO INTELIGENTE: Pega apenas o que for "entrega" ou não tiver tipo definido
+        const tarefasData = snapTarefas.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo));
         
         tarefasData.sort((a, b) => {
           const timeA = a.dataFim?.toMillis() || 0;
@@ -177,7 +204,7 @@ export default function Comunicacao() {
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
   const isCarregando = loadingTurmas || loadingDados;
   const msgGeralPronta = gerarMensagemGeral();
-  if (!escolaSelecionada?.id) {
+            if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Breadcrumb items={[{ label: 'Comunicação' }]} />
@@ -235,7 +262,7 @@ export default function Comunicacao() {
 
             {tarefasDaTurma.length === 0 ? (
               <div className="text-sm text-orange-600 font-bold bg-orange-50 p-4 rounded-xl border border-orange-200">
-                Nenhuma tarefa cadastrada para esta turma.
+                Nenhuma tarefa (para entrega) cadastrada para esta turma.
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
@@ -344,23 +371,34 @@ export default function Comunicacao() {
                               <div className="flex flex-wrap gap-2 shrink-0">
                                 <button 
                                   onClick={() => handleCopiar(msgIndividualizada, idCopiaPlat)}
-                                  className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-sm ${copiado === idCopiaPlat ? 'bg-blue-600 text-white scale-95' : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'}`}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm border ${
+                                    copiado === idCopiaPlat 
+                                      ? 'bg-blue-100 text-blue-700 border-blue-200' 
+                                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-blue-600'
+                                  }`}
                                 >
-                                  {copiado === idCopiaPlat ? <><CheckCircle2 size={16}/> Copiado!</> : <><Copy size={16}/> Sistema Oficial</>} 
+                                  {copiado === idCopiaPlat ? <CheckCircle2 size={14}/> : <Copy size={14}/>} Copiar
                                 </button>
-
-                                <button 
-                                  onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
-                                  className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-sm ${copiado === idCopiaZap ? 'bg-green-600 text-white scale-95' : 'bg-green-500 text-white hover:bg-green-600'}`}
-                                >
-                                  {copiado === idCopiaZap ? <><CheckCircle2 size={16}/> Abrindo...</> : <><Send size={16}/> Zap Privado</>} 
-                                </button>
+                                
+                                {pend.whatsapp && (
+                                  <button 
+                                    onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm ${
+                                      copiado === idCopiaZap 
+                                        ? 'bg-green-200 text-green-900 scale-95' 
+                                        : 'bg-green-600 text-white hover:bg-green-700'
+                                    }`}
+                                  >
+                                    {copiado === idCopiaZap ? <CheckCircle2 size={14}/> : <Send size={14}/>} Cobrar no Zap
+                                  </button>
+                                )}
                               </div>
                             </div>
-
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-sm text-gray-600 italic whitespace-pre-wrap">
-                              "{msgIndividualizada}"
+                            
+                            <div className="bg-gray-50 p-4 rounded-xl text-sm text-gray-600 whitespace-pre-wrap border border-gray-100 font-medium">
+                              {msgIndividualizada}
                             </div>
+                            
                           </div>
                         );
                       })}
