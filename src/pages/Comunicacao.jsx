@@ -3,30 +3,26 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Megaphone, Copy, CheckCircle2, MessageCircle, Send, MonitorSmartphone, GraduationCap, RefreshCw, BookOpen, Target, CalendarClock } from 'lucide-react';
+import { Megaphone, Copy, CheckCircle2, MessageCircle, Send, MonitorSmartphone, GraduationCap, BookOpen, Target, CalendarClock } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Comunicacao() {
   const { currentUser, escolaSelecionada } = useAuth();
   const location = useLocation();
-  
   const alunoAlvo = location.state?.alunoAlvo || null;
 
   const [turmas, setTurmas] = useState([]);
   
-  // A MÁGICA DA MEMÓRIA
+  // A MÁGICA DA MEMÓRIA GLOBAL
   const [turmaAtiva, setTurmaAtiva] = useState(() => {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
   
   const [tarefasDaTurma, setTarefasDaTurma] = useState([]);
   const [tarefaAtivaId, setTarefaAtivaId] = useState('');
-  
   const [devedores, setDevedores] = useState([]);
-  
   const [loadingTurmas, setLoadingTurmas] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
-  const [erro, setErro] = useState(null);
   const [copiado, setCopiado] = useState(null);
 
   // ESPIÃO DE CLIQUES E SALVAMENTO NA MEMÓRIA
@@ -42,19 +38,19 @@ export default function Comunicacao() {
 
   useEffect(() => {
     async function fetchTurmas() {
-      if (!currentUser || !escolaSelecionada?.id) {
-        setLoadingTurmas(false);
-        return; 
-      }
-      setErro(null);
+      if (!currentUser || !escolaSelecionada?.id) { setLoadingTurmas(false); return; }
       setLoadingTurmas(true);
       try {
         const qT = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
         const snapT = await getDocs(qT);
-        const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        
+        // ORDENAÇÃO INTELIGENTE: Sempre puxa a turma mais NOVA caso a memória falhe
+        let turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        turmasData.sort((a, b) => (b.dataCriacao?.toMillis() || 0) - (a.dataCriacao?.toMillis() || 0));
+        
         setTurmas(turmasData);
         
-        // Aplica a Memória Global
+        // Aplica a Memória
         const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || turmaAtiva;
         const isValid = turmasData.some(t => t.id === targetTurma);
         
@@ -63,47 +59,31 @@ export default function Comunicacao() {
         } else if (turmasData.length > 0) {
           setTurmaAtiva(turmasData[0].id);
         }
-      } catch (error) {
-        setErro("Falha de conexão com o banco de dados.");
-      } finally {
-        setLoadingTurmas(false);
-      }
+      } catch (error) { console.error(error); } finally { setLoadingTurmas(false); }
     }
     fetchTurmas();
   }, [currentUser, escolaSelecionada]);
 
   useEffect(() => {
     async function fetchDadosComunicacao() {
-      if (!turmaAtiva) {
-        setTarefasDaTurma([]); setDevedores([]); setTarefaAtivaId('');
-        return;
-      }
+      if (!turmaAtiva) { setTarefasDaTurma([]); setDevedores([]); setTarefaAtivaId(''); return; }
       setLoadingDados(true);
       try {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         
-        // FILTRO INTELIGENTE: Pega apenas o que for "entrega" ou não tiver tipo definido
+        // O FILTRO: Exibe APENAS tarefas do tipo entrega para serem cobradas!
         const tarefasData = snapTarefas.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo));
         
-        tarefasData.sort((a, b) => {
-          const timeA = a.dataFim?.toMillis() || 0;
-          const timeB = b.dataFim?.toMillis() || 0;
-          return timeA - timeB;
-        });
-        
+        tarefasData.sort((a, b) => (a.dataFim?.toMillis() || 0) - (b.dataFim?.toMillis() || 0));
         setTarefasDaTurma(tarefasData);
         
         const tarefaAtualId = tarefaAtivaId && tarefasData.some(t => t.id === tarefaAtivaId) ? tarefaAtivaId : (tarefasData[0]?.id || '');
         setTarefaAtivaId(tarefaAtualId);
 
-        if (!tarefaAtualId) {
-          setDevedores([]);
-          setLoadingDados(false);
-          return;
-        }
+        if (!tarefaAtualId) { setDevedores([]); setLoadingDados(false); return; }
 
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapAlunos = await getDocs(qAlunos);
@@ -114,7 +94,6 @@ export default function Comunicacao() {
         const entregasFeitas = new Set(snapAtividades.docs.map(d => d.data().alunoId));
 
         const listaDevedores = alunosData.filter(aluno => !entregasFeitas.has(aluno.id));
-
         listaDevedores.sort((a, b) => {
           if (a.nome === alunoAlvo) return -1;
           if (b.nome === alunoAlvo) return 1;
@@ -122,28 +101,20 @@ export default function Comunicacao() {
         });
 
         setDevedores(listaDevedores);
-      } catch (error) {
-        console.error("Erro ao montar pendências:", error);
-      } finally {
-        setLoadingDados(false);
-      }
+      } catch (error) { console.error(error); } finally { setLoadingDados(false); }
     }
     fetchDadosComunicacao();
   }, [turmaAtiva, tarefaAtivaId, alunoAlvo]);
 
   const getDiasRestantes = (timestampFim) => {
     if (!timestampFim || !timestampFim.toDate) return null;
-    const agora = new Date();
-    const dataFim = timestampFim.toDate(); 
-    const diferencaTime = dataFim.getTime() - agora.getTime();
-    return Math.ceil(diferencaTime / (1000 * 3600 * 24));
+    const agora = new Date(); const dataFim = timestampFim.toDate(); 
+    return Math.ceil((dataFim.getTime() - agora.getTime()) / (1000 * 3600 * 24));
   };
 
   const getPrimeiroNome = (nomeCompleto) => {
     if (!nomeCompleto) return '';
-    const partes = nomeCompleto.trim().split(' ');
-    const primeiro = partes[0];
-    return primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
+    return nomeCompleto.trim().split(' ')[0].charAt(0).toUpperCase() + nomeCompleto.trim().split(' ')[0].slice(1).toLowerCase();
   };
 
   const tarefaAtualObj = tarefasDaTurma.find(t => t.id === tarefaAtivaId);
@@ -174,22 +145,14 @@ export default function Comunicacao() {
 
   const aplicarFeedback = (idCopia, acaoAposFeedback) => {
     setCopiado(idCopia);
-    setTimeout(() => {
-      setCopiado(null);
-      if (acaoAposFeedback) acaoAposFeedback();
-    }, 1500);
+    setTimeout(() => { setCopiado(null); if (acaoAposFeedback) acaoAposFeedback(); }, 1500);
   };
 
-  const handleCopiar = (texto, id) => {
-    navigator.clipboard.writeText(texto);
-    aplicarFeedback(id);
-  };
+  const handleCopiar = (texto, id) => { navigator.clipboard.writeText(texto); aplicarFeedback(id); };
 
   const handleEnviarWhatsAppGeral = (texto) => {
     navigator.clipboard.writeText(texto);
-    aplicarFeedback('geral', () => {
-      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
-    });
+    aplicarFeedback('geral', () => { window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank'); });
   };
 
   const handleEnviarWhatsAppIndividual = (alunoObjeto, idCopia) => {
@@ -202,9 +165,8 @@ export default function Comunicacao() {
   };
 
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
-  const isCarregando = loadingTurmas || loadingDados;
   const msgGeralPronta = gerarMensagemGeral();
-            if (!escolaSelecionada?.id) {
+          if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Breadcrumb items={[{ label: 'Comunicação' }]} />
@@ -262,7 +224,7 @@ export default function Comunicacao() {
 
             {tarefasDaTurma.length === 0 ? (
               <div className="text-sm text-orange-600 font-bold bg-orange-50 p-4 rounded-xl border border-orange-200">
-                Nenhuma tarefa (para entrega) cadastrada para esta turma.
+                Nenhuma tarefa do aluno cadastrada para esta turma.
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
@@ -270,11 +232,7 @@ export default function Comunicacao() {
                   <button
                     key={t.id}
                     onClick={() => setTarefaAtivaId(t.id)}
-                    className={`px-5 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 border ${
-                      tarefaAtivaId === t.id
-                        ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]'
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
-                    }`}
+                    className={`px-5 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 border ${tarefaAtivaId === t.id ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
                   >
                     <span className={`w-2 h-2 rounded-full ${tarefaAtivaId === t.id ? 'bg-white' : 'bg-green-500 animate-pulse'}`}></span>
                     {t.nomeTarefa || t.titulo}
@@ -371,11 +329,7 @@ export default function Comunicacao() {
                               <div className="flex flex-wrap gap-2 shrink-0">
                                 <button 
                                   onClick={() => handleCopiar(msgIndividualizada, idCopiaPlat)}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm border ${
-                                    copiado === idCopiaPlat 
-                                      ? 'bg-blue-100 text-blue-700 border-blue-200' 
-                                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-blue-600'
-                                  }`}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm border ${copiado === idCopiaPlat ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-blue-600'}`}
                                 >
                                   {copiado === idCopiaPlat ? <CheckCircle2 size={14}/> : <Copy size={14}/>} Copiar
                                 </button>
@@ -383,11 +337,7 @@ export default function Comunicacao() {
                                 {pend.whatsapp && (
                                   <button 
                                     onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm ${
-                                      copiado === idCopiaZap 
-                                        ? 'bg-green-200 text-green-900 scale-95' 
-                                        : 'bg-green-600 text-white hover:bg-green-700'
-                                    }`}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm ${copiado === idCopiaZap ? 'bg-green-200 text-green-900 scale-95' : 'bg-green-600 text-white hover:bg-green-700'}`}
                                   >
                                     {copiado === idCopiaZap ? <CheckCircle2 size={14}/> : <Send size={14}/>} Cobrar no Zap
                                   </button>
