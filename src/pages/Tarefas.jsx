@@ -12,24 +12,25 @@ export default function Tarefas() {
   
   const [turmas, setTurmas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
-  const [alunosTurma, setAlunosTurma] = useState([]); // Guarda os alunos para a atribuição
+  const [alunosTurma, setAlunosTurma] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   
-  // A MÁGICA DA MEMÓRIA
   const [turmaAtiva, setTurmaAtiva] = useState(() => {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
 
-  const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataFim: '', tipo: 'entrega' });
-  const [atribuicaoEspecifica, setAtribuicaoEspecifica] = useState(false); // Flag de Exceção
-  const [alunosSelecionados, setAlunosSelecionados] = useState([]); // Quem vai receber a exceção
+  // AJUSTE: Separamos a Data da Hora
+  const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataFim: '', horaFim: '', tipo: 'entrega' });
+  const [atribuicaoEspecifica, setAtribuicaoEspecifica] = useState(false); 
+  const [alunosSelecionados, setAlunosSelecionados] = useState([]); 
   const [salvando, setSalvando] = useState(false);
 
   const [editandoId, setEditandoId] = useState(null);
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
   const [dataFimEdicao, setDataFimEdicao] = useState('');
+  const [horaFimEdicao, setHoraFimEdicao] = useState('');
   const [tipoEdicao, setTipoEdicao] = useState('entrega');
 
   useEffect(() => {
@@ -64,24 +65,20 @@ export default function Tarefas() {
     fetchTurmas();
   }, [currentUser, escolaSelecionada]);
 
-  // BUSCA AS TAREFAS E OS ALUNOS (PARA A ATRIBUIÇÃO MÁGICA)
   useEffect(() => {
     async function fetchDadosTurma() {
       if (!turmaAtiva) { setTarefas([]); setAlunosTurma([]); setLoading(false); return; }
       setLoading(true);
       try {
-        // Busca Tarefas
         const qT = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id), where('turmaId', '==', turmaAtiva));
         const snapT = await getDocs(qT);
         const tarefasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTarefas(tarefasData.sort((a, b) => (b.dataCriacao?.toMillis() || 0) - (a.dataCriacao?.toMillis() || 0)));
 
-        // Busca Alunos da Turma
         const qA = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapA = await getDocs(qA);
         setAlunosTurma(snapA.docs.map(d => ({ id: d.id, nome: d.data().nome })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome)));
         
-        // Reseta o estado de seleção
         setAtribuicaoEspecifica(false);
         setAlunosSelecionados([]);
 
@@ -91,17 +88,36 @@ export default function Tarefas() {
     fetchDadosTurma();
   }, [turmaAtiva, escolaSelecionada]);
 
-  const tsToInput = (ts) => {
+  // CONVERSORES SEPARADOS DE DATA E HORA PARA O MODO EDIÇÃO
+  const tsToDateInput = (ts) => {
     if (!ts) return "";
     try {
-      let d;
-      if (ts.toDate) d = ts.toDate();
-      else if (ts instanceof Date) d = ts;
-      else if (ts.seconds) d = new Date(ts.seconds * 1000);
-      else d = new Date(ts);
+      let d = ts.toDate ? ts.toDate() : new Date(ts);
       if (isNaN(d.getTime())) return "";
-      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     } catch (e) { return ""; }
+  };
+
+  const tsToTimeInput = (ts) => {
+    if (!ts) return "";
+    try {
+      let d = ts.toDate ? ts.toDate() : new Date(ts);
+      if (isNaN(d.getTime())) return "";
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    } catch (e) { return ""; }
+  };
+
+  // FUNÇÃO MÁGICA PARA BLINDAR FUSO HORÁRIO E INJETAR 23:59
+  const criarDataSegura = (dataStr, horaStr) => {
+    if (!dataStr) return null;
+    const [ano, mes, dia] = dataStr.split('-');
+    const [hora, min] = (horaStr || '23:59').split(':');
+    return new Date(ano, mes - 1, dia, hora, min);
   };
 
   const iniciarEdicao = (t) => {
@@ -110,7 +126,8 @@ export default function Tarefas() {
     
     setTituloEdicao(t.nomeTarefa || t.titulo || 'Tarefa sem nome');
     setEnunciadoEdicao(t.enunciado || '');
-    setDataFimEdicao(tsToInput(t.dataFim));
+    setDataFimEdicao(tsToDateInput(t.dataFim));
+    setHoraFimEdicao(tsToTimeInput(t.dataFim));
     setTipoEdicao(tiposValidos.includes(tipoNormalizado) ? tipoNormalizado : 'entrega');
     setEditandoId(t.id); 
   };
@@ -118,7 +135,8 @@ export default function Tarefas() {
   async function handleSalvarEdicao(id) {
     if (!tituloEdicao.trim()) return;
     try {
-      const prazoFinal = dataFimEdicao ? Timestamp.fromDate(new Date(dataFimEdicao)) : null;
+      const prazoFinal = dataFimEdicao ? Timestamp.fromDate(criarDataSegura(dataFimEdicao, horaFimEdicao)) : null;
+      
       await updateDoc(doc(db, 'tarefas', id), { 
         nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(),
         dataFim: prazoFinal, tipo: tipoEdicao
@@ -128,12 +146,10 @@ export default function Tarefas() {
     } catch (error) { console.error("Erro ao salvar:", error); }
   }
 
-  // A MAGICA DA DISTRIBUIÇÃO ACONTECE AQUI
   async function handleCriar(e) {
     e.preventDefault();
     if (!novaTarefa.titulo || !turmaAtiva) return;
     
-    // Trava de segurança: Se marcou a flag, tem que escolher pelo menos 1 aluno
     if (novaTarefa.tipo === 'entrega' && atribuicaoEspecifica && alunosSelecionados.length === 0) {
       alert("Selecione pelo menos um aluno para receber a tarefa.");
       return;
@@ -141,7 +157,8 @@ export default function Tarefas() {
 
     try {
       setSalvando(true);
-      const prazoFinal = novaTarefa.dataFim ? Timestamp.fromDate(new Date(novaTarefa.dataFim)) : null;
+      const prazoFinal = novaTarefa.dataFim ? Timestamp.fromDate(criarDataSegura(novaTarefa.dataFim, novaTarefa.horaFim)) : null;
+      
       const tData = {
         nomeTarefa: novaTarefa.titulo.trim(), enunciado: novaTarefa.enunciado.trim(),
         dataFim: prazoFinal, tipo: novaTarefa.tipo, turmaId: turmaAtiva,
@@ -149,15 +166,12 @@ export default function Tarefas() {
         status: 'ativa', dataCriacao: serverTimestamp()
       };
       
-      // 1. Salva a Tarefa "Mãe"
       const docRef = await addDoc(collection(db, 'tarefas'), tData);
       const novaId = docRef.id;
 
-      // 2. Se for uma "Entrega", distribui as obrigações
       if (novaTarefa.tipo === 'entrega' && alunosTurma.length > 0) {
-        const batch = writeBatch(db); // Usamos batch para salvar vários de uma vez sem estourar o banco
+        const batch = writeBatch(db); 
         
-        // Define quem vai receber (a turma toda ou só os marcados)
         const listaAlvo = atribuicaoEspecifica 
           ? alunosTurma.filter(a => alunosSelecionados.includes(a.id))
           : alunosTurma;
@@ -179,11 +193,11 @@ export default function Tarefas() {
           });
         });
         
-        await batch.commit(); // Executa o salvamento em massa
+        await batch.commit(); 
       }
 
       setTarefas([{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas]);
-      setNovaTarefa({ titulo: '', enunciado: '', dataFim: '', tipo: 'entrega' });
+      setNovaTarefa({ titulo: '', enunciado: '', dataFim: '', horaFim: '', tipo: 'entrega' });
       setAtribuicaoEspecifica(false);
       setAlunosSelecionados([]);
     } catch (error) { console.error("Erro criar:", error); } finally { setSalvando(false); }
@@ -212,7 +226,6 @@ export default function Tarefas() {
     } catch (e) { return ""; }
   };
 
-  // AJUSTE DE COR PARA O POST-IT AQUI
   const getIconeTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return <Calendar size={22} className="text-purple-500" />;
@@ -220,7 +233,6 @@ export default function Tarefas() {
     return <FileText size={22} className="text-orange-500" />;
   };
 
-  // AJUSTE DE FUNDO E BORDA PARA O POST-IT AQUI
   const getCorTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return 'border-purple-200 bg-purple-50/20';
@@ -273,18 +285,30 @@ export default function Tarefas() {
                 <div key={tarefa.id} className={`bg-white p-5 rounded-2xl border transition-all ${editandoId === tarefa.id ? 'border-blue-500 ring-4 ring-blue-50 shadow-lg' : `${getCorTipo(tarefa.tipo)}`}`}>
                   {editandoId === tarefa.id ? (
                     <div className="space-y-4 animate-in fade-in zoom-in duration-200">
+                      
                       <div className="grid grid-cols-2 gap-3">
-                        <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
-                        
+                        <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)} placeholder="Título da tarefa..."/>
                         <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white outline-none cursor-pointer" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
                           <option value="entrega">Tarefa do Aluno</option>
                           <option value="compromisso">Compromisso</option>
                           <option value="lembrete">Post-it</option>
                         </select>
                       </div>
-                      <input type="datetime-local" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
-                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm outline-none resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3"/>
+                      
+                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm outline-none resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3" placeholder="Observações/Enunciado (Opcional)..."/>
+                      
                       <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="text-[10px] font-black uppercase text-blue-500 mb-1 block pl-1">Data</label>
+                          <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none text-gray-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
+                        </div>
+                        <div className="w-1/3">
+                          <label className="text-[10px] font-black uppercase text-blue-500 mb-1 block pl-1">Hora</label>
+                          <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none text-gray-700" value={horaFimEdicao} onChange={e => setHoraFimEdicao(e.target.value)}/>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 mt-2">
                         <button onClick={() => handleSalvarEdicao(tarefa.id)} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold shadow-md">Salvar</button>
                         <button onClick={() => setEditandoId(null)} className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-xl font-bold">Cancelar</button>
                       </div>
@@ -333,9 +357,20 @@ export default function Tarefas() {
               </select>
               
               <input type="text" required placeholder="Título..." className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} />
-              <input type="datetime-local" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-gray-700" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})} />
+              
               <textarea placeholder="Observações/Enunciado (Opcional)..." rows="3" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none resize-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
               
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block pl-1">Data Final</label>
+                  <input type="date" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-gray-700" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})} />
+                </div>
+                <div className="w-1/3">
+                  <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block pl-1">Hora</label>
+                  <input type="time" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-gray-700" value={novaTarefa.horaFim} onChange={e => setNovaTarefa({...novaTarefa, horaFim: e.target.value})} />
+                </div>
+              </div>
+
               {/* O MENU DE EXCEÇÃO (APARECE SÓ SE FOR TAREFA DO ALUNO) */}
               {novaTarefa.tipo === 'entrega' && alunosTurma.length > 0 && (
                 <div className="pt-2 border-t border-gray-200">
