@@ -88,16 +88,18 @@ export default function Cronograma() {
     };
   };
 
+  // AJUSTE: Cores amarelas para o Post-it e adição do campo 'label' para tradução do texto
   const getEstiloCartao = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
-    if (t === 'compromisso') return { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-900', shadow: 'shadow-[0_0_10px_rgba(168,85,247,0.4)]', badge: 'bg-purple-600', icon: <Calendar size={18}/> };
-    if (t === 'lembrete') return { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-900', shadow: 'shadow-[0_0_10px_rgba(59,130,246,0.4)]', badge: 'bg-blue-600', icon: <StickyNote size={18}/> };
-    return { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-900', shadow: 'shadow-[0_0_10px_rgba(249,115,22,0.4)]', badge: 'bg-orange-500', icon: <FileText size={18}/> };
+    if (t === 'compromisso') return { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-900', shadow: 'shadow-[0_0_10px_rgba(168,85,247,0.4)]', badge: 'bg-purple-600', icon: <Calendar size={18}/>, label: 'COMPROMISSO' };
+    if (t === 'lembrete') return { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-900', shadow: 'shadow-[0_0_10px_rgba(234,179,8,0.4)]', badge: 'bg-yellow-500', icon: <StickyNote size={18}/>, label: 'POST-IT' };
+    return { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-900', shadow: 'shadow-[0_0_10px_rgba(249,115,22,0.4)]', badge: 'bg-orange-500', icon: <FileText size={18}/>, label: 'TAREFA DO ALUNO' };
   };
 
   const itensComPrazo = tarefas.filter(t => t.dataFim).map(t => ({ ...t, statusObj: getStatusPrazo(t.dataFim) })).filter(t => !esconderPassados || t.statusObj.diasRestantes >= 0).sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal); 
   const itensSemPrazo = tarefas.filter(t => !t.dataFim);
-    if (!escolaSelecionada?.id) {
+  
+  if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Breadcrumb items={[{ label: 'Cronograma' }]} />
@@ -143,7 +145,8 @@ export default function Cronograma() {
           <div className="text-center py-16 bg-white rounded-3xl border-2 border-dashed border-gray-200">
             <CalendarDays className="mx-auto text-gray-300 mb-4" size={48} />
             <p className="text-gray-500 font-medium text-lg">Nenhum evento programado para esta turma.</p>
-            <p className="text-gray-400 text-sm mt-2">Vá na aba "Tarefas" para adicionar entregas, reuniões ou lembretes.</p>
+            {/* AJUSTE NO TEXTO AQUI */}
+            <p className="text-gray-400 text-sm mt-2">Vá na aba "Tarefas" para adicionar entregas, reuniões ou post-its.</p>
           </div>
         ) : (
           <div className="space-y-12">
@@ -161,7 +164,8 @@ export default function Cronograma() {
                       <div key={item.id} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-gray-50 border-gray-200 group`}>
                         <div className="flex items-center gap-2 mb-2">
                           <div className={`p-1.5 rounded-lg text-white ${estilo.badge}`}>{estilo.icon}</div>
-                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{item.tipo || 'entrega'}</span>
+                          {/* AJUSTE AQUI PARA LER O LABEL (POST-IT) EM VEZ DO TIPO (LEMBRETE) */}
+                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{estilo.label}</span>
                         </div>
                         <h4 className="font-bold text-gray-800 leading-tight mb-2">{item.nomeTarefa || item.titulo}</h4>
                         <p className="text-xs text-gray-500 italic line-clamp-3">{item.enunciado}</p>
@@ -200,7 +204,8 @@ export default function Cronograma() {
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
                             {estilo.icon}
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{item.tipo || 'entrega'}</span>
+                            {/* AJUSTE AQUI PARA LER O LABEL EM VEZ DO TIPO */}
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{estilo.label}</span>
                           </div>
                           {isEntrega && <span className="text-[10px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hidden md:block">Abrir Correção &rarr;</span>}
                         </div>
