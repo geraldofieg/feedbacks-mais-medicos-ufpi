@@ -22,7 +22,7 @@ export default function Dashboard() {
 
   const [minhasTurmas, setMinhasTurmas] = useState([]);
   const [proximosEventos, setProximosEventos] = useState([]);
-  const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]); // NOVO: Ponto de Situação
+  const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]); // Ponto de Situação
   
   // ESTADOS DA ESTEIRA DE PRODUÇÃO (KANBAN)
   const [loadingDados, setLoadingDados] = useState(false);
@@ -37,12 +37,19 @@ export default function Dashboard() {
       if (!currentUser) return;
       try {
         const instList = [];
-        const qInst = query(collection(db, 'instituicoes'), where('professorUid', '==', currentUser.uid));
+        
+        // A CHAVE MESTRA: Se for Gestor, puxa tudo. Se for professor, puxa só o dele.
+        const instRef = collection(db, 'instituicoes');
+        const qInst = isAdmin 
+          ? instRef 
+          : query(instRef, where('professorUid', '==', currentUser.uid));
+          
         const snapInst = await getDocs(qInst);
         snapInst.docs.forEach(d => {
           const data = d.data();
           if (data.status !== 'lixeira') instList.push({ id: d.id, nome: data.nome });
         });
+        
         const listaOrdenada = instList.sort((a, b) => a.nome.localeCompare(b.nome));
         setInstituicoes(listaOrdenada);
         if (listaOrdenada.length === 1 && !escolaSelecionada) setEscolaSelecionada(listaOrdenada[0]);
@@ -50,15 +57,19 @@ export default function Dashboard() {
       finally { setLoadingInst(false); }
     }
     fetchInstituicoes();
-  }, [currentUser, escolaSelecionada, setEscolaSelecionada]);
+  }, [currentUser, escolaSelecionada, setEscolaSelecionada, isAdmin]);
 
   useEffect(() => {
     async function fetchDadosDashboard() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoadingDados(true);
       try {
-        // 1. Puxa as Turmas
-        const qTurmas = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        // 1. Puxa as Turmas (A CHAVE MESTRA ATUANDO NOVAMENTE)
+        const turmasRef = collection(db, 'turmas');
+        const qTurmas = isAdmin
+          ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
+          : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+          
         const snapTurmas = await getDocs(qTurmas);
         const turmasData = snapTurmas.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
         setMinhasTurmas(turmasData);
@@ -66,7 +77,7 @@ export default function Dashboard() {
         if (turmasData.length > 0) {
           const turmasIds = turmasData.map(d => d.id);
           
-          // 2. Puxa Todas as Tarefas
+          // 2. Puxa Todas as Tarefas daquela instituição
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
           
@@ -85,7 +96,7 @@ export default function Dashboard() {
 
           // PONTO DE SITUAÇÃO (Tarefas que ainda não venceram)
           const ativas = todasTarefasFiltradas
-            .filter(t => t.diasRestantes >= 0 && t.tipo === 'entrega') // Apenas tarefas de entrega ativas
+            .filter(t => t.diasRestantes >= 0 && t.tipo === 'entrega')
             .sort((a, b) => a.diasRestantes - b.diasRestantes);
           setTarefasEmAndamento(ativas);
 
@@ -128,7 +139,7 @@ export default function Dashboard() {
       finally { setLoadingDados(false); }
     }
     if (escolaSelecionada) fetchDadosDashboard();
-  }, [currentUser, escolaSelecionada]);
+  }, [currentUser, escolaSelecionada, isAdmin]);
 
   async function handleCriarAcessar(e) {
     e.preventDefault(); const nomeInst = novaInstituicao.trim(); if (!nomeInst) return;
@@ -284,8 +295,13 @@ export default function Dashboard() {
                 <h3 className="text-xs font-bold text-yellow-600 uppercase tracking-widest leading-tight">Aguardando<br/>Revisão</h3>
                 <div className="bg-yellow-50 text-yellow-500 p-2 rounded-lg"><Clock size={20}/></div>
               </div>
-              <div className="flex items-end justify-between">
+              <div className="flex items-end justify-between mt-2">
                 <span className="text-4xl font-black text-gray-800">{loadingDados ? '-' : kanban.pendentes}</span>
+                {kanban.pendentes > 0 && (
+                  <Link to="/aguardandorevisao" className="text-xs font-bold text-yellow-600 bg-yellow-50 hover:bg-yellow-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                    Ver lista <ChevronRight size={14}/>
+                  </Link>
+                )}
               </div>
             </div>
 
@@ -295,7 +311,7 @@ export default function Dashboard() {
                   <h3 className="text-xs font-bold text-blue-200 uppercase tracking-widest leading-tight">Pronto para<br/>Lançar</h3>
                   <div className="bg-blue-500 text-white p-2 rounded-lg shadow-inner"><Send size={20}/></div>
                 </div>
-                <div className="flex items-end justify-between relative z-10">
+                <div className="flex items-end justify-between mt-2 relative z-10">
                   <span className="text-4xl font-black text-white">{loadingDados ? '-' : kanban.faltaLancar}</span>
                   {kanban.faltaLancar > 0 && (
                     <Link to="/faltapostar" className="text-xs font-bold text-white bg-blue-700/50 hover:bg-blue-500 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors border border-blue-400/30">
@@ -312,8 +328,13 @@ export default function Dashboard() {
                 <h3 className="text-xs font-bold text-green-600 uppercase tracking-widest leading-tight">Histórico<br/>Finalizado</h3>
                 <div className="bg-green-50 text-green-500 p-2 rounded-lg"><CheckCheck size={20}/></div>
               </div>
-              <div className="flex items-end justify-between">
+              <div className="flex items-end justify-between mt-2">
                 <span className="text-4xl font-black text-gray-800">{loadingDados ? '-' : finalizadosVisor}</span>
+                {finalizadosVisor > 0 && (
+                  <Link to="/historico" className="text-xs font-bold text-green-600 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                    Ver histórico <ChevronRight size={14}/>
+                  </Link>
+                )}
               </div>
             </div>
 
