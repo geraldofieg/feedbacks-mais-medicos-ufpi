@@ -7,7 +7,8 @@ import { Users, Plus, Search, Pencil, Trash2, Check, X, GraduationCap, Phone, Ma
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Alunos() {
-  const { currentUser, escolaSelecionada } = useAuth();
+  // AJUSTE: Inserido o userProfile para ler o Nível de Acesso
+  const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const location = useLocation();
   
   const [turmas, setTurmas] = useState([]);
@@ -19,7 +20,6 @@ export default function Alunos() {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || 'todas';
   });
 
-  // Novo estado incluindo o e-mail
   const [novoAluno, setNovoAluno] = useState({ nome: '', whatsapp: '', email: '', turmaId: '' });
   const [salvando, setSalvando] = useState(false);
 
@@ -28,6 +28,9 @@ export default function Alunos() {
   const [whatsappEdicao, setWhatsappEdicao] = useState('');
   const [emailEdicao, setEmailEdicao] = useState('');
   const [turmaIdEdicao, setTurmaIdEdicao] = useState('');
+
+  // AJUSTE: Definição de quem é Admin lendo o banco de dados
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== filtroTurma) {
@@ -47,10 +50,12 @@ export default function Alunos() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoading(true);
       try {
-        const qTurmas = query(collection(db, 'turmas'), 
-          where('instituicaoId', '==', escolaSelecionada.id),
-          where('professorUid', '==', currentUser.uid)
-        );
+        // AJUSTE: A CHAVE MESTRA NAS TURMAS PARA O GESTOR PODER MATRICULAR EM QUALQUER UMA
+        const turmasRef = collection(db, 'turmas');
+        const qTurmas = isAdmin 
+          ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
+          : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        
         const snapTurmas = await getDocs(qTurmas);
         const turmasData = snapTurmas.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
@@ -65,6 +70,7 @@ export default function Alunos() {
           setNovoAluno(prev => ({ ...prev, turmaId: turmasData[0].id }));
         }
 
+        // Busca todos os alunos da instituição (o filtro acontece na tela)
         const qAlunos = query(collection(db, 'alunos'), 
           where('instituicaoId', '==', escolaSelecionada.id)
         );
@@ -79,7 +85,7 @@ export default function Alunos() {
       }
     }
     fetchData();
-  }, [currentUser, escolaSelecionada]);
+  }, [currentUser, userProfile, escolaSelecionada]); // userProfile adicionado como dependência
 
   async function handleCriar(e) {
     e.preventDefault();
@@ -334,4 +340,4 @@ export default function Alunos() {
       </div>
     </div>
   );
-                                        }
+}
