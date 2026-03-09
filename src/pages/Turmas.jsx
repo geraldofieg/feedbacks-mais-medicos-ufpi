@@ -7,7 +7,8 @@ import { Link } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Turmas() {
-  const { currentUser, escolaSelecionada } = useAuth();
+  // AJUSTE: Trazendo o userProfile para validar o acesso master
+  const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -17,15 +18,19 @@ export default function Turmas() {
   const [editandoId, setEditandoId] = useState(null);
   const [nomeEdicao, setNomeEdicao] = useState('');
 
+  // AJUSTE: Definição de quem é Admin lendo o banco de dados
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+
   useEffect(() => {
     async function fetchTurmas() {
       if (!currentUser || !escolaSelecionada?.id) return;
       try {
-        const q = query(
-          collection(db, 'turmas'),
-          where('instituicaoId', '==', escolaSelecionada.id),
-          where('professorUid', '==', currentUser.uid)
-        );
+        // AJUSTE: A CHAVE MESTRA. Se for Admin, busca tudo da escola. Se não, só do professor.
+        const turmasRef = collection(db, 'turmas');
+        const q = isAdmin
+          ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
+          : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+
         const querySnapshot = await getDocs(q);
         const turmasData = querySnapshot.docs.map(doc => ({
           id: doc.id,
@@ -33,7 +38,7 @@ export default function Turmas() {
         }));
         
         const turmasAtivas = turmasData.filter(t => t.status !== 'lixeira');
-        setTurmas(turmasAtivas.sort((a, b) => b.dataCriacao?.toMillis() - a.dataCriacao?.toMillis()));
+        setTurmas(turmasAtivas.sort((a, b) => (b.dataCriacao?.toMillis() || 0) - (a.dataCriacao?.toMillis() || 0)));
       } catch (error) {
         console.error("Erro ao buscar turmas:", error);
       } finally {
@@ -41,7 +46,7 @@ export default function Turmas() {
       }
     }
     fetchTurmas();
-  }, [currentUser, escolaSelecionada]);
+  }, [currentUser, userProfile, escolaSelecionada, isAdmin]); // Dependências atualizadas
 
   async function handleCriarTurma(e) {
     e.preventDefault();
@@ -58,7 +63,9 @@ export default function Turmas() {
         dataCriacao: serverTimestamp()
       };
       const docRef = await addDoc(collection(db, 'turmas'), novaTurmaObj);
-      setTurmas([{ id: docRef.id, ...novaTurmaObj }, ...turmas]);
+      
+      // Para o estado local, usamos a data atual para não quebrar o sort imediato
+      setTurmas([{ id: docRef.id, ...novaTurmaObj, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]);
       setNovaTurma('');
     } catch (error) {
       console.error("Erro ao criar turma:", error);
@@ -99,9 +106,9 @@ export default function Turmas() {
           <BookOpen size={28} />
         </div>
         <div>
-          <h1 className="text-2xl font-black text-gray-800 leading-tight">Minhas Turmas</h1>
-          <p className="text-gray-500 text-sm font-medium mt-0.5">
-            Gerencie os agrupamentos em: <strong className="text-gray-700">{escolaSelecionada?.nome}</strong>
+          <h1 className="text-2xl font-black text-gray-800 leading-tight">Gestão de Turmas</h1>
+          <p className="text-sm font-medium text-gray-500 mt-0.5">
+            Agrupamentos em: <strong className="text-gray-700">{escolaSelecionada?.nome}</strong>
           </p>
         </div>
       </div>
@@ -111,12 +118,12 @@ export default function Turmas() {
         {/* BLOCO 1: Lista de Turmas */}
         <div className="w-full lg:w-2/3 order-1">
           {loading ? (
-             <div className="text-gray-400 font-medium animate-pulse text-center py-10">Carregando suas turmas...</div>
+             <div className="text-gray-400 font-medium animate-pulse text-center py-10">Carregando agrupamentos...</div>
           ) : turmas.length === 0 ? (
             <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center">
               <BookOpen className="text-gray-300 w-16 h-16 mx-auto mb-4" />
               <h3 className="text-xl font-black text-gray-700 mb-2">Nenhuma turma criada</h3>
-              <p className="text-gray-500 mb-6 text-sm">Utilize o formulário abaixo para criar o seu primeiro agrupamento.</p>
+              <p className="text-gray-500 mb-6 text-sm">Utilize o formulário lateral para criar o seu primeiro agrupamento.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -159,9 +166,8 @@ export default function Turmas() {
                     <p className="text-xs text-gray-400 font-medium">Turma Ativa</p>
                   </div>
                   
-                  {/* A CORREÇÃO DO LINK DE TAREFAS ESTÁ AQUI (Garantindo que aponte para /tarefas) */}
                   <div className="bg-gray-50 border-t border-gray-100 p-3 grid grid-cols-2 gap-2">
-                    <Link to="/alunos" className="flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 hover:text-blue-600 hover:bg-blue-50 py-2 rounded-lg transition-colors">
+                    <Link to="/alunos" state={{ turmaIdSelecionada: turma.id }} className="flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 hover:text-blue-600 hover:bg-blue-50 py-2 rounded-lg transition-colors">
                       <Users size={16}/> Alunos
                     </Link>
                     <Link to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="flex items-center justify-center gap-1.5 text-sm font-bold text-blue-600 hover:bg-blue-50 py-2 rounded-lg transition-colors">
@@ -178,16 +184,16 @@ export default function Turmas() {
         <div className="w-full lg:w-1/3 order-2">
           <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 sticky top-24">
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Plus size={16}/> Cadastrar Turma
+              <Plus size={16}/> Nova Turma
             </h2>
             <form onSubmit={handleCriarTurma} className="flex flex-col gap-3">
               <input
-                type="text" required placeholder="Ex: Turma de Odonto..."
+                type="text" required placeholder="Ex: Odontologia 3º Período..."
                 className="w-full px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 font-medium outline-none"
                 value={novaTurma} onChange={(e) => setNovaTurma(e.target.value)}
               />
               <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white font-bold py-3.5 px-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm flex justify-center items-center gap-2">
-                {salvando ? 'Salvando...' : 'Criar Turma'}
+                {salvando ? 'Criando...' : 'Criar Turma'}
               </button>
             </form>
           </div>
