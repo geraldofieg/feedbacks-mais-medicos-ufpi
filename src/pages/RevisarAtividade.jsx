@@ -169,6 +169,7 @@ export default function RevisarAtividade() {
   const isFaltaPostar = isEnviado && (!!atividadeAtual.dataAprovacao && !atividadeAtual.dataPostagem && atividadeAtual.status !== 'postado');
   const isFinalizado = isEnviado && (!!atividadeAtual.dataPostagem || atividadeAtual.status === 'postado');
   const foiEditado = isEnviado && atividadeAtual.feedbackFinal?.trim() !== atividadeAtual.feedbackSugerido?.trim();
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 pb-24">
       <div className="max-w-5xl mx-auto">
