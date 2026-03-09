@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Building2, UserPlus, FileText, ChevronRight, Trash2, Pencil, Check, X, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Building2, Pencil, Check, X, Calendar, Clock, Trash2, ChevronRight, Send, CheckCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const { currentUser, escolaSelecionada, setEscolaSelecionada } = useAuth();
   const navigate = useNavigate();
+  
+  // REGRA DE PROTEÇÃO GESTOR VS PROFESSOR
+  const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   
   const [instituicoes, setInstituicoes] = useState([]);
   const [novaInstituicao, setNovaInstituicao] = useState('');
@@ -18,10 +21,12 @@ export default function Dashboard() {
   const [nomeInstEdicao, setNomeInstEdicao] = useState('');
 
   const [minhasTurmas, setMinhasTurmas] = useState([]);
-  const [estatisticas, setEstatisticas] = useState({ alunos: 0, pendencias: 0 });
-  const [loadingDados, setLoadingDados] = useState(false);
-  
   const [proximosEventos, setProximosEventos] = useState([]);
+  const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]); // NOVO: Ponto de Situação
+  
+  // ESTADOS DA ESTEIRA DE PRODUÇÃO (KANBAN)
+  const [loadingDados, setLoadingDados] = useState(false);
+  const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
 
   useEffect(() => {
     setTimeout(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, 50);
@@ -52,43 +57,73 @@ export default function Dashboard() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoadingDados(true);
       try {
+        // 1. Puxa as Turmas
         const qTurmas = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
         const snapTurmas = await getDocs(qTurmas);
         const turmasData = snapTurmas.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
         setMinhasTurmas(turmasData);
 
-        let totalAlunos = 0;
         if (turmasData.length > 0) {
           const turmasIds = turmasData.map(d => d.id);
-          const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
-          const snapAlunos = await getDocs(qAlunos);
-          totalAlunos = snapAlunos.docs.filter(a => turmasIds.includes(a.data().turmaId) && a.data().status !== 'lixeira').length;
-
+          
+          // 2. Puxa Todas as Tarefas
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
           
-          const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-          const limite = new Date(hoje); limite.setDate(hoje.getDate() + 7); 
+          const agora = new Date();
+          const hojeMeiaNoite = new Date(); hojeMeiaNoite.setHours(0, 0, 0, 0);
+          const limiteSemana = new Date(hojeMeiaNoite); limiteSemana.setDate(hojeMeiaNoite.getDate() + 7); 
 
-          const tarefasFiltradas = snapTarefas.docs
+          const todasTarefasFiltradas = snapTarefas.docs
             .map(d => ({ id: d.id, ...d.data() }))
             .filter(t => t.status !== 'lixeira' && turmasIds.includes(t.turmaId) && t.dataFim)
             .map(t => {
               const dataF = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
-              dataF.setHours(0,0,0,0);
-              return { ...t, objDataFim: dataF, timestamp: dataF.getTime() };
-            })
-            .filter(t => t.timestamp >= hoje.getTime() && t.timestamp <= limite.getTime())
+              const diasRestantes = Math.ceil((dataF.getTime() - agora.getTime()) / (1000 * 3600 * 24));
+              return { ...t, objDataFim: dataF, timestamp: dataF.getTime(), diasRestantes };
+            });
+
+          // PONTO DE SITUAÇÃO (Tarefas que ainda não venceram)
+          const ativas = todasTarefasFiltradas
+            .filter(t => t.diasRestantes >= 0 && t.tipo === 'entrega') // Apenas tarefas de entrega ativas
+            .sort((a, b) => a.diasRestantes - b.diasRestantes);
+          setTarefasEmAndamento(ativas);
+
+          // RADAR DA SEMANA (Eventos dos próximos 7 dias)
+          const radar = todasTarefasFiltradas
+            .filter(t => t.timestamp >= hojeMeiaNoite.getTime() && t.timestamp <= limiteSemana.getTime())
             .sort((a, b) => a.timestamp - b.timestamp)
             .slice(0, 3); 
-            
-          setProximosEventos(tarefasFiltradas);
-        } else {
-          setEstatisticas({ alunos: 0, pendencias: 0 });
-          setProximosEventos([]);
-        }
+          setProximosEventos(radar);
 
-        setEstatisticas({ alunos: totalAlunos, pendencias: 0 }); 
+          // 3. CALCULADORA DO KANBAN DE PRODUÇÃO
+          const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
+          const snapAtividades = await getDocs(qAtividades);
+          
+          let contPendentes = 0;
+          let contFaltaLancar = 0;
+          let contFinalizados = 0;
+
+          snapAtividades.docs.forEach(doc => {
+            const ativ = doc.data();
+            if (turmasIds.includes(ativ.turmaId)) {
+              if (ativ.postado === true) {
+                contFinalizados++;
+              } else if (ativ.status === 'aprovado') {
+                contFaltaLancar++;
+              } else {
+                contPendentes++;
+              }
+            }
+          });
+
+          setKanban({ pendentes: contPendentes, faltaLancar: contFaltaLancar, finalizados: contFinalizados });
+
+        } else {
+          setProximosEventos([]);
+          setTarefasEmAndamento([]);
+          setKanban({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
+        }
       } catch (error) { console.error("Erro buscar dados:", error); } 
       finally { setLoadingDados(false); }
     }
@@ -113,13 +148,15 @@ export default function Dashboard() {
   
   const temTurmas = minhasTurmas.length > 0;
 
-  // FUNÇÃO DE TRADUÇÃO VISUAL (Igual à da página de Tarefas)
   const getNomeVisivelTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return 'Compromisso';
     if (t === 'lembrete') return 'Post-it';
     return 'Tarefa do Aluno';
   };
+
+  // LÓGICA DE EXIBIÇÃO: Se não for Gestor, agrupa o que falta lançar no Histórico da professora
+  const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   if (!escolaSelecionada) {
     return (
@@ -176,7 +213,7 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       
       {/* CABEÇALHO */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8 justify-between border-b border-gray-200 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 justify-between border-b border-gray-200 pb-6">
         <div className="flex items-center gap-3 w-full">
           <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm shrink-0"><GraduationCap size={28} /></div>
           <div className="flex-1">
@@ -195,100 +232,162 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {!temTurmas && !loadingDados && (
+      {!temTurmas && !loadingDados ? (
         <div className="mb-10 text-center bg-blue-50 border-2 border-dashed border-blue-200 p-10 rounded-3xl max-w-2xl mx-auto">
           <Building2 className="mx-auto text-blue-400 mb-4" size={48}/>
           <h2 className="text-xl font-black text-blue-900 mb-2">Vamos configurar sua instituição?</h2>
           <p className="text-blue-700 font-medium mb-6">Para começar a organizar suas tarefas e alunos, você precisa criar sua primeira turma.</p>
           <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-3 px-8 rounded-xl shadow-lg hover:bg-blue-700 transition-all"><Plus size={20}/> Criar Nova Turma</Link>
         </div>
-      )}
-
-      {temTurmas && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-          
-          <div className="lg:col-span-2">
-            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-              Minhas Turmas <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-black">{minhasTurmas.length}</span>
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {minhasTurmas.map(turma => (
-                <Link key={turma.id} to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm hover:border-blue-400 hover:shadow-md transition-all group flex justify-between items-center">
-                  <div>
-                    <h3 className="font-black text-gray-800 text-lg group-hover:text-blue-700 transition-colors line-clamp-1">{turma.nome}</h3>
-                    <p className="text-xs text-gray-400 mt-1 font-medium">Ver tarefas e pendências</p>
-                  </div>
-                  <div className="bg-gray-50 p-2 rounded-xl group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors"><ChevronRight size={20}/></div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="lg:col-span-1">
-            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Calendar size={18}/> Radar da Semana
-            </h2>
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              {proximosEventos.length === 0 ? (
-                <div className="p-6 text-center">
-                  <Clock className="mx-auto text-gray-300 mb-2" size={32}/>
-                  <p className="text-sm font-bold text-gray-400">Nenhum evento para os próximos 7 dias.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {proximosEventos.map(evento => {
-                    const isEntrega = (evento.tipo || 'entrega').toLowerCase() === 'entrega';
-                    const ConteudoCartao = (
-                      <>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`w-2 h-2 rounded-full ${evento.tipo === 'compromisso' ? 'bg-purple-500' : 'bg-orange-500'}`}></span>
-                          {/* APLICANDO A TRADUÇÃO VISUAL AQUI */}
-                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{getNomeVisivelTipo(evento.tipo)}</span>
-                        </div>
-                        <h4 className={`font-bold text-sm truncate ${isEntrega ? 'text-orange-700 group-hover:underline' : 'text-gray-800'}`}>
-                          {evento.nomeTarefa || evento.titulo}
-                        </h4>
-                        <p className="text-xs text-gray-500 mt-1 font-medium flex items-center gap-1">
-                          <Clock size={12}/> {evento.objDataFim.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
-                        </p>
-                      </>
-                    );
-
-                    return isEntrega ? (
-                      <Link key={evento.id} to={`/revisar/${evento.id}`} className="block p-4 hover:bg-orange-50 transition-colors group cursor-pointer border-l-2 border-transparent hover:border-orange-400">
-                        {ConteudoCartao}
-                      </Link>
-                    ) : (
-                      <div key={evento.id} className="p-4 hover:bg-gray-50 transition-colors">
-                        {ConteudoCartao}
+      ) : (
+        <>
+          {/* PONTO DE SITUAÇÃO DO CURSO (Estilo V1) */}
+          <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800">
+            <div className="flex gap-4 items-start w-full">
+              <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner">
+                <Calendar size={24} className="text-blue-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-black text-white mb-2 tracking-wide">Ponto de Situação do Curso</h2>
+                {tarefasEmAndamento.length === 0 ? (
+                  <p className="text-slate-400 text-sm font-medium flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-slate-600"></span> Nenhuma tarefa em andamento no momento.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {tarefasEmAndamento.slice(0, 3).map(tarefa => (
+                      <div key={tarefa.id} className="text-sm font-medium flex items-center gap-2 truncate">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${tarefa.diasRestantes <= 3 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
+                        <strong className="text-slate-200 font-bold truncate">{tarefa.nomeTarefa || tarefa.titulo}</strong>
+                        <span className={`shrink-0 font-bold ${tarefa.diasRestantes <= 3 ? 'text-red-400' : 'text-green-400'}`}>
+                          (Falta{tarefa.diasRestantes === 1 ? '' : 'm'} {tarefa.diasRestantes} dia{tarefa.diasRestantes === 1 ? '' : 's'})
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-              <Link to="/datas" className="block w-full text-center bg-gray-50 p-3 text-xs font-bold text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-colors uppercase tracking-widest border-t border-gray-100">
-                Ver Calendário Completo
-              </Link>
+                    ))}
+                    {tarefasEmAndamento.length > 3 && (
+                      <p className="text-slate-500 text-xs mt-2 italic">+ {tarefasEmAndamento.length - 3} outras tarefas ativas na instituição.</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+            <Link to="/datas" className="shrink-0 w-full md:w-auto text-center bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-sm text-sm border border-blue-500">
+              Ver Cronograma
+            </Link>
           </div>
 
-        </div>
+          {/* ESTEIRA DE PRODUÇÃO (NOVO KANBAN V3) */}
+          <div className={`grid grid-cols-1 gap-4 mb-10 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2 max-w-4xl mx-auto'}`}>
+            
+            <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-xs font-bold text-yellow-600 uppercase tracking-widest leading-tight">Aguardando<br/>Revisão</h3>
+                <div className="bg-yellow-50 text-yellow-500 p-2 rounded-lg"><Clock size={20}/></div>
+              </div>
+              <div className="flex items-end justify-between">
+                <span className="text-4xl font-black text-gray-800">{loadingDados ? '-' : kanban.pendentes}</span>
+              </div>
+            </div>
+
+            {isAdmin && (
+              <div className="bg-blue-600 border border-blue-700 p-5 rounded-2xl shadow-md flex flex-col justify-between relative overflow-hidden group">
+                <div className="flex items-start justify-between mb-4 relative z-10">
+                  <h3 className="text-xs font-bold text-blue-200 uppercase tracking-widest leading-tight">Pronto para<br/>Lançar</h3>
+                  <div className="bg-blue-500 text-white p-2 rounded-lg shadow-inner"><Send size={20}/></div>
+                </div>
+                <div className="flex items-end justify-between relative z-10">
+                  <span className="text-4xl font-black text-white">{loadingDados ? '-' : kanban.faltaLancar}</span>
+                  {kanban.faltaLancar > 0 && (
+                    <Link to="/faltapostar" className="text-xs font-bold text-white bg-blue-700/50 hover:bg-blue-500 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors border border-blue-400/30">
+                      Ver Lista <ChevronRight size={14}/>
+                    </Link>
+                  )}
+                </div>
+                <div className="absolute -bottom-6 -right-6 text-blue-500 opacity-50 transform rotate-12 scale-150 transition-transform group-hover:scale-110"><Send size={80}/></div>
+              </div>
+            )}
+
+            <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-xs font-bold text-green-600 uppercase tracking-widest leading-tight">Histórico<br/>Finalizado</h3>
+                <div className="bg-green-50 text-green-500 p-2 rounded-lg"><CheckCheck size={20}/></div>
+              </div>
+              <div className="flex items-end justify-between">
+                <span className="text-4xl font-black text-gray-800">{loadingDados ? '-' : finalizadosVisor}</span>
+              </div>
+            </div>
+
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+            
+            <div className="lg:col-span-2">
+              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Users size={18}/> Minhas Turmas <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-black ml-1">{minhasTurmas.length}</span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {minhasTurmas.map(turma => (
+                  <Link key={turma.id} to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm hover:border-blue-400 hover:shadow-md transition-all group flex justify-between items-center">
+                    <div>
+                      <h3 className="font-black text-gray-800 text-lg group-hover:text-blue-700 transition-colors line-clamp-1">{turma.nome}</h3>
+                      <p className="text-xs text-gray-400 mt-1 font-medium">Ver tarefas e atividades</p>
+                    </div>
+                    <div className="bg-gray-50 p-2 rounded-xl group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors"><ChevronRight size={20}/></div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div className="lg:col-span-1">
+              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Calendar size={18}/> Radar da Semana
+              </h2>
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                {proximosEventos.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <Clock className="mx-auto text-gray-300 mb-2" size={32}/>
+                    <p className="text-sm font-bold text-gray-400">Nenhum evento para os próximos 7 dias.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {proximosEventos.map(evento => {
+                      const isEntrega = (evento.tipo || 'entrega').toLowerCase() === 'entrega';
+                      const ConteudoCartao = (
+                        <>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`w-2 h-2 rounded-full ${evento.tipo === 'compromisso' ? 'bg-purple-500' : 'bg-orange-500'}`}></span>
+                            <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{getNomeVisivelTipo(evento.tipo)}</span>
+                          </div>
+                          <h4 className={`font-bold text-sm truncate ${isEntrega ? 'text-orange-700 group-hover:underline' : 'text-gray-800'}`}>
+                            {evento.nomeTarefa || evento.titulo}
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-1 font-medium flex items-center gap-1">
+                            <Clock size={12}/> {evento.objDataFim.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                          </p>
+                        </>
+                      );
+
+                      return isEntrega ? (
+                        <Link key={evento.id} to={`/revisar/${evento.id}`} className="block p-4 hover:bg-orange-50 transition-colors group cursor-pointer border-l-2 border-transparent hover:border-orange-400">
+                          {ConteudoCartao}
+                        </Link>
+                      ) : (
+                        <div key={evento.id} className="p-4 hover:bg-gray-50 transition-colors">
+                          {ConteudoCartao}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <Link to="/datas" className="block w-full text-center bg-gray-50 p-3 text-xs font-bold text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-colors uppercase tracking-widest border-t border-gray-100">
+                  Ver Calendário Completo
+                </Link>
+              </div>
+            </div>
+
+          </div>
+        </>
       )}
-
-      <div className="border-t border-gray-200 pt-8 opacity-70 hover:opacity-100 transition-opacity">
-        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Visão Geral</h2>
-        <div className="flex flex-wrap gap-4">
-          <div className="bg-white px-4 py-3 rounded-xl border border-gray-100 flex-1 min-w-[150px] flex items-center justify-between shadow-sm">
-            <span className="text-gray-500 text-sm font-bold flex items-center gap-2"><Users size={16}/> Alunos</span>
-            <span className="font-black text-gray-800">{loadingDados ? '...' : estatisticas.alunos}</span>
-          </div>
-          <div className="bg-white px-4 py-3 rounded-xl border border-gray-100 flex-1 min-w-[150px] flex items-center justify-between shadow-sm">
-            <span className="text-gray-500 text-sm font-bold flex items-center gap-2"><LayoutDashboard size={16}/> Pendências Ativas</span>
-            <span className="font-black text-gray-800">-</span>
-          </div>
-        </div>
-      </div>
-
     </div>
   );
-                      }
+}
