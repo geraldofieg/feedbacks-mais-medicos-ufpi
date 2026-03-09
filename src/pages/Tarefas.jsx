@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Search, Pencil, Trash2, Check, X, CalendarClock, Calendar, StickyNote, GraduationCap, ArrowRight } from 'lucide-react';
+import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, CheckSquare } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Tarefas() {
@@ -12,6 +12,7 @@ export default function Tarefas() {
   
   const [turmas, setTurmas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
+  const [alunosTurma, setAlunosTurma] = useState([]); // Guarda os alunos para a atribuição
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   
@@ -21,6 +22,8 @@ export default function Tarefas() {
   });
 
   const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataFim: '', tipo: 'entrega' });
+  const [atribuicaoEspecifica, setAtribuicaoEspecifica] = useState(false); // Flag de Exceção
+  const [alunosSelecionados, setAlunosSelecionados] = useState([]); // Quem vai receber a exceção
   const [salvando, setSalvando] = useState(false);
 
   const [editandoId, setEditandoId] = useState(null);
@@ -61,19 +64,31 @@ export default function Tarefas() {
     fetchTurmas();
   }, [currentUser, escolaSelecionada]);
 
+  // BUSCA AS TAREFAS E OS ALUNOS (PARA A ATRIBUIÇÃO MÁGICA)
   useEffect(() => {
-    async function fetchTarefas() {
-      if (!turmaAtiva) { setTarefas([]); setLoading(false); return; }
+    async function fetchDadosTurma() {
+      if (!turmaAtiva) { setTarefas([]); setAlunosTurma([]); setLoading(false); return; }
       setLoading(true);
       try {
-        const qA = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id), where('turmaId', '==', turmaAtiva));
-        const snapA = await getDocs(qA);
-        const tarefasData = snapA.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
+        // Busca Tarefas
+        const qT = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id), where('turmaId', '==', turmaAtiva));
+        const snapT = await getDocs(qT);
+        const tarefasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTarefas(tarefasData.sort((a, b) => (b.dataCriacao?.toMillis() || 0) - (a.dataCriacao?.toMillis() || 0)));
-      } catch (error) { console.error("Erro fetch tarefas:", error); } 
+
+        // Busca Alunos da Turma
+        const qA = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
+        const snapA = await getDocs(qA);
+        setAlunosTurma(snapA.docs.map(d => ({ id: d.id, nome: d.data().nome })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome)));
+        
+        // Reseta o estado de seleção
+        setAtribuicaoEspecifica(false);
+        setAlunosSelecionados([]);
+
+      } catch (error) { console.error("Erro fetch dados:", error); } 
       finally { setLoading(false); }
     }
-    fetchTarefas();
+    fetchDadosTurma();
   }, [turmaAtiva, escolaSelecionada]);
 
   const tsToInput = (ts) => {
@@ -113,9 +128,17 @@ export default function Tarefas() {
     } catch (error) { console.error("Erro ao salvar:", error); }
   }
 
+  // A MAGICA DA DISTRIBUIÇÃO ACONTECE AQUI
   async function handleCriar(e) {
     e.preventDefault();
     if (!novaTarefa.titulo || !turmaAtiva) return;
+    
+    // Trava de segurança: Se marcou a flag, tem que escolher pelo menos 1 aluno
+    if (novaTarefa.tipo === 'entrega' && atribuicaoEspecifica && alunosSelecionados.length === 0) {
+      alert("Selecione pelo menos um aluno para receber a tarefa.");
+      return;
+    }
+
     try {
       setSalvando(true);
       const prazoFinal = novaTarefa.dataFim ? Timestamp.fromDate(new Date(novaTarefa.dataFim)) : null;
@@ -125,11 +148,52 @@ export default function Tarefas() {
         instituicaoId: escolaSelecionada.id, professorUid: currentUser.uid,
         status: 'ativa', dataCriacao: serverTimestamp()
       };
+      
+      // 1. Salva a Tarefa "Mãe"
       const docRef = await addDoc(collection(db, 'tarefas'), tData);
-      setTarefas([{ id: docRef.id, ...tData, dataCriacao: Timestamp.now() }, ...tarefas]);
+      const novaId = docRef.id;
+
+      // 2. Se for uma "Entrega", distribui as obrigações
+      if (novaTarefa.tipo === 'entrega' && alunosTurma.length > 0) {
+        const batch = writeBatch(db); // Usamos batch para salvar vários de uma vez sem estourar o banco
+        
+        // Define quem vai receber (a turma toda ou só os marcados)
+        const listaAlvo = atribuicaoEspecifica 
+          ? alunosTurma.filter(a => alunosSelecionados.includes(a.id))
+          : alunosTurma;
+
+        listaAlvo.forEach(aluno => {
+          const ativRef = doc(collection(db, 'atividades'));
+          batch.set(ativRef, {
+            alunoId: aluno.id,
+            turmaId: turmaAtiva,
+            instituicaoId: escolaSelecionada.id,
+            tarefaId: novaId,
+            resposta: '',
+            nota: null,
+            feedbackSugerido: '',
+            feedbackFinal: '',
+            status: 'pendente',
+            postado: false,
+            dataCriacao: serverTimestamp()
+          });
+        });
+        
+        await batch.commit(); // Executa o salvamento em massa
+      }
+
+      setTarefas([{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas]);
       setNovaTarefa({ titulo: '', enunciado: '', dataFim: '', tipo: 'entrega' });
+      setAtribuicaoEspecifica(false);
+      setAlunosSelecionados([]);
     } catch (error) { console.error("Erro criar:", error); } finally { setSalvando(false); }
   }
+
+  const toggleAlunoSelecao = (alunoId) => {
+    setAlunosSelecionados(prev => 
+      prev.includes(alunoId) ? prev.filter(id => id !== alunoId) : [...prev, alunoId]
+    );
+  };
 
   async function handleLixeira(id, nome) {
     if (!window.confirm(`Remover "${nome}"?`)) return;
@@ -162,7 +226,6 @@ export default function Tarefas() {
     return 'border-orange-200 bg-orange-50/20';
   };
 
-  // FUNÇÃO DE TRADUÇÃO VISUAL
   const getNomeVisivelTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return 'Compromisso';
@@ -261,7 +324,7 @@ export default function Tarefas() {
             </h2>
             <form onSubmit={handleCriar} className="space-y-4">
               
-              <select className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" value={novaTarefa.tipo} onChange={e => setNovaTarefa({...novaTarefa, tipo: e.target.value})}>
+              <select className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" value={novaTarefa.tipo} onChange={e => {setNovaTarefa({...novaTarefa, tipo: e.target.value}); setAtribuicaoEspecifica(false);}}>
                 <option value="entrega">📝 Tarefa do Aluno</option>
                 <option value="compromisso">📅 Compromisso</option>
                 <option value="lembrete">💡 Post-it</option>
@@ -269,8 +332,40 @@ export default function Tarefas() {
               
               <input type="text" required placeholder="Título..." className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} />
               <input type="datetime-local" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-gray-700" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})} />
-              <textarea placeholder="Observações..." rows="3" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none resize-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
-              <button disabled={salvando || !turmaAtiva} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-md hover:bg-blue-700 transition-all disabled:opacity-50"> {salvando ? 'Salvando...' : 'Adicionar'} </button>
+              <textarea placeholder="Observações/Enunciado (Opcional)..." rows="3" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none resize-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
+              
+              {/* O MENU DE EXCEÇÃO (APARECE SÓ SE FOR TAREFA DO ALUNO) */}
+              {novaTarefa.tipo === 'entrega' && alunosTurma.length > 0 && (
+                <div className="pt-2 border-t border-gray-200">
+                  <label className="flex items-center gap-2 text-sm font-bold text-gray-600 cursor-pointer hover:text-gray-800 transition-colors mb-3">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                      checked={atribuicaoEspecifica}
+                      onChange={(e) => setAtribuicaoEspecifica(e.target.checked)}
+                    />
+                    Atribuir apenas a alunos específicos (Exceção)
+                  </label>
+                  
+                  {atribuicaoEspecifica && (
+                    <div className="bg-white border border-gray-200 rounded-xl max-h-48 overflow-y-auto p-2 space-y-1 shadow-inner animate-in fade-in slide-in-from-top-2">
+                      {alunosTurma.map(aluno => (
+                        <label key={aluno.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-gray-100">
+                          <input 
+                            type="checkbox"
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                            checked={alunosSelecionados.includes(aluno.id)}
+                            onChange={() => toggleAlunoSelecao(aluno.id)}
+                          />
+                          <span className="text-sm font-medium text-gray-700 truncate">{aluno.nome}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button disabled={salvando || !turmaAtiva} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-md hover:bg-blue-700 transition-all disabled:opacity-50 mt-2"> {salvando ? 'Criando e Distribuindo...' : 'Adicionar Tarefa'} </button>
             </form>
           </div>
         </div>
