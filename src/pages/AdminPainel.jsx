@@ -6,10 +6,11 @@ import { ShieldAlert, Users, Crown, CheckCircle, XCircle, Search } from 'lucide-
 import { Navigate } from 'react-router-dom';
 
 export default function AdminPainel() {
-  const { currentUser } = useAuth();
+  // AJUSTE: Pegamos o 'loading' do auth para não dar redirect errado
+  const { currentUser, userProfile, loading: authLoading } = useAuth();
   
-  // A CHAVE MESTRA: Apenas o seu email tem acesso a esta tela
-  const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  // A CHAVE MESTRA: Role de Admin no banco OU o seu e-mail supremo
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,7 +19,7 @@ export default function AdminPainel() {
 
   useEffect(() => {
     async function fetchUsuarios() {
-      if (!isAdmin) return;
+      if (!isAdmin || authLoading) return;
       try {
         const querySnapshot = await getDocs(collection(db, 'usuarios'));
         const lista = querySnapshot.docs.map(doc => ({
@@ -35,7 +36,7 @@ export default function AdminPainel() {
       }
     }
     fetchUsuarios();
-  }, [isAdmin]);
+  }, [isAdmin, authLoading]);
 
   // Função genérica para atualizar qualquer campo do usuário (plano, role, status)
   async function handleUpdateUser(userId, campo, valor) {
@@ -53,7 +54,12 @@ export default function AdminPainel() {
     }
   }
 
-  // Se não for o Geraldo, expulsa da tela (Segurança)
+  // Enquanto o Auth está carregando, mostra um spinner para não dar redirect precoce
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-slate-900"></div></div>;
+  }
+
+  // Se não for Admin após o carregamento, expulsa da tela
   if (!isAdmin) {
     return <Navigate to="/" />;
   }
