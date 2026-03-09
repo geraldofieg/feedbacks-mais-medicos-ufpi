@@ -1,215 +1,190 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { collection, addDoc, deleteDoc, doc, query, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, Plus, Trash2, Settings, Archive, Calendar } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { User, Phone, Sparkles, Save, ShieldCheck, Mail, CheckCircle2 } from 'lucide-react';
+import Breadcrumb from '../components/Breadcrumb';
 
 export default function Configuracoes() {
-  const [modulos, setModulos] = useState([]);
-  const [novoModulo, setNovoModulo] = useState('');
-  const [novoDataInicio, setNovoDataInicio] = useState('');
-  const [novoDataFim, setNovoDataFim] = useState('');
+  const { currentUser, userProfile } = useAuth();
   
+  const [nome, setNome] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [promptIA, setPromptIA] = useState('');
+  
+  const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
-  const [novaTarefaModulo, setNovaTarefaModulo] = useState({}); 
+  const [mensagem, setMensagem] = useState(null);
+
+  // A MÁGICA DOS PLANOS: Libera a IA apenas para Premium (ou Admin)
+  const isPremium = userProfile?.plano === 'premium';
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  const mostrarIA = isPremium || isAdmin;
 
   useEffect(() => {
-    const qModulos = query(collection(db, 'modulos'));
-    const unsubModulos = onSnapshot(qModulos, (snap) => {
-      setModulos(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsubModulos();
-  }, []);
-
-  const modulosAtivos = modulos.filter(m => m.status !== 'arquivado').sort((a, b) => (b.dataCriacao?.toMillis?.() || 0) - (a.dataCriacao?.toMillis?.() || 0));
-  const modulosArquivados = modulos.filter(m => m.status === 'arquivado').sort((a, b) => (b.dataCriacao?.toMillis?.() || 0) - (a.dataCriacao?.toMillis?.() || 0));
-
-  const criarDataFirestore = (dataStr, isFim) => {
-    if (!dataStr) return null;
-    const [ano, mes, dia] = dataStr.split('-');
-    const d = new Date(ano, mes - 1, dia);
-    if (isFim) d.setHours(23, 59, 59, 999); 
-    else d.setHours(0, 0, 0, 0); 
-    return d;
-  };
-
-  // ==========================================
-  // CRUD MANUAL
-  // ==========================================
-  async function handleAddModulo(e) {
-    e.preventDefault();
-    if (salvando || !novoModulo.trim()) return;
-    setSalvando(true);
-    try {
-      await addDoc(collection(db, 'modulos'), { 
-        nome: novoModulo.trim(),
-        tarefas: [], 
-        status: 'ativo', 
-        dataCriacao: serverTimestamp(),
-        dataInicio: novoDataInicio ? criarDataFirestore(novoDataInicio, false) : null,
-        dataFim: novoDataFim ? criarDataFirestore(novoDataFim, true) : null
-      });
-      setNovoModulo(''); setNovoDataInicio(''); setNovoDataFim('');
-    } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
-  }
-
-  async function handleExcluirModulo(id) {
-    if (salvando) return;
-    if (window.confirm('Excluir esta Unidade e todas as tarefas dela?')) {
-      setSalvando(true);
-      try { await deleteDoc(doc(db, 'modulos', id)); } finally { setSalvando(false); }
-    }
-  }
-
-  async function handleToggleStatus(id, statusAtual) {
-    if (salvando) return;
-    setSalvando(true);
-    try {
-      const novoStatus = statusAtual === 'ativo' ? 'arquivado' : 'ativo';
-      await updateDoc(doc(db, 'modulos', id), { status: novoStatus });
-    } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
-  }
-
-  async function handleAddTarefaNoModulo(moduloId, listaAtual) {
-    const nomeTarefa = novaTarefaModulo[moduloId];
-    if (salvando || !nomeTarefa || !nomeTarefa.trim()) return;
-    setSalvando(true);
-    try {
-      const novaLista = [...(listaAtual || []), nomeTarefa.trim()];
-      await updateDoc(doc(db, 'modulos', moduloId), { tarefas: novaLista });
-      setNovaTarefaModulo(prev => ({ ...prev, [moduloId]: '' }));
-    } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
-  }
-
-  async function handleExcluirTarefaDoModulo(moduloId, nomeTarefaParaExcluir, listaAtual) {
-    if (salvando) return;
-    if (window.confirm(`Excluir a tarefa "${nomeTarefaParaExcluir}"?`)) {
-      setSalvando(true);
+    async function fetchPerfil() {
+      if (!currentUser) return;
       try {
-        const novaLista = listaAtual.filter(t => t !== nomeTarefaParaExcluir);
-        await updateDoc(doc(db, 'modulos', moduloId), { tarefas: novaLista });
-      } catch (error) { console.error("Erro:", error); } finally { setSalvando(false); }
+        const docRef = doc(db, 'usuarios', currentUser.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setNome(data.nome || '');
+          setWhatsapp(data.whatsapp || '');
+          setPromptIA(data.promptPersonalizado || '');
+        }
+      } catch (error) {
+        console.error("Erro ao buscar perfil:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPerfil();
+  }, [currentUser]);
+
+  async function handleSalvar(e) {
+    e.preventDefault();
+    setSalvando(true);
+    setMensagem(null);
+    try {
+      const docRef = doc(db, 'usuarios', currentUser.uid);
+      await updateDoc(docRef, {
+        nome: nome.trim(),
+        whatsapp: whatsapp.trim(),
+        promptPersonalizado: promptIA.trim()
+      });
+      setMensagem({ tipo: 'sucesso', texto: 'Configurações salvas com sucesso!' });
+      setTimeout(() => setMensagem(null), 3000);
+    } catch (error) {
+      console.error("Erro ao salvar:", error);
+      setMensagem({ tipo: 'erro', texto: 'Erro ao salvar. Tente novamente.' });
+    } finally {
+      setSalvando(false);
     }
   }
 
-  const formatarDataLocal = (timestamp) => {
-    if (!timestamp || !timestamp.toDate) return null;
-    return timestamp.toDate().toLocaleDateString('pt-BR');
-  };
-
-  const renderModuloCard = (mod, isAtivo) => {
-    const dataFimFormatada = formatarDataLocal(mod.dataFim);
-    
-    return (
-      <div key={mod.id} className={`rounded-xl border overflow-hidden shadow-sm flex flex-col transition-all ${isAtivo ? 'bg-gray-50 border-gray-200' : 'bg-gray-100 border-gray-300 opacity-75'}`}>
-        <div className={`p-4 flex justify-between items-center text-white ${isAtivo ? 'bg-gray-800' : 'bg-gray-400'}`}>
-          <div className="flex items-center gap-2">
-            <span className="font-bold">{mod.nome}</span>
-            {!isAtivo && <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase tracking-wider">Arquivado</span>}
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => handleToggleStatus(mod.id, mod.status)} disabled={salvando} title={isAtivo ? "Arquivar Unidade" : "Desarquivar Unidade"} className="hover:text-yellow-400 transition-colors">
-              <Archive size={18} />
-            </button>
-            <button onClick={() => handleExcluirModulo(mod.id)} disabled={salvando} className="hover:text-red-400 transition-colors"><Trash2 size={18} /></button>
-          </div>
-        </div>
-        
-        <div className="bg-white px-4 py-2 border-b border-gray-100 flex items-center gap-2 text-xs font-medium text-gray-500">
-          <Calendar size={14} className={dataFimFormatada ? "text-blue-500" : "text-gray-400"} />
-          {dataFimFormatada ? `Prazo Final: ${dataFimFormatada}` : 'Sem prazo definido (Opcional)'}
-        </div>
-
-        <div className="p-4 flex-1">
-          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Tarefas:</h4>
-          <ul className="space-y-2 mb-4">
-            {(!mod.tarefas || mod.tarefas.length === 0) && <li className="text-sm text-gray-400 italic">Nenhuma tarefa.</li>}
-            {mod.tarefas?.map((tar, idx) => (
-              <li key={idx} className={`border p-2 rounded-lg flex justify-between items-center text-sm ${isAtivo ? 'bg-white border-gray-100 text-gray-700' : 'bg-transparent border-gray-200 text-gray-500'}`}>
-                <span className="font-medium">{tar}</span>
-                <button onClick={() => handleExcluirTarefaDoModulo(mod.id, tar, mod.tarefas)} disabled={salvando || !isAtivo} className="text-red-300 hover:text-red-500 disabled:opacity-0"><Trash2 size={16}/></button>
-              </li>
-            ))}
-          </ul>
-        </div>
-        
-        {isAtivo && (
-          <div className="p-3 bg-white border-t border-gray-100 flex gap-2">
-            <input type="text" placeholder="Nova tarefa..." className="flex-grow p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-              value={novaTarefaModulo[mod.id] || ''} 
-              onChange={e => setNovaTarefaModulo(prev => ({ ...prev, [mod.id]: e.target.value }))}
-              onKeyDown={e => e.key === 'Enter' && handleAddTarefaNoModulo(mod.id, mod.tarefas)}
-            />
-            <button onClick={() => handleAddTarefaNoModulo(mod.id, mod.tarefas)} disabled={salvando} className="bg-gray-800 text-white px-3 py-2 rounded-md hover:bg-black transition-colors">
-              <Plus size={16} />
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600"></div></div>;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-8">
-        
-        <div className="flex items-center gap-4 mb-8">
-          <Link to="/" className="text-gray-500 hover:text-blue-600 transition-colors"><ArrowLeft size={24} /></Link>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><Settings className="text-blue-600" /> Configurações do Sistema</h2>
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <Breadcrumb items={[{ label: 'Configurações da Conta' }]} />
+      
+      <div className="flex items-center gap-4 mb-8 mt-4">
+        <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg shrink-0">
+          <ShieldCheck size={28} />
         </div>
-
-        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
-          <h3 className="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Gerenciamento Estrutural (Unidades de Ensino)</h3>
-          
-          <form onSubmit={handleAddModulo} className="mb-8 bg-blue-50 p-5 rounded-xl border border-blue-100 space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Nome da Unidade *</label>
-              <input required type="text" placeholder="Ex: Módulo 9, Semana 3..." className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={novoModulo} onChange={e => setNovoModulo(e.target.value)} />
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Data Início (Opcional)</label>
-                <input type="date" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-600" value={novoDataInicio} onChange={e => setNovoDataInicio(e.target.value)} />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">Data Fim (Opcional)</label>
-                <input type="date" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-600" value={novoDataFim} onChange={e => setNovoDataFim(e.target.value)} />
-              </div>
-            </div>
-            <div className="pt-2">
-              <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-bold disabled:opacity-50">
-                Criar Unidade
-              </button>
-            </div>
-          </form>
-
-          {/* SESSÃO DE ATIVOS */}
-          <div className="mb-12">
-            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500"></span> Unidades Ativas
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {modulosAtivos.length === 0 ? (
-                <div className="col-span-2 text-center text-gray-500 py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">Nenhuma unidade ativa no momento.</div>
-              ) : (
-                modulosAtivos.map(mod => renderModuloCard(mod, true))
-              )}
-            </div>
-          </div>
-
-          {/* SESSÃO DE ARQUIVADOS */}
-          {modulosArquivados.length > 0 && (
-            <div>
-              <h4 className="text-lg font-bold text-gray-500 mb-4 border-b pb-2 flex items-center gap-2">
-                <Archive size={18} /> Histórico de Unidades Arquivadas
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {modulosArquivados.map(mod => renderModuloCard(mod, false))}
-              </div>
-            </div>
-          )}
+        <div>
+          <h1 className="text-2xl font-black text-gray-800 tracking-tight">Minha Conta</h1>
+          <p className="text-sm font-medium text-gray-500 mt-1">Gerencie seu perfil e preferências do sistema.</p>
         </div>
       </div>
+
+      {mensagem && (
+        <div className={`mb-6 p-4 rounded-xl font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-4 ${mensagem.tipo === 'sucesso' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 size={20}/> : null}
+          {mensagem.texto}
+        </div>
+      )}
+
+      <form onSubmit={handleSalvar} className="space-y-6">
+        
+        {/* CARD 1: DADOS PESSOAIS */}
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2 border-b border-gray-100 pb-4">
+            <User size={20} className="text-blue-600" /> Perfil do Professor
+          </h2>
+          
+          <div className="space-y-5">
+            <div>
+              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">E-mail de Acesso (Não editável)</label>
+              <div className="flex items-center gap-3 w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-500 font-medium">
+                <Mail size={18} className="text-gray-400 shrink-0"/>
+                {currentUser?.email}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Nome de Exibição</label>
+                <div className="relative">
+                  <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Prof. Silva"
+                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800 transition-all"
+                    value={nome} 
+                    onChange={e => setNome(e.target.value)} 
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">WhatsApp / Telefone</label>
+                <div className="relative">
+                  <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Ex: 11999999999"
+                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800 transition-all"
+                    value={whatsapp} 
+                    onChange={e => setWhatsapp(e.target.value)} 
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CARD 2: CONFIGURAÇÃO DE IA (SÓ APARECE PARA PREMIUM E ADMIN) */}
+        {mostrarIA && (
+          <div className="bg-gradient-to-br from-purple-900 to-indigo-900 p-6 md:p-8 rounded-3xl shadow-lg border border-purple-700 relative overflow-hidden">
+            {/* Efeito visual de fundo */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500 rounded-full blur-3xl opacity-20 -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-6 border-b border-purple-700/50 pb-4">
+                <h2 className="text-lg font-black text-white flex items-center gap-2">
+                  <Sparkles size={20} className="text-yellow-400" /> Treinamento da IA (Premium)
+                </h2>
+                <span className="bg-yellow-400 text-yellow-900 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-sm">
+                  Exclusivo
+                </span>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-purple-200 uppercase tracking-widest mb-2 ml-1">
+                    Instruções de Personalidade (Prompt de Sistema)
+                  </label>
+                  <p className="text-sm text-purple-300 mb-3 font-medium">
+                    Defina como a Inteligência Artificial deve se comportar ao gerar os feedbacks. Ex: "Seja acolhedor, use emojis, chame o aluno pelo primeiro nome e seja rigoroso com erros de gramática."
+                  </p>
+                  <textarea 
+                    rows="4" 
+                    placeholder="Cole aqui suas instruções de comportamento da IA..."
+                    className="w-full p-4 bg-purple-950/50 border border-purple-600 rounded-xl focus:ring-2 focus:ring-yellow-400 outline-none font-medium text-white placeholder-purple-400/50 transition-all resize-none shadow-inner"
+                    value={promptIA} 
+                    onChange={e => setPromptIA(e.target.value)} 
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="pt-4 flex justify-end">
+          <button 
+            type="submit" 
+            disabled={salvando} 
+            className="bg-blue-600 text-white font-black px-8 py-4 rounded-xl hover:bg-blue-700 transition-all shadow-md flex items-center gap-2 disabled:opacity-50 text-lg w-full sm:w-auto justify-center"
+          >
+            {salvando ? 'Salvando...' : <><Save size={20}/> Salvar Configurações</>}
+          </button>
+        </div>
+
+      </form>
     </div>
   );
 }
