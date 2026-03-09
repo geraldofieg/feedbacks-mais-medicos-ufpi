@@ -83,14 +83,12 @@ export default function RevisarAtividade() {
       };
 
       if (atividadeAtual) {
-        // ATUALIZAR ATIVIDADE EXISTENTE
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
         setAtividadesMap(prev => ({ 
           ...prev, 
           [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } 
         }));
       } else {
-        // CRIAR NOVA ATIVIDADE (A MÁGICA DO DIGITADOR)
         const novaAtiv = {
           alunoId: alunoAtual.id,
           turmaId: tarefa.turmaId,
@@ -107,8 +105,7 @@ export default function RevisarAtividade() {
         }));
       }
       
-      if (alunoAtualIndex < alunos.length - 1) irParaProximo(); 
-      else alert("Todos os alunos desta turma foram revisados!");
+      // REMOVIDO O AVANÇO AUTOMÁTICO PARA O PROFESSOR VER A TELA DE SUCESSO
     } catch (error) { alert("Erro ao salvar."); console.error(error); } finally { setSalvando(false); }
   }
 
@@ -118,7 +115,7 @@ export default function RevisarAtividade() {
     try {
       await updateDoc(doc(db, 'atividades', atividadeAtual.id), { postado: true, dataPostagem: new Date() });
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], postado: true, dataPostagem: new Date() } }));
-      if (alunoAtualIndex < alunos.length - 1) irParaProximo();
+      // Mantendo o comportamento visual: O botão muda para 'Feedback Lançado', ele decide se avança.
     } catch (error) { alert("Erro ao marcar."); } finally { setMarcandoPostado(false); }
   }
 
@@ -248,10 +245,10 @@ export default function RevisarAtividade() {
                   </div>
                 </div>
 
-                <button onClick={handleAprovar} disabled={salvando} className="w-full bg-white text-blue-700 font-black text-lg py-4 rounded-xl hover:bg-gray-100 active:scale-95 transition-all shadow-lg flex justify-center items-center gap-2">{salvando ? 'Salvando...' : 'Salvar e Avançar'} <ChevronRight size={20}/></button>
+                <button onClick={handleAprovar} disabled={salvando} className="w-full bg-white text-blue-700 font-black text-lg py-4 rounded-xl hover:bg-gray-100 active:scale-95 transition-all shadow-lg flex justify-center items-center gap-2">{salvando ? 'Salvando...' : 'Salvar Avaliação'}</button>
               </div>
             ) : (
-              <div className="bg-gray-800 p-6 rounded-2xl shadow-md text-white animate-in fade-in duration-300">
+              <div className="bg-gray-800 p-6 rounded-2xl shadow-md text-white animate-in fade-in duration-300 flex flex-col h-full">
                 <h3 className="text-lg font-black mb-4 flex items-center gap-2 border-b border-gray-600 pb-2">
                   <CheckCircle size={20} />Aprovado
                   {foiEditado ? ( <span className="ml-auto text-[10px] font-black uppercase tracking-wider bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full flex items-center gap-1"><Edit3 size={12}/> Editado</span> ) : ( <span className="ml-auto text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full flex items-center gap-1"><Sparkles size={12}/> 100% IA</span> )}
@@ -273,6 +270,20 @@ export default function RevisarAtividade() {
                 )}
                 {isAdmin && isFaltaPostar && ( <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-blue-600 text-white font-black text-md py-4 rounded-xl hover:bg-blue-700 transition-all border border-blue-500 flex justify-center items-center gap-2">{marcandoPostado ? 'Salvando...' : <><Send size={20}/> Marcar como Lançado</>}</button> )}
                 {isFinalizado && ( <div className="w-full bg-green-900 text-green-100 font-bold text-sm py-3 rounded-xl flex justify-center items-center gap-2 border border-green-700"><CheckCheck size={18} /> Feedback lançado (Moodle, Sigaa...)</div> )}
+                
+                {/* NOVO: BOTÃO DE AVANÇAR PARA O PRÓXIMO ALUNO FICA AQUI */}
+                <div className="mt-auto pt-6">
+                  {alunoAtualIndex < alunos.length - 1 ? (
+                    <button onClick={irParaProximo} className="w-full bg-gray-700 text-white font-black text-md py-4 rounded-xl hover:bg-gray-600 transition-all flex justify-center items-center gap-2 border border-gray-600 shadow-md">
+                      Avaliar Próximo Aluno <ChevronRight size={20}/>
+                    </button>
+                  ) : (
+                    <div className="w-full bg-green-900/50 text-green-300 font-bold text-sm py-3 rounded-xl flex justify-center items-center gap-2 border border-green-800">
+                      🎉 Fim da lista de alunos!
+                    </div>
+                  )}
+                </div>
+
                 <div className="mt-4 pt-4 border-t border-gray-700 space-y-2 text-xs text-gray-400 font-medium">
                   {atividadeAtual.dataAprovacao && ( <p className="flex items-center gap-2"><CalendarDays size={14}/> Revisado: {formatarData(atividadeAtual.dataAprovacao)}</p> )}
                   {isFinalizado && atividadeAtual.dataPostagem && ( <p className="flex items-center gap-2 text-gray-300"><CalendarDays size={14}/> Lançado: {formatarData(atividadeAtual.dataPostagem)}</p> )}
