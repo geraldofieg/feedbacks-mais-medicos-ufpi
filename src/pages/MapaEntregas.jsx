@@ -7,7 +7,8 @@ import { ClipboardList, Check, X, BookOpen, Users, FileText, RefreshCw, Graduati
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function MapaEntregas() {
-  const { currentUser, escolaSelecionada } = useAuth();
+  // AJUSTE: Inserido o userProfile para ler a permissão
+  const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const location = useLocation();
   
   const [turmas, setTurmas] = useState([]);
@@ -24,6 +25,9 @@ export default function MapaEntregas() {
   const [loadingTurmas, setLoadingTurmas] = useState(true);
   const [loadingMatriz, setLoadingMatriz] = useState(false);
   const [erro, setErro] = useState(null);
+
+  // AJUSTE: Definição de quem é Admin lendo o banco de dados
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   // O ESPIÃO DE CLIQUES: Força a atualização se a URL trouxer uma turma nova
   useEffect(() => {
@@ -45,10 +49,12 @@ export default function MapaEntregas() {
     setErro(null);
     setLoadingTurmas(true);
     try {
-      const qT = query(collection(db, 'turmas'), 
-        where('instituicaoId', '==', escolaSelecionada.id),
-        where('professorUid', '==', currentUser.uid)
-      );
+      // AJUSTE: Se for Gestor (isAdmin), puxa todas as turmas da Instituição. Se não, puxa só as do professor.
+      const turmasRef = collection(db, 'turmas');
+      const qT = isAdmin
+        ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
+        : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        
       const snapT = await getDocs(qT);
       const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
       setTurmas(turmasData);
@@ -69,7 +75,7 @@ export default function MapaEntregas() {
     }
   }
 
-  useEffect(() => { fetchTurmas(); }, [currentUser, escolaSelecionada]);
+  useEffect(() => { fetchTurmas(); }, [currentUser, userProfile, escolaSelecionada, isAdmin]); // dependências atualizadas
 
   useEffect(() => {
     async function fetchMatriz() {
@@ -85,7 +91,7 @@ export default function MapaEntregas() {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         
-        // CORREÇÃO DO BUG AQUI: Filtra apenas as do tipo "entrega" para gerar as colunas do Mapa
+        // Filtra apenas as do tipo "entrega" para gerar as colunas do Mapa
         const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo))
           .sort((a, b) => a.dataCriacao?.toMillis() - b.dataCriacao?.toMillis());
