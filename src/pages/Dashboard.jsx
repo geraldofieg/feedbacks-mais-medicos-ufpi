@@ -6,11 +6,16 @@ import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Building2, Pen
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
-  const { currentUser, escolaSelecionada, setEscolaSelecionada } = useAuth();
+  // NOVO: Puxando o userProfile para ler o Plano
+  const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   const navigate = useNavigate();
   
   // REGRA DE PROTEÇÃO GESTOR VS PROFESSOR
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  
+  // NOVO: Regra do Plano (Tier)
+  const planoUsuario = userProfile?.plano || 'basico'; 
+  const mostrarRevisao = isAdmin || planoUsuario === 'intermediario' || planoUsuario === 'premium';
   
   const [instituicoes, setInstituicoes] = useState([]);
   const [novaInstituicao, setNovaInstituicao] = useState('');
@@ -288,23 +293,28 @@ export default function Dashboard() {
           </div>
 
           {/* ESTEIRA DE PRODUÇÃO (NOVO KANBAN V3) */}
-          <div className={`grid grid-cols-1 gap-4 mb-10 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2 max-w-4xl mx-auto'}`}>
+          {/* AJUSTE NA GRID: Se for básico (só 1 caixa), fica menor e centralizada. Se não, usa 2 ou 3 colunas. */}
+          <div className={`grid grid-cols-1 gap-4 mb-10 ${isAdmin ? 'md:grid-cols-3' : mostrarRevisao ? 'md:grid-cols-2 max-w-4xl mx-auto' : 'max-w-sm mx-auto'}`}>
             
-            <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
-              <div className="flex items-start justify-between mb-4">
-                <h3 className="text-xs font-bold text-yellow-600 uppercase tracking-widest leading-tight">Aguardando<br/>Revisão</h3>
-                <div className="bg-yellow-50 text-yellow-500 p-2 rounded-lg"><Clock size={20}/></div>
+            {/* SÓ MOSTRA SE FOR INTERMEDIÁRIO, PREMIUM OU ADMIN */}
+            {mostrarRevisao && (
+              <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                <div className="flex items-start justify-between mb-4">
+                  <h3 className="text-xs font-bold text-yellow-600 uppercase tracking-widest leading-tight">Aguardando<br/>Revisão</h3>
+                  <div className="bg-yellow-50 text-yellow-500 p-2 rounded-lg"><Clock size={20}/></div>
+                </div>
+                <div className="flex items-end justify-between mt-2">
+                  <span className="text-4xl font-black text-gray-800">{loadingDados ? '-' : kanban.pendentes}</span>
+                  {kanban.pendentes > 0 && (
+                    <Link to="/aguardandorevisao" className="text-xs font-bold text-yellow-600 bg-yellow-50 hover:bg-yellow-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                      Ver lista <ChevronRight size={14}/>
+                    </Link>
+                  )}
+                </div>
               </div>
-              <div className="flex items-end justify-between mt-2">
-                <span className="text-4xl font-black text-gray-800">{loadingDados ? '-' : kanban.pendentes}</span>
-                {kanban.pendentes > 0 && (
-                  <Link to="/aguardandorevisao" className="text-xs font-bold text-yellow-600 bg-yellow-50 hover:bg-yellow-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
-                    Ver lista <ChevronRight size={14}/>
-                  </Link>
-                )}
-              </div>
-            </div>
+            )}
 
+            {/* SÓ MOSTRA PARA GESTOR ADMIN */}
             {isAdmin && (
               <div className="bg-blue-600 border border-blue-700 p-5 rounded-2xl shadow-md flex flex-col justify-between relative overflow-hidden group">
                 <div className="flex items-start justify-between mb-4 relative z-10">
@@ -323,14 +333,17 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* MOSTRA PARA TODOS (Mas muda o título se for plano básico) */}
             <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
               <div className="flex items-start justify-between mb-4">
-                <h3 className="text-xs font-bold text-green-600 uppercase tracking-widest leading-tight">Histórico<br/>Finalizado</h3>
+                <h3 className="text-xs font-bold text-green-600 uppercase tracking-widest leading-tight">
+                  {!mostrarRevisao ? 'Entregas Concluídas' : 'Histórico Finalizado'}
+                </h3>
                 <div className="bg-green-50 text-green-500 p-2 rounded-lg"><CheckCheck size={20}/></div>
               </div>
               <div className="flex items-end justify-between mt-2">
                 <span className="text-4xl font-black text-gray-800">{loadingDados ? '-' : finalizadosVisor}</span>
-                {finalizadosVisor > 0 && (
+                {finalizadosVisor > 0 && mostrarRevisao && (
                   <Link to="/historico" className="text-xs font-bold text-green-600 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
                     Ver histórico <ChevronRight size={14}/>
                   </Link>
