@@ -28,9 +28,9 @@ O sistema opera em uma hierarquia plana de 3 níveis protegida por Tenant ID:
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de dados. Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
 * **`instituicoes`:** `id`, `nome`, `professorUid`, `status`, `dataCriacao`.
-* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role`, `plano` ('basico', 'intermediario', 'premium'), **`promptPersonalizado`** (String para moldar a IA), `dataCadastro`.
-* **`turmas`**: `id`, `instituicaoId`, `nome`, `professorUid`, `status`, `dataCriacao`.
-* **`alunos`**: `id`, `nome`, `whatsapp` (opcional), `email` (opcional), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCadastro`.
+* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role`, `plano` ('basico', 'intermediario', 'premium'), **`promptPersonalizado`** (String para moldar a IA), **`status` ('ativo' ou 'bloqueado')**, `dataCadastro`.
+* **`turmas`:** `id`, `instituicaoId`, `nome`, `professorUid`, `status`, `dataCriacao`.
+* **`alunos`:** `id`, `nome`, `whatsapp` (opcional), `email` (opcional), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCadastro`.
 * **`tarefas`:** `id`, `nomeTarefa` (Obrigatório), `enunciado` (Opcional), `urlEnunciado` (Opcional), `dataFim` (Firebase Timestamp com precisão de hora e minuto), `tipo` ('entrega', 'compromisso', 'lembrete'), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCriacao`.
 * **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta` (Opcional), `urlResposta` (Opcional), `status` ('pendente'|'aprovado'|'devolvido'), `nota` (Opcional), `feedbackSugerido`, `feedbackFinal`, `postado` (Booleano), `dataAprovacao`, `dataPostagem`.
 
@@ -39,17 +39,20 @@ Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de 
 * **Troca de Contexto Inteligente:** O Dashboard possui um *Dropdown* (Menu Suspenso) nativo no cabeçalho. Ele permite ao professor alternar instantaneamente entre suas Instituições cadastradas ou criar uma nova, sem precisar retroceder na navegação.
 * **Centro de Comando Mutante (Inversão de Hierarquia):** O layout adapta-se à maturidade do usuário:
     * Se `Turmas === 0`, o topo destaca convites de criação e oculta os atalhos.
-    * Se `Turmas > 0`, os botões de criação viram atalhos discretos e o topo passa a ser dominado por "Minhas Turmas Ativas" e pelo "Radar da Semana".
-* **A Esteira de Produção (Kanban Numérico):** Inspirado no fluxo da V1, o Dashboard apresenta o funil de trabalho do professor através de "Cards de Status":
-    1. **Aguardando Revisão:** Respostas coladas/recebidas, mas ainda não corrigidas (`status === 'pendente'`).
-    2. **Falta Postar:** Atividades com feedback/nota aprovados, mas que o professor ainda não lançou no sistema oficial (`status === 'aprovado'` e `postado === false`).
-    3. **Histórico Finalizado:** Atividades já transcritas e lançadas no portal da faculdade (`postado === true`).
+    * Se `Turmas > 0`, os botões de criação viram atalhos discretos.
+* **Ponto de Situação do Curso (Senso de Urgência):** Letreiro escuro no topo do Dashboard exibindo as tarefas do tipo 'Entrega' que estão ativas, com contagem regressiva de dias para o encerramento, sinalizando o foco do momento.
+* **A Esteira de Produção (Kanban Numérico Inteligente):** O Dashboard apresenta o funil de trabalho com links diretos para as listas. Sua exibição se adapta ao Perfil (Role):
+    * **Visão Gestor (Admin):** 3 Caixas (Aguardando Revisão ➔ Pronto p/ Lançar ➔ Histórico Finalizado). A caixa do meio leva à tela exclusiva `/faltapostar`.
+    * **Visão Professor:** 2 Caixas (Aguardando Revisão ➔ Histórico Finalizado). A caixa do meio é ocultada e seus valores são somados ao Histórico, blindando o professor de ações burocráticas que não lhe cabem.
 * **Radar da Semana (Mini-Cronograma):** Injetado na tela inicial, exibe até 3 eventos programados para os próximos 7 dias. Cartões de "Tarefa do Aluno" funcionam como links mágicos para a correção.
 * **Termômetro da IA:** Mede a eficiência do prompt. Regra: Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA.
 
-## 7. Perfis de Acesso (RBAC SaaS)
-* **Perfil Admin:** Visão global de faturamento e controle master do sistema.
-* **Perfil Professor:** Visão isolada. Só enxerga dados pertencentes ao `instituicaoId` selecionado e onde seu `uid` conste como criador.
+## 7. Perfis de Acesso (RBAC SaaS) e Painel Admin
+A plataforma diferencia quem opera de quem administra o SaaS, aplicando filtros severos no banco de dados:
+* **Perfil Professor:** Visão isolada e restrita. Só enxerga dados pertencentes ao `instituicaoId` selecionado **E** onde seu `uid` conste como criador (`professorUid`).
+* **Perfil Gestor (Super Admin):** * Possui a **"Chave Mestra"** nas consultas do banco, ignorando a trava de `professorUid` para enxergar e auditar turmas e tarefas criadas por outros professores dentro de uma Instituição.
+    * Tem acesso a um botão oculto na Navbar (Coroa Roxa) que leva ao **Painel SaaS (`/admin`)**.
+    * **Painel SaaS:** Tela gerencial para controle de assinaturas, onde o Gestor visualiza todos os usuários do sistema, podendo alterar em tempo real o Plano (Básico, Intermediário, Premium), o Nível de Acesso (Professor/Gestor) e o Status de Acesso (Ativo/Bloqueado).
 
 ## 8. Modelos de Operação (Tiers/Planos de Assinatura)
 O sistema adapta sua funcionalidade com base no plano/perfil do professor logado:
@@ -67,19 +70,16 @@ O sistema adapta sua funcionalidade com base no plano/perfil do professor logado
 
 ## 9. A Nova Estação de Correção (Fluxo Centralizado)
 A página de Revisar Atividade (`/revisar/id`) atua como o HUB de entrada e saída de dados. Substitui a antiga página de "Nova Atividade" solta da V1, agrupando a visualização da turma inteira:
-* **A Visão do "Digitador":** Como não há portal do aluno, o professor abre a tarefa, seleciona o aluno e tem acesso a 3 blocos visuais:
-   1. **Enunciado:** Somente leitura (puxa da Tarefa).
-   2. **Resposta do Aluno:** Campo de texto livre para o professor colar o que o aluno mandou no fórum/Zap (Opcional).
-   3. **Feedback e Nota:** Área onde o professor digita/cola o feedback (ou recebe da IA), preenche a **Nota (Opcional)** e clica em Aprovar.
-* **Paginação Inteligente:** O sistema busca todos os alunos da turma e cria botões de "Anterior" e "Próximo". Ao aprovar um feedback, o sistema avança automaticamente para o próximo aluno.
+* **A Visão do "Digitador":** Como não há portal do aluno, a tela permite a **criação de atividade on-the-fly**. Se o aluno não tiver resposta, os campos ficam abertos. O professor cola a Resposta, digita a Nota/Feedback e o sistema salva e cria o vínculo no banco instantaneamente.
+* **Senso de Conclusão e Paginação UX:** Ao salvar, a tela *não* avança invisivelmente. Ela exibe o "Cartão Escuro de Aprovado" para o professor ter certeza do salvamento, oferecendo um botão claro de "Avaliar Próximo Aluno ➔" para continuar a varredura.
 * **Blindagem de Datas (Anti-Crash):** Utiliza um conversor de *timestamp* universal para evitar a "tela branca" ao renderizar datas antigas ou em formatos mistos.
-* **Vocabulário de Sistema Oficial:** O botão final de fluxo adota a nomenclatura genérica **"Marcar como Lançado"**, gerando o status **"Feedback lançado (Moodle, Sigaa...)"** para indicar que a obrigação burocrática foi cumprida e finalizada.
+* **Vocabulário de Sistema Oficial (Separação de Papéis):** O botão final de fluxo adota a nomenclatura genérica **"Marcar como Lançado"**. Este botão e os controles gerenciais **só aparecem para o Gestor**. Para o professor comum, o trabalho finaliza na Aprovação.
 
-## 10. Gestão de Tarefas e Agenda
+## 10. Gestão de Tarefas e Regra de Distribuição
 O professor cadastra itens na página de `/tarefas` com categorias distintas: `Tarefa do Aluno`, `Compromisso` ou `Post-it`.
 * **Hierarquia Invertida:** A página foca na gestão do dia a dia. A barra de busca e os registros existentes aparecem no topo, enquanto o formulário de "Nova Tarefa" é fixado no rodapé (mobile) ou na lateral.
-* **Regra de Distribuição Padrão:** Ao criar uma tarefa, ela é **automaticamente atribuída a todos os alunos** ativos da turma, gerando pendência para a turma inteira.
-* **Regra de Exceção (Futuro):** Criação de uma flag ou menu avançado para "Atribuir a alunos específicos" (para casos raros como recuperação ou segunda chamada).
+* **A Máquina de Distribuição Automática (Batch Write):** Ao criar uma "Tarefa do Aluno", o sistema realiza uma varredura silenciosa e cria um registro de `Atividade (Pendente)` para cada aluno ativo da turma, alimentando instantaneamente o Kanban e o Mapa de Pendências.
+* **Regra de Exceção (Recuperação):** O formulário possui uma flag avançada "Atribuir apenas a alunos específicos". Ao marcá-la, exibe checkboxes com os nomes da turma, permitindo gerar pendências cirúrgicas apenas para quem fará provas de segunda chamada.
 
 ## 11. Módulo de Comunicação e Cobrança
 Automatização de cobranças baseada no cruzamento de alunos ativos x tarefas pendentes (filtrando apenas itens do tipo `entrega` / `Tarefa do Aluno`). O sistema lê automaticamente a `dataFim` da tarefa para definir o tom da mensagem.
@@ -124,4 +124,3 @@ O cadastro de alunos exige vinculação a uma `Turma`.
 A aba "Datas" processa todas as tarefas criadas no banco em tempo real, eliminando qualquer dependência de arquivos estáticos.
 * **O Radar (A Gaveta de Post-its):** Tarefas *sem* prazo definido (Lembretes soltos) são renderizadas fixas no topo da tela, servindo como uma visão contínua.
 * **A Linha do Tempo:** Entregas e Compromissos *com* `dataFim` são ordenados verticalmente (do mais próximo ao mais distante), utilizando bolinhas e badges coloridos para indicar proximidade, mantendo o botão de "Ocultar Passados".
-  
