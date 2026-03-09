@@ -7,7 +7,8 @@ import { Megaphone, Copy, CheckCircle2, MessageCircle, Send, MonitorSmartphone, 
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Comunicacao() {
-  const { currentUser, escolaSelecionada } = useAuth();
+  // AJUSTE: Inserido o userProfile para ler o Nível de Acesso
+  const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const location = useLocation();
   const alunoAlvo = location.state?.alunoAlvo || null;
 
@@ -25,6 +26,9 @@ export default function Comunicacao() {
   const [loadingDados, setLoadingDados] = useState(false);
   const [copiado, setCopiado] = useState(null);
 
+  // AJUSTE: Definição de quem é Admin lendo o banco de dados
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+
   // ESPIÃO DE CLIQUES E SALVAMENTO NA MEMÓRIA
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
@@ -41,7 +45,12 @@ export default function Comunicacao() {
       if (!currentUser || !escolaSelecionada?.id) { setLoadingTurmas(false); return; }
       setLoadingTurmas(true);
       try {
-        const qT = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        // AJUSTE: A CHAVE MESTRA NAS TURMAS PARA O GESTOR PODER VER TODAS AS TURMAS
+        const turmasRef = collection(db, 'turmas');
+        const qT = isAdmin 
+          ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
+          : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        
         const snapT = await getDocs(qT);
         
         // ORDENAÇÃO INTELIGENTE: Sempre puxa a turma mais NOVA caso a memória falhe
@@ -62,7 +71,7 @@ export default function Comunicacao() {
       } catch (error) { console.error(error); } finally { setLoadingTurmas(false); }
     }
     fetchTurmas();
-  }, [currentUser, escolaSelecionada]);
+  }, [currentUser, userProfile, escolaSelecionada, isAdmin]); // adicionado dependências
 
   useEffect(() => {
     async function fetchDadosComunicacao() {
@@ -166,7 +175,8 @@ export default function Comunicacao() {
 
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
   const msgGeralPronta = gerarMensagemGeral();
-          if (!escolaSelecionada?.id) {
+  
+  if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Breadcrumb items={[{ label: 'Comunicação' }]} />
@@ -193,7 +203,7 @@ export default function Comunicacao() {
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-widest hidden sm:block">Turma:</span>
               <select 
-                className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-xl focus:ring-2 focus:ring-green-500 py-2 px-3 font-bold shadow-sm cursor-pointer w-full sm:w-auto"
+                className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-xl focus:ring-2 focus:ring-green-50 py-2 px-3 font-bold shadow-sm cursor-pointer w-full sm:w-auto"
                 value={turmaAtiva} onChange={e => { setTurmaAtiva(e.target.value); setTarefaAtivaId(''); }}
               >
                 {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
