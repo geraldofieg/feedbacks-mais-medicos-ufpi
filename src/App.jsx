@@ -3,10 +3,16 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+// COMPONENTES
 import Navbar from './components/Navbar';
-import BotaoGlobal from './components/BotaoGlobal'; // NOVO: Import do Botão Global
+import BotaoGlobal from './components/BotaoGlobal'; 
+
+// PÁGINAS PÚBLICAS
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+
+// PÁGINAS PRIVADAS (SaaS V3)
 import Dashboard from './pages/Dashboard';
 import Turmas from './pages/Turmas';
 import Tarefas from './pages/Tarefas'; 
@@ -15,12 +21,17 @@ import RevisarAtividade from './pages/RevisarAtividade';
 import Alunos from './pages/Alunos';
 import Configuracoes from './pages/Configuracoes';
 import MapaEntregas from './pages/MapaEntregas';
-import ListaAtividades from './pages/ListaAtividades';
 import Pendencias from './pages/Pendencias';
 import Cronograma from './pages/Cronograma';
 import Comunicacao from './pages/Comunicacao';
+
+// ESTEIRA DE PRODUÇÃO (KANBAN)
+import AguardandoRevisao from './pages/AguardandoRevisao';
 import FaltaPostar from './pages/FaltaPostar'; 
-import AdminPainel from './pages/AdminPainel'; // NOVO: Import do Painel Admin
+import Historico from './pages/Historico';
+
+// PAINEL DE GESTÃO DO CEO
+import AdminPainel from './pages/AdminPainel'; 
 
 function PrivateRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -70,18 +81,21 @@ function App() {
           <Route path="/alunos" element={<PrivateRoute><Alunos /></PrivateRoute>} />
           <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
-          <Route path="/lista/:status" element={<PrivateRoute><ListaAtividades /></PrivateRoute>} />
           <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
-          <Route path="/faltapostar" element={<PrivateRoute><FaltaPostar /></PrivateRoute>} />
           
-          {/* NOVO: Rota do Painel SaaS */}
+          {/* ROTAS DO KANBAN */}
+          <Route path="/aguardandorevisao" element={<PrivateRoute><AguardandoRevisao /></PrivateRoute>} />
+          <Route path="/faltapostar" element={<PrivateRoute><FaltaPostar /></PrivateRoute>} />
+          <Route path="/historico" element={<PrivateRoute><Historico /></PrivateRoute>} />
+          
+          {/* Rota do Painel SaaS */}
           <Route path="/admin" element={<PrivateRoute><AdminPainel /></PrivateRoute>} />
           
           {/* Rota de fallback: Se digitar uma URL que não existe, volta pro Dashboard */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
 
-        {/* NOVO: Botão Flutuante Global renderizado por cima de tudo */}
+        {/* Botão Flutuante Global renderizado por cima de tudo */}
         <BotaoGlobal />
 
       </AuthProvider>
