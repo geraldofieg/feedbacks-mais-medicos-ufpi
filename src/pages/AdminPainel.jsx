@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldAlert, Users, Crown, Settings, CheckCircle, XCircle, Search } from 'lucide-react';
+import { ShieldAlert, Users, Crown, CheckCircle, XCircle, Search } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export default function AdminPainel() {
   const { currentUser } = useAuth();
+  
+  // A CHAVE MESTRA: Apenas o seu email tem acesso a esta tela
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   const [usuarios, setUsuarios] = useState([]);
@@ -94,17 +96,19 @@ export default function AdminPainel() {
           <div className="bg-yellow-50 text-yellow-500 p-3 rounded-xl"><Crown size={24}/></div>
         </div>
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Busca Rápida</p>
-            <input 
-              type="text" 
-              placeholder="Nome ou e-mail..." 
-              className="mt-2 w-full text-sm border-b border-gray-300 focus:border-blue-500 outline-none pb-1"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-            />
+          <div className="w-full">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Busca Rápida</p>
+            <div className="flex items-center bg-gray-50 rounded-lg px-3 py-2 border border-gray-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+              <Search size={16} className="text-gray-400 mr-2 shrink-0"/>
+              <input 
+                type="text" 
+                placeholder="Nome ou e-mail..." 
+                className="w-full text-sm bg-transparent outline-none text-gray-700 font-medium"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="text-gray-300 p-3"><Search size={24}/></div>
         </div>
       </div>
 
@@ -125,7 +129,7 @@ export default function AdminPainel() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {usuariosFiltrados.map((user) => (
-                  <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${atualizando === user.id ? 'opacity-50' : ''}`}>
+                  <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${atualizando === user.id ? 'opacity-50 pointer-events-none' : ''}`}>
                     <td className="p-4">
                       <p className="font-bold text-gray-900">{user.nome || 'Sem Nome'}</p>
                       <p className="text-xs font-medium text-gray-500 mt-0.5">{user.email}</p>
@@ -133,7 +137,7 @@ export default function AdminPainel() {
                     
                     <td className="p-4">
                       <select 
-                        className={`text-sm font-bold p-2 rounded-lg border outline-none cursor-pointer ${
+                        className={`text-sm font-bold p-2.5 rounded-lg border outline-none cursor-pointer transition-colors ${
                           user.plano === 'premium' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 
                           user.plano === 'intermediario' ? 'bg-blue-50 border-blue-200 text-blue-700' : 
                           'bg-gray-50 border-gray-200 text-gray-600'
@@ -150,7 +154,9 @@ export default function AdminPainel() {
 
                     <td className="p-4">
                       <select 
-                        className={`text-sm font-bold p-2 rounded-lg outline-none cursor-pointer ${user.role === 'admin' ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-700'}`}
+                        className={`text-sm font-bold p-2.5 rounded-lg outline-none cursor-pointer transition-colors ${
+                          user.role === 'admin' ? 'bg-slate-800 text-white border border-slate-700' : 'bg-gray-100 text-gray-700 border border-transparent'
+                        }`}
                         value={user.role || 'professor'}
                         onChange={(e) => handleUpdateUser(user.id, 'role', e.target.value)}
                         disabled={atualizando === user.id}
@@ -164,13 +170,13 @@ export default function AdminPainel() {
                       <button 
                         onClick={() => handleUpdateUser(user.id, 'status', user.status === 'bloqueado' ? 'ativo' : 'bloqueado')}
                         disabled={atualizando === user.id}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
                           user.status === 'bloqueado' 
-                          ? 'bg-red-100 text-red-600 hover:bg-red-200 border border-red-200' 
-                          : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-200'
+                          ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' 
+                          : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
                         }`}
                       >
-                        {user.status === 'bloqueado' ? <><XCircle size={14}/> Bloqueado</> : <><CheckCircle size={14}/> Liberado</>}
+                        {user.status === 'bloqueado' ? <><XCircle size={16}/> Bloqueado</> : <><CheckCircle size={16}/> Liberado</>}
                       </button>
                     </td>
                   </tr>
@@ -178,7 +184,10 @@ export default function AdminPainel() {
               </tbody>
             </table>
             {usuariosFiltrados.length === 0 && (
-              <div className="text-center py-8 text-gray-500">Nenhum usuário encontrado.</div>
+              <div className="text-center py-12">
+                <Users size={40} className="mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-500 font-medium">Nenhum usuário encontrado com esta busca.</p>
+              </div>
             )}
           </div>
         )}
