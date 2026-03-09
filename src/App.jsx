@@ -19,7 +19,8 @@ import ListaAtividades from './pages/ListaAtividades';
 import Pendencias from './pages/Pendencias';
 import Cronograma from './pages/Cronograma';
 import Comunicacao from './pages/Comunicacao';
-import FaltaPostar from './pages/FaltaPostar'; // NOVO: Import da tela de Falta Postar
+import FaltaPostar from './pages/FaltaPostar'; 
+import AdminPainel from './pages/AdminPainel'; // NOVO: Import do Painel Admin
 
 function PrivateRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -71,9 +72,10 @@ function App() {
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
           <Route path="/lista/:status" element={<PrivateRoute><ListaAtividades /></PrivateRoute>} />
           <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
-          
-          {/* NOVO: Rota da tela de Falta Postar */}
           <Route path="/faltapostar" element={<PrivateRoute><FaltaPostar /></PrivateRoute>} />
+          
+          {/* NOVO: Rota do Painel SaaS */}
+          <Route path="/admin" element={<PrivateRoute><AdminPainel /></PrivateRoute>} />
           
           {/* Rota de fallback: Se digitar uma URL que não existe, volta pro Dashboard */}
           <Route path="*" element={<Navigate to="/" />} />
