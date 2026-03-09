@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users } from 'lucide-react';
+import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown } from 'lucide-react';
 
 export default function Navbar() {
   const { currentUser, logout, escolaSelecionada } = useAuth();
@@ -8,6 +8,8 @@ export default function Navbar() {
   const navigate = useNavigate();
 
   if (!currentUser) return null;
+
+  const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   async function handleLogout() {
     try {
@@ -59,6 +61,21 @@ export default function Navbar() {
                 {link.icon} {link.label}
               </Link>
             ))}
+            
+            {/* BOTÃO SECRETO DO GESTOR (COMPUTADOR) */}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className={`flex items-center gap-1.5 text-sm font-black transition-all ${
+                  location.pathname === '/admin' 
+                    ? 'text-purple-700 border-b-2 border-purple-600 py-5' 
+                    : 'text-purple-500 hover:text-purple-700 py-5'
+                }`}
+              >
+                <Crown size={18} /> Painel SaaS
+              </Link>
+            )}
+
             <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm font-bold text-red-500 hover:text-red-700 ml-4 py-5 border-l border-gray-200 pl-6">
               <LogOut size={18} /> Sair
             </button>
@@ -85,6 +102,20 @@ export default function Navbar() {
               {link.icon} {link.label}
             </Link>
           ))}
+
+          {/* BOTÃO SECRETO DO GESTOR (CELULAR) */}
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className={`shrink-0 flex items-center gap-1.5 text-xs font-black whitespace-nowrap px-3 py-2 rounded-full transition-colors ${
+                location.pathname === '/admin' 
+                  ? 'bg-purple-200 text-purple-800' 
+                  : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+              }`}
+            >
+              <Crown size={14} /> SaaS
+            </Link>
+          )}
 
           <button 
             onClick={handleLogout} 
