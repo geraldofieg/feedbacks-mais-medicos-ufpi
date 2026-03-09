@@ -212,17 +212,19 @@ export default function Tarefas() {
     } catch (e) { return ""; }
   };
 
+  // AJUSTE DE COR PARA O POST-IT AQUI
   const getIconeTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return <Calendar size={22} className="text-purple-500" />;
-    if (t === 'lembrete') return <StickyNote size={22} className="text-blue-500" />;
+    if (t === 'lembrete') return <StickyNote size={22} className="text-yellow-500" />;
     return <FileText size={22} className="text-orange-500" />;
   };
 
+  // AJUSTE DE FUNDO E BORDA PARA O POST-IT AQUI
   const getCorTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return 'border-purple-200 bg-purple-50/20';
-    if (t === 'lembrete') return 'border-blue-200 bg-blue-50/20';
+    if (t === 'lembrete') return 'border-yellow-300 bg-yellow-50/40';
     return 'border-orange-200 bg-orange-50/20';
   };
 
