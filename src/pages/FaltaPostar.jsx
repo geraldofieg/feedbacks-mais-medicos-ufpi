@@ -6,7 +6,8 @@ import { ArrowLeft, Send, ChevronRight, CalendarDays } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function FaltaPostar() {
-  const { currentUser, escolaSelecionada } = useAuth();
+  // AJUSTE: Puxando o userProfile para ler a Rule do Banco de Dados
+  const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
@@ -17,8 +18,10 @@ export default function FaltaPostar() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoading(true);
       try {
+        // AJUSTE: Agora é Admin se o banco disser que é, ou se for o seu email mestre
+        const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+        
         // 1. Busca todas as turmas que esse usuário tem acesso na Instituição
-        const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
         const turmasRef = collection(db, 'turmas');
         const qTurmas = isAdmin
           ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
@@ -80,7 +83,7 @@ export default function FaltaPostar() {
     }
 
     fetchFaltaPostar();
-  }, [currentUser, escolaSelecionada]);
+  }, [currentUser, userProfile, escolaSelecionada]);
 
   const formatarData = (ts) => {
     if (!ts) return "";
