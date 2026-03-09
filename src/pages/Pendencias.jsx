@@ -7,7 +7,8 @@ import { AlertTriangle, User, Calendar, CalendarClock, ArrowRight, BookOpen, Ref
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Pendencias() {
-  const { currentUser, escolaSelecionada } = useAuth();
+  // AJUSTE: Trazendo o userProfile para validar o acesso Gestor
+  const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const location = useLocation();
   const navigate = useNavigate(); 
   
@@ -22,6 +23,9 @@ export default function Pendencias() {
   const [loadingTurmas, setLoadingTurmas] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
   const [erro, setErro] = useState(null);
+
+  // AJUSTE: Definição de quem é Admin lendo o banco de dados
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   // O ESPIÃO DE CLIQUES: Força a atualização se a URL trouxer uma turma nova
   useEffect(() => {
@@ -44,7 +48,12 @@ export default function Pendencias() {
       setErro(null);
       setLoadingTurmas(true);
       try {
-        const qT = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        // AJUSTE: Se for Gestor, puxa todas as turmas. Se não, puxa só as do professor.
+        const turmasRef = collection(db, 'turmas');
+        const qT = isAdmin
+          ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
+          : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+          
         const snapT = await getDocs(qT);
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
@@ -65,7 +74,7 @@ export default function Pendencias() {
       }
     }
     fetchTurmas(); 
-  }, [currentUser, escolaSelecionada]);
+  }, [currentUser, userProfile, escolaSelecionada, isAdmin]); // dependências atualizadas
 
   useEffect(() => {
     async function fetchPendencias() {
@@ -125,6 +134,7 @@ export default function Pendencias() {
 
     fetchPendencias();
   }, [turmaAtiva]); 
+
   const getStatusPrazo = (timestampFim) => {
     if (!timestampFim || !timestampFim.toDate) return null;
     const hoje = new Date();
