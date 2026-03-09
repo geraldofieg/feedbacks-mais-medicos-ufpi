@@ -3,13 +3,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown } from 'lucide-react';
 
 export default function Navbar() {
-  const { currentUser, logout, escolaSelecionada } = useAuth();
+  // AJUSTE: Trazendo o userProfile para validar o Gestor
+  const { currentUser, userProfile, logout, escolaSelecionada } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   if (!currentUser) return null;
 
-  const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  // AJUSTE DE SEGURANÇA LENDO DO BANCO DE DADOS (Ou do e-mail root)
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   async function handleLogout() {
     try {
@@ -23,7 +25,8 @@ export default function Navbar() {
   const navLinks = [
     { path: '/', icon: <Home size={18} />, label: 'Início' },
     { path: '/turmas', icon: <Users size={18} />, label: 'Turmas' }, 
-    { path: '/cronograma', icon: <CalendarRange size={18} />, label: 'Datas' },
+    // AJUSTE DE NOME: 'Datas' mudou para 'Cronograma'
+    { path: '/cronograma', icon: <CalendarRange size={18} />, label: 'Cronograma' },
     { path: '/comunicacao', icon: <Megaphone size={18} />, label: 'Comunicação' },
     { path: '/pendencias', icon: <AlertTriangle size={18} />, label: 'Pendências' },
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
