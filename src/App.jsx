@@ -16,14 +16,13 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Turmas from './pages/Turmas';
 import Tarefas from './pages/Tarefas'; 
-import NovaAtividade from './pages/NovaAtividade';
+import Cronograma from './pages/Cronograma';
+import Comunicacao from './pages/Comunicacao';
 import RevisarAtividade from './pages/RevisarAtividade';
 import Alunos from './pages/Alunos';
 import Configuracoes from './pages/Configuracoes';
 import MapaEntregas from './pages/MapaEntregas';
 import Pendencias from './pages/Pendencias';
-import Cronograma from './pages/Cronograma';
-import Comunicacao from './pages/Comunicacao';
 
 // ESTEIRA DE PRODUÇÃO (KANBAN)
 import AguardandoRevisao from './pages/AguardandoRevisao';
@@ -76,14 +75,13 @@ function App() {
           <Route path="/tarefas" element={<PrivateRoute><Tarefas /></PrivateRoute>} />
           <Route path="/cronograma" element={<PrivateRoute><Cronograma /></PrivateRoute>} />
           <Route path="/comunicacao" element={<PrivateRoute><Comunicacao /></PrivateRoute>} />
-          <Route path="/nova-atividade" element={<PrivateRoute><NovaAtividade /></PrivateRoute>} />
           <Route path="/revisar/:id" element={<PrivateRoute><RevisarAtividade /></PrivateRoute>} />
           <Route path="/alunos" element={<PrivateRoute><Alunos /></PrivateRoute>} />
           <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
           <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
           
-          {/* ROTAS DO KANBAN */}
+          {/* ROTAS DO KANBAN (Esteira de Produção V3) */}
           <Route path="/aguardandorevisao" element={<PrivateRoute><AguardandoRevisao /></PrivateRoute>} />
           <Route path="/faltapostar" element={<PrivateRoute><FaltaPostar /></PrivateRoute>} />
           <Route path="/historico" element={<PrivateRoute><Historico /></PrivateRoute>} />
@@ -91,11 +89,10 @@ function App() {
           {/* Rota do Painel SaaS */}
           <Route path="/admin" element={<PrivateRoute><AdminPainel /></PrivateRoute>} />
           
-          {/* Rota de fallback: Se digitar uma URL que não existe, volta pro Dashboard */}
+          {/* Rota de fallback */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
 
-        {/* Botão Flutuante Global renderizado por cima de tudo */}
         <BotaoGlobal />
 
       </AuthProvider>
