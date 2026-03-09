@@ -9,7 +9,9 @@ import Breadcrumb from '../components/Breadcrumb';
 export default function RevisarAtividade() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  
+  // AJUSTE: Puxando o userProfile para ler a Rule do Banco de Dados
+  const { currentUser, userProfile } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [tarefa, setTarefa] = useState(null);
@@ -28,7 +30,8 @@ export default function RevisarAtividade() {
   const [salvandoAcao, setSalvandoAcao] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
-  const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
+  // AJUSTE: Agora é Admin se o banco disser que é, ou se for o seu email mestre
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
   useEffect(() => {
     async function buscarDadosDaEstacao() {
@@ -105,7 +108,6 @@ export default function RevisarAtividade() {
         }));
       }
       
-      // REMOVIDO O AVANÇO AUTOMÁTICO PARA O PROFESSOR VER A TELA DE SUCESSO
     } catch (error) { alert("Erro ao salvar."); console.error(error); } finally { setSalvando(false); }
   }
 
@@ -115,7 +117,6 @@ export default function RevisarAtividade() {
     try {
       await updateDoc(doc(db, 'atividades', atividadeAtual.id), { postado: true, dataPostagem: new Date() });
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], postado: true, dataPostagem: new Date() } }));
-      // Mantendo o comportamento visual: O botão muda para 'Feedback Lançado', ele decide se avança.
     } catch (error) { alert("Erro ao marcar."); } finally { setMarcandoPostado(false); }
   }
 
@@ -271,7 +272,6 @@ export default function RevisarAtividade() {
                 {isAdmin && isFaltaPostar && ( <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-blue-600 text-white font-black text-md py-4 rounded-xl hover:bg-blue-700 transition-all border border-blue-500 flex justify-center items-center gap-2">{marcandoPostado ? 'Salvando...' : <><Send size={20}/> Marcar como Lançado</>}</button> )}
                 {isFinalizado && ( <div className="w-full bg-green-900 text-green-100 font-bold text-sm py-3 rounded-xl flex justify-center items-center gap-2 border border-green-700"><CheckCheck size={18} /> Feedback lançado (Moodle, Sigaa...)</div> )}
                 
-                {/* NOVO: BOTÃO DE AVANÇAR PARA O PRÓXIMO ALUNO FICA AQUI */}
                 <div className="mt-auto pt-6">
                   {alunoAtualIndex < alunos.length - 1 ? (
                     <button onClick={irParaProximo} className="w-full bg-gray-700 text-white font-black text-md py-4 rounded-xl hover:bg-gray-600 transition-all flex justify-center items-center gap-2 border border-gray-600 shadow-md">
