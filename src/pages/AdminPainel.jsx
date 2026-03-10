@@ -1,74 +1,127 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldAlert, Users, Crown, CheckCircle, XCircle, Search } from 'lucide-react';
+import { ShieldAlert, Users, Crown, CheckCircle, XCircle, Search, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export default function AdminPainel() {
   const { currentUser, userProfile, loading: authLoading } = useAuth();
-  
-  // A CHAVE MESTRA: Role de Admin no banco OU o seu e-mail supremo
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   const [atualizando, setAtualizando] = useState(null);
+  const [sincronizando, setSincronizando] = useState(false);
 
   useEffect(() => {
     async function fetchUsuarios() {
       if (!isAdmin || authLoading) return;
       try {
         const querySnapshot = await getDocs(collection(db, 'usuarios'));
-        const lista = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        // Ordena por nome
+        const lista = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
         setUsuarios(lista);
-      } catch (error) {
-        console.error("Erro ao buscar usuários:", error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (error) { console.error(error); } finally { setLoading(false); }
     }
     fetchUsuarios();
   }, [isAdmin, authLoading]);
 
-  // Função genérica para atualizar qualquer campo do usuário (plano, role, status)
-  async function handleUpdateUser(userId, campo, valor) {
-    setAtualizando(userId);
+  // =========================================================================
+  // A PONTE ELEGANTE: ETIQUETA ORIGINAIS E APAGA CLONES (COM NOMES OFICIAIS)
+  // =========================================================================
+  async function handleEtiquetarOriginais(userEmail, userUid) {
+    if (!window.confirm(`Isso vai LIMPAR os clones e ETIQUETAR os dados reais de ${userEmail} para a V3 ler. Confirma?`)) return;
+    setSincronizando(userUid);
     try {
-      await updateDoc(doc(db, 'usuarios', userId), {
-        [campo]: valor
+      const batch = writeBatch(db);
+
+      // PASSO 1: FAXINA DOS CLONES (Tudo que foi criado exclusivamete pra V3 antes)
+      const apagarClones = async (colName) => {
+        const q = await getDocs(collection(db, colName));
+        q.docs.forEach(d => { 
+          if (d.data().instituicaoId) batch.delete(d.ref); 
+        });
+      };
+      await apagarClones('instituicoes');
+      await apagarClones('turmas');
+      
+      // PASSO 2: CRIAR AS GAVETAS DA V3 (Com os Nomes Oficiais)
+      const instRef = doc(collection(db, 'instituicoes'));
+      batch.set(instRef, { 
+        nome: "UFPI", // Nome oficial solicitado
+        professorUid: userUid, 
+        status: 'ativa', 
+        dataCriacao: serverTimestamp() 
       });
-      setUsuarios(usuarios.map(u => u.id === userId ? { ...u, [campo]: valor } : u));
-    } catch (error) {
-      alert("Erro ao atualizar usuário.");
-      console.error(error);
+
+      const turmaRef = doc(collection(db, 'turmas'));
+      batch.set(turmaRef, { 
+        nome: "Mais Médicos", // Nome oficial solicitado
+        instituicaoId: instRef.id, 
+        professorUid: userUid, 
+        status: 'ativa' 
+      });
+
+      // PASSO 3: ETIQUETAR OS ORIGINAIS (Sem duplicar a V1)
+      let contAlunos = 0, contAtiv = 0, contTarefas = 0;
+
+      // Etiqueta Alunos Originais
+      const snapAlunos = await getDocs(collection(db, 'alunos'));
+      snapAlunos.docs.forEach(d => {
+        if (!d.data().instituicaoId) { // Se não tem etiqueta, é original da V1
+          batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
+          contAlunos++;
+        } else {
+           // Se era clone nosso dos testes, apaga para desduplicar a V1
+           batch.delete(d.ref);
+        }
+      });
+
+      // Etiqueta Atividades Originais
+      const snapAtiv = await getDocs(collection(db, 'atividades'));
+      snapAtiv.docs.forEach(d => {
+        if (!d.data().instituicaoId) {
+          batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
+          contAtiv++;
+        } else {
+           batch.delete(d.ref);
+        }
+      });
+
+      // Etiqueta Tarefas Originais (Cronograma)
+      const snapTarefas = await getDocs(collection(db, 'tarefas'));
+      snapTarefas.docs.forEach(d => {
+        if (!d.data().instituicaoId) {
+          batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
+          contTarefas++;
+        } else {
+           batch.delete(d.ref);
+        }
+      });
+
+      await batch.commit();
+      alert(`🔗 PONTE CRIADA COM SUCESSO!\n\nDados Reais Etiquetados:\n👤 ${contAlunos} Alunos\n📝 ${contAtiv} Atividades\n📅 ${contTarefas} Tarefas do Cronograma.\n\nDuplicidades removidas da V1!`);
+      window.location.reload();
+    } catch (e) {
+      alert("Erro ao criar a ponte: " + e.message);
+      console.error(e);
     } finally {
-      setAtualizando(null);
+      setSincronizando(null);
     }
   }
 
-  // Enquanto o Auth está carregando, mostra um spinner
-  if (authLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-slate-900"></div></div>;
+  async function handleUpdateUser(userId, campo, valor) {
+    setAtualizando(userId);
+    try {
+      await updateDoc(doc(db, 'usuarios', userId), { [campo]: valor });
+      setUsuarios(usuarios.map(u => u.id === userId ? { ...u, [campo]: valor } : u));
+    } catch (error) { alert("Erro ao atualizar."); } finally { setAtualizando(null); }
   }
 
-  // Se não for Admin após o carregamento, expulsa da tela
-  if (!isAdmin) {
-    return <Navigate to="/" />;
-  }
-
-  const usuariosFiltrados = usuarios.filter(u => 
-    (u.nome || '').toLowerCase().includes(busca.toLowerCase()) || 
-    (u.email || '').toLowerCase().includes(busca.toLowerCase())
-  );
-
-  const totalPremium = usuarios.filter(u => u.plano === 'premium').length;
+  if (authLoading) return <div className="p-10 text-center">Carregando...</div>;
+  if (!isAdmin) return <Navigate to="/" />;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -79,123 +132,59 @@ export default function AdminPainel() {
           </div>
           <div>
             <h1 className="text-2xl font-black text-gray-800 tracking-tight">Painel SaaS (Super Admin)</h1>
-            <p className="text-sm font-medium text-gray-500 mt-1">Gestão de acessos, assinaturas e permissões.</p>
+            <p className="text-sm font-medium text-gray-500 mt-1">Gestão de acessos, assinaturas e sincronização de dados.</p>
           </div>
         </div>
       </div>
 
-      {/* CARDS DE RESUMO */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total de Usuários</p>
-            <h3 className="text-3xl font-black text-gray-800 mt-1">{usuarios.length}</h3>
-          </div>
-          <div className="bg-blue-50 text-blue-500 p-3 rounded-xl"><Users size={24}/></div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-yellow-200 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-yellow-600 uppercase tracking-widest">Assinantes Premium</p>
-            <h3 className="text-3xl font-black text-gray-800 mt-1">{totalPremium}</h3>
-          </div>
-          <div className="bg-yellow-50 text-yellow-500 p-3 rounded-xl"><Crown size={24}/></div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
-          <div className="w-full">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Busca Rápida</p>
-            <div className="flex items-center bg-gray-50 rounded-lg px-3 py-2 border border-gray-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
-              <Search size={16} className="text-gray-400 mr-2 shrink-0"/>
-              <input 
-                type="text" 
-                placeholder="Nome ou e-mail..." 
-                className="w-full text-sm bg-transparent outline-none text-gray-700 font-medium"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* TABELA DE USUÁRIOS */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        {loading ? (
-          <div className="text-center py-12 text-gray-500 font-bold animate-pulse">Carregando base de usuários...</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-xs uppercase tracking-widest text-gray-500 border-b border-gray-200">
-                  <th className="p-4 font-bold">Usuário</th>
-                  <th className="p-4 font-bold">Plano SaaS</th>
-                  <th className="p-4 font-bold">Nível (Role)</th>
-                  <th className="p-4 font-bold text-center">Status de Acesso</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 text-xs uppercase tracking-widest text-gray-500 border-b border-gray-200">
+                <th className="p-4 font-bold">Usuário</th>
+                <th className="p-4 font-bold">Plano SaaS</th>
+                <th className="p-4 font-bold text-center">Status de Acesso</th>
+                <th className="p-4 font-bold text-center">Ponte V1 ➔ V3</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {usuarios.map((user) => (
+                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="p-4">
+                    <p className="font-bold text-gray-900">{user.nome || 'Sem Nome'}</p>
+                    <p className="text-xs font-medium text-gray-500 mt-0.5">{user.email}</p>
+                  </td>
+                  
+                  <td className="p-4">
+                    <select className="text-sm font-bold p-2.5 rounded-lg border bg-gray-50" value={user.plano || 'basico'} onChange={(e) => handleUpdateUser(user.id, 'plano', e.target.value)} disabled={atualizando === user.id}>
+                      <option value="basico">Tier 1: Básico</option>
+                      <option value="intermediario">Tier 2: Intermediário</option>
+                      <option value="premium">Tier 3: Premium (IA)</option>
+                    </select>
+                  </td>
+
+                  <td className="p-4 text-center">
+                    <button onClick={() => handleUpdateUser(user.id, 'status', user.status === 'bloqueado' ? 'ativo' : 'bloqueado')} disabled={atualizando === user.id} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider ${user.status === 'bloqueado' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
+                      {user.status === 'bloqueado' ? 'Bloqueado' : 'Liberado'}
+                    </button>
+                  </td>
+
+                  <td className="p-4 text-center">
+                    <button 
+                      onClick={() => handleEtiquetarOriginais(user.email, user.id)}
+                      disabled={sincronizando === user.id}
+                      className="inline-flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-orange-600 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      <LinkIcon size={16} />
+                      {sincronizando === user.id ? 'Sincronizando...' : 'Etiquetar Dados'}
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {usuariosFiltrados.map((user) => (
-                  <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${atualizando === user.id ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <td className="p-4">
-                      <p className="font-bold text-gray-900">{user.nome || 'Sem Nome'}</p>
-                      <p className="text-xs font-medium text-gray-500 mt-0.5">{user.email}</p>
-                    </td>
-                    
-                    <td className="p-4">
-                      <select 
-                        className={`text-sm font-bold p-2.5 rounded-lg border outline-none cursor-pointer transition-colors ${
-                          user.plano === 'premium' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 
-                          user.plano === 'intermediario' ? 'bg-blue-50 border-blue-200 text-blue-700' : 
-                          'bg-gray-50 border-gray-200 text-gray-600'
-                        }`}
-                        value={user.plano || 'basico'}
-                        onChange={(e) => handleUpdateUser(user.id, 'plano', e.target.value)}
-                        disabled={atualizando === user.id}
-                      >
-                        <option value="basico">Tier 1: Básico</option>
-                        <option value="intermediario">Tier 2: Intermediário</option>
-                        <option value="premium">Tier 3: Premium (IA)</option>
-                      </select>
-                    </td>
-
-                    <td className="p-4">
-                      <select 
-                        className={`text-sm font-bold p-2.5 rounded-lg outline-none cursor-pointer transition-colors ${
-                          user.role === 'admin' ? 'bg-slate-800 text-white border border-slate-700' : 'bg-gray-100 text-gray-700 border border-transparent'
-                        }`}
-                        value={user.role || 'professor'}
-                        onChange={(e) => handleUpdateUser(user.id, 'role', e.target.value)}
-                        disabled={atualizando === user.id}
-                      >
-                        <option value="professor">Professor</option>
-                        <option value="admin">Gestor (Admin)</option>
-                      </select>
-                    </td>
-
-                    <td className="p-4 text-center">
-                      <button 
-                        onClick={() => handleUpdateUser(user.id, 'status', user.status === 'bloqueado' ? 'ativo' : 'bloqueado')}
-                        disabled={atualizando === user.id}
-                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
-                          user.status === 'bloqueado' 
-                          ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' 
-                          : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-                        }`}
-                      >
-                        {user.status === 'bloqueado' ? <><XCircle size={16}/> Bloqueado</> : <><CheckCircle size={16}/> Liberado</>}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {usuariosFiltrados.length === 0 && (
-              <div className="text-center py-12">
-                <Users size={40} className="mx-auto text-gray-300 mb-3" />
-                <p className="text-gray-500 font-medium">Nenhum usuário encontrado com esta busca.</p>
-              </div>
-            )}
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
