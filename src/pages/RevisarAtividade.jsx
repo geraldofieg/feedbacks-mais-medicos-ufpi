@@ -5,6 +5,7 @@ import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3, CalendarDays, AlertCircle, Clock, GraduationCap, Search, Bot } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import { GoogleGenerativeAI } from '@google/generative-ai'; // INJEÇÃO DA BIBLIOTECA DA IA
 
 export default function RevisarAtividade() {
   const { id } = useParams();
@@ -74,7 +75,7 @@ export default function RevisarAtividade() {
   }, [alunoSelecionadoId, atividadeAtual]);
 
   // =========================================================================
-  // MOTOR DA INTELIGÊNCIA ARTIFICIAL (COLE SUA API AQUI!)
+  // MOTOR DA INTELIGÊNCIA ARTIFICIAL (GEMINI - API REAL)
   // =========================================================================
   async function handleGerarIA() {
     if (!novaResposta.trim()) {
@@ -84,39 +85,49 @@ export default function RevisarAtividade() {
     setGerandoIA(true);
 
     try {
-      // 1. Preparando os "Ingredientes" que a IA precisa ler:
-      const promptDoProfessor = userProfile?.promptPersonalizado || "Seja um professor universitário acolhedor.";
-      const enunciadoBase = tarefa.enunciado || "Sem enunciado fornecido.";
+      // 1. Puxa a chave direto do cofre da Vercel
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      
+      if (!apiKey) {
+        alert("Chave da API não encontrada na Vercel!");
+        setGerandoIA(false);
+        return;
+      }
+
+      // 2. Inicializa o Gemini
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+      // 3. Prepara os Ingredientes
+      const promptDoProfessor = userProfile?.promptPersonalizado || "Você é um professor corrigindo uma atividade. Seja direto, didático e construtivo.";
+      const enunciadoBase = tarefa?.enunciado || "Tarefa sem enunciado específico fornecido.";
       const respostaDoAluno = novaResposta;
 
-      /* ==============================================================
-         GERALDO: AQUI É ONDE VOCÊ PLUGA A SUA API DO GEMINI OU OPENAI
-         Exemplo de como você vai fazer:
-         
-         const payloadParaSuaAPI = {
-            instrucaoDeSistema: promptDoProfessor,
-            textoDaTarefa: enunciadoBase,
-            textoDoAluno: respostaDoAluno
-         };
+      // 4. Monta o Super Prompt
+      const promptCompleto = `
+        Aja como um professor. Siga RIGOROSAMENTE as seguintes instruções de personalidade e tom de voz:
+        "${promptDoProfessor}"
 
-         const respostaApi = await fetch('URL_DA_SUA_API', { ... });
-         const dados = await respostaApi.json();
-         const textoGeradoPelaIA = dados.texto; 
-         
-         setFeedbackEditado(textoGeradoPelaIA);
-      ============================================================== */
+        Contexto da Tarefa (O que foi pedido ao aluno):
+        "${enunciadoBase}"
 
-      // GERALDO: APAGUE ESTE setTimeout QUANDO PLUGAR A SUA API DE VERDADE.
-      // ISSO É APENAS UMA SIMULAÇÃO VISUAL PARA VOCÊ TESTAR A TELA HOJE.
-      setTimeout(() => {
-        const textoSimulado = `[FEEDBACK GERADO PELA IA]\n\nOlá, ${alunoAtual.nome}! Analisei sua resposta baseada no enunciado fornecido.\n\nSua linha de raciocínio está ótima. Percebi que você pontuou bem os conceitos.\n\n(Lembrete: Esta é uma simulação. Conecte sua API na função handleGerarIA).`;
-        setFeedbackEditado(textoSimulado);
-        setGerandoIA(false);
-      }, 2500);
+        Resposta enviada pelo aluno:
+        "${respostaDoAluno}"
+
+        Com base no contexto da tarefa e na resposta do aluno, gere um feedback de avaliação direcionado diretamente ao aluno.
+      `;
+
+      // 5. Envia o pedido para o Google e aguarda a mágica
+      const result = await model.generateContent(promptCompleto);
+      const textoGeradoPelaIA = result.response.text();
+
+      // 6. Joga o texto pronto na tela
+      setFeedbackEditado(textoGeradoPelaIA);
 
     } catch (error) {
       console.error("Erro ao gerar IA:", error);
-      alert("Ops! Houve um erro na comunicação com a Inteligência Artificial.");
+      alert("Ops! A IA falhou. O limite gratuito pode ter estourado ou houve erro na chave.");
+    } finally {
       setGerandoIA(false);
     }
   }
