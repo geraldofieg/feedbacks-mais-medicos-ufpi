@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, writeBatch, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldAlert, Users, Rocket, RefreshCw, Trash2, Search } from 'lucide-react';
+import { ShieldAlert, Users, Rocket, RefreshCw, Trash2, Search, AlertTriangle } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export default function AdminPainel() {
@@ -10,55 +10,55 @@ export default function AdminPainel() {
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   const [usuarios, setUsuarios] = useState([]);
+  const [instituicoes, setInstituicoes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [busca, setBusca] = useState('');
   const [migrando, setMigrando] = useState(null);
-  const [limpando, setLimpando] = useState(false);
 
-  useEffect(() => {
-    async function fetchUsuarios() {
-      if (!isAdmin || authLoading) return;
-      try {
-        const querySnapshot = await getDocs(collection(db, 'usuarios'));
-        setUsuarios(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } catch (error) { console.error(error); } finally { setLoading(false); }
-    }
-    fetchUsuarios();
-  }, [isAdmin, authLoading]);
-
-  // =========================================================================
-  // LIMPEZA DEFINITIVA (Apaga o que está com status 'lixeira')
-  // =========================================================================
-  async function handleLimpezaTotal() {
-    if (!window.confirm("Isso vai apagar DEFINITIVAMENTE todas as Instituições e Turmas que estão na lixeira. Confirma?")) return;
-    setLimpando(true);
+  async function carregarDados() {
+    if (!isAdmin || authLoading) return;
+    setLoading(true);
     try {
-      const batch = writeBatch(db);
-      
-      const snapInst = await getDocs(collection(db, 'instituicoes'));
-      snapInst.docs.forEach(d => { if (d.data().status === 'lixeira') batch.delete(d.ref); });
+      const qUsers = await getDocs(collection(db, 'usuarios'));
+      setUsuarios(qUsers.docs.map(d => ({ id: d.id, ...d.data() })));
 
-      const snapTurmas = await getDocs(collection(db, 'turmas'));
-      snapTurmas.docs.forEach(d => { if (d.data().status === 'lixeira') batch.delete(d.ref); });
-
-      await batch.commit();
-      alert("Limpeza concluída! Os itens fantasmas sumiram.");
-      window.location.reload();
-    } catch (e) { alert("Erro ao limpar banco."); } finally { setLimpando(false); }
+      const qInst = await getDocs(collection(db, 'instituicoes'));
+      setInstituicoes(qInst.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   }
 
-  // =========================================================================
-  // MIGRAÇÃO INTELIGENTE V1 -> V3
-  // =========================================================================
+  useEffect(() => { carregarDados(); }, [isAdmin, authLoading]);
+
+  // DELETAR TUDO DE UMA INSTITUIÇÃO (Para limpar o lixo)
+  async function handleDeletarInstituicao(id, nome) {
+    if (!window.confirm(`Apagar DEFINITIVAMENTE a instituição "${nome}" e todos os seus dados?`)) return;
+    try {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'instituicoes', id));
+      
+      // Busca turmas, alunos e atividades dessa inst para apagar tmb
+      const colecoes = ['turmas', 'alunos', 'atividades', 'tarefas'];
+      for (const col of colecoes) {
+        const q = await getDocs(collection(db, col));
+        q.docs.forEach(d => { if (d.data().instituicaoId === id) batch.delete(d.ref); });
+      }
+      
+      await batch.commit();
+      alert("Instituição removida do mapa!");
+      carregarDados();
+    } catch (e) { alert("Erro ao deletar."); }
+  }
+
   async function handleMigrarDados(userEmail, userUid) {
-    if (!window.confirm(`Migrar dados V1 para o perfil de ${userEmail}?`)) return;
+    if (!window.confirm(`Rodar migração definitiva para ${userEmail}?`)) return;
     setMigrando(userUid);
     try {
+      // 1. Puxa os dados da V1 (Confirme se os nomes são esses no seu Firebase)
       const snapAlunosV1 = await getDocs(collection(db, 'alunos'));
       const snapAtivV1 = await getDocs(collection(db, 'atividades'));
 
+      // 2. Cria a única e oficial Instituição V3
       const instRef = await addDoc(collection(db, 'instituicoes'), {
-        nome: "UFPI - Mais Médicos (V3 Oficial)",
+        nome: "UFPI - Mais Médicos (OFICIAL V3)",
         professorUid: userUid,
         status: 'ativa',
         dataCriacao: serverTimestamp()
@@ -74,23 +74,20 @@ export default function AdminPainel() {
       const batch = writeBatch(db);
       const mapaAlunosNovos = {};
 
+      // 3. Migra Alunos
       snapAlunosV1.docs.forEach((docAlu) => {
         const d = docAlu.data();
-        if (d.status === 'lixeira') return;
+        if (d.instituicaoId) return; // Pula se já for um dado da V3
         const nomeReal = d.nome || d.nomeAluno || "Aluno";
         const novoAluRef = doc(collection(db, 'alunos'));
-        batch.set(novoAluRef, { 
-          nome: nomeReal, 
-          turmaId: turmaRef.id, 
-          instituicaoId: instRef.id, 
-          professorUid: userUid, 
-          status: 'ativo' 
-        });
+        batch.set(novoAluRef, { nome: nomeReal, turmaId: turmaRef.id, instituicaoId: instRef.id, professorUid: userUid, status: 'ativo' });
         mapaAlunosNovos[nomeReal] = novoAluRef.id;
       });
 
+      // 4. Migra Atividades com lógica de status
       snapAtivV1.docs.forEach((docAtiv) => {
         const d = docAtiv.data();
+        if (d.instituicaoId) return; // Pula se já for V3
         const idNovo = mapaAlunosNovos[d.nomeAluno || d.nome];
         if (idNovo) {
           const novaAtivRef = doc(collection(db, 'atividades'));
@@ -101,93 +98,48 @@ export default function AdminPainel() {
             instituicaoId: instRef.id,
             professorUid: userUid,
             resposta: d.resposta || "",
-            feedbackSugerido: d.feedbackIA || "",
             feedbackFinal: d.feedbackFinal || "",
             status: temFeedback ? 'aprovado' : 'pendente',
-            postado: temFeedback,
-            dataAprovacao: temFeedback ? serverTimestamp() : null
+            postado: temFeedback ? true : false
           });
         }
       });
 
       await batch.commit();
-      alert("🚀 Sucesso! Dados migrados e organizados.");
+      alert("🚀 MÁGICA FEITA! Dados migrados para 'OFICIAL V3'.");
+      carregarDados();
     } catch (e) { console.error(e); } finally { setMigrando(null); }
   }
 
-  async function handleUpdateUser(userId, campo, valor) {
-    setAtualizando(userId);
-    try {
-      await updateDoc(doc(db, 'usuarios', userId), { [campo]: valor });
-      setUsuarios(usuarios.map(u => u.id === userId ? { ...u, [campo]: valor } : u));
-    } catch (e) { alert("Erro ao atualizar."); } finally { setAtualizando(null); }
-  }
-
-  if (authLoading) return <div className="p-10 text-center">Carregando Auth...</div>;
   if (!isAdmin) return <Navigate to="/" />;
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
-      <div className="flex justify-between items-center mb-8 border-b pb-6">
-        <div>
-          <h1 className="text-2xl font-black flex items-center gap-2">
-            <ShieldAlert className="text-yellow-500" /> Painel SaaS
-          </h1>
-          <p className="text-gray-500 text-sm">Controle de acessos e limpeza de dados</p>
+    <div className="max-w-4xl mx-auto p-8">
+      <h1 className="text-2xl font-black mb-8 flex items-center gap-2"><ShieldAlert className="text-yellow-500" /> Painel de Controle SaaS</h1>
+
+      <div className="bg-red-50 border-2 border-red-200 p-6 rounded-2xl mb-8">
+        <h2 className="text-red-800 font-black flex items-center gap-2 mb-4"><Trash2 size={20}/> Limpeza de Instituições Fantasmas</h2>
+        <p className="text-red-700 text-sm mb-4">Apague todas as instituições de teste abaixo antes de migrar novamente.</p>
+        <div className="grid gap-2">
+          {instituicoes.map(inst => (
+            <div key={inst.id} className="bg-white p-3 rounded-xl border border-red-100 flex justify-between items-center">
+              <span className="font-bold text-gray-700">{inst.nome}</span>
+              <button onClick={() => handleDeletarInstituicao(inst.id, inst.nome)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"><Trash2 size={18}/></button>
+            </div>
+          ))}
         </div>
-        <button 
-          onClick={handleLimpezaTotal} 
-          disabled={limpando} 
-          className="flex items-center gap-2 bg-red-100 text-red-600 px-5 py-2.5 rounded-xl font-black text-xs hover:bg-red-200 transition-all shadow-sm"
-        >
-          <Trash2 size={16}/> {limpando ? 'Limpando...' : 'Esvaziar Lixeiras do Banco'}
-        </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-        <div className="p-4 border-b bg-gray-50 flex items-center gap-2">
-          <Search size={16} className="text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="Buscar por e-mail..." 
-            className="bg-transparent outline-none text-sm font-medium w-full"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
-        </div>
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
         <table className="w-full text-left">
-          <thead>
-            <tr className="text-xs uppercase text-gray-400 border-b">
-              <th className="p-4">Usuário</th>
-              <th className="p-4">Plano</th>
-              <th className="p-4 text-center">Ações</th>
-            </tr>
-          </thead>
+          <thead className="bg-gray-50 text-xs uppercase text-gray-400"><th className="p-4">Usuário</th><th className="p-4 text-center">Migrar V1</th></thead>
           <tbody>
-            {usuarios.filter(u => u.email.includes(busca.toLowerCase())).map(u => (
-              <tr key={u.id} className="border-t hover:bg-gray-50/50 transition-colors">
-                <td className="p-4">
-                  <p className="font-bold text-gray-800">{u.nome || 'Sem Nome'}</p>
-                  <p className="text-xs text-gray-400">{u.email}</p>
-                </td>
-                <td className="p-4">
-                  <select 
-                    className="text-xs font-bold p-2 rounded-lg border bg-white" 
-                    value={u.plano || 'basico'} 
-                    onChange={(e) => handleUpdateUser(u.id, 'plano', e.target.value)}
-                  >
-                    <option value="basico">Básico</option>
-                    <option value="intermediario">Intermediário</option>
-                    <option value="premium">Premium</option>
-                  </select>
-                </td>
+            {usuarios.map(u => (
+              <tr key={u.id} className="border-t">
+                <td className="p-4"><p className="font-bold">{u.nome}</p><p className="text-xs text-gray-400">{u.email}</p></td>
                 <td className="p-4 text-center">
-                  <button 
-                    onClick={() => handleMigrarDados(u.email, u.id)} 
-                    disabled={migrando === u.id} 
-                    className="bg-purple-600 text-white p-2.5 rounded-xl hover:bg-purple-700 shadow-md active:scale-95 transition-all"
-                  >
-                    {migrando === u.id ? <RefreshCw className="animate-spin" size={16}/> : <Rocket size={16}/>}
+                  <button onClick={() => handleMigrarDados(u.email, u.id)} disabled={migrando === u.id} className="bg-purple-600 text-white p-2 rounded-xl hover:bg-purple-700 shadow-md">
+                    {migrando === u.id ? <RefreshCw className="animate-spin" size={18}/> : <Rocket size={18}/>}
                   </button>
                 </td>
               </tr>
