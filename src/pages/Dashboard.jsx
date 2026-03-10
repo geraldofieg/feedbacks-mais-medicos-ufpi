@@ -19,7 +19,6 @@ export default function Dashboard() {
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
   const [loading, setLoading] = useState(true);
 
-  // 1. BUSCA INSTITUIÇÕES (E corrige a memória do navegador)
   useEffect(() => {
     async function fetchInst() {
       if (!currentUser) return;
@@ -44,18 +43,15 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isAdmin, setEscolaSelecionada]);
 
-  // 2. BUSCA TODOS OS DADOS (Kanban, IA, Tarefas Futuras)
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id) return;
       
-      // Reseta os visores enquanto carrega a nova escola
       setKanban({ pendentes: 0, faltaLancar: 0, finalizados: 0 }); 
       setMetricasIA({ total: 0, originais: 0, percentual: 0 });
       setTarefasEmAndamento([]);
       
       try {
-        // Busca Turmas
         const qTurmas = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapT = await getDocs(qTurmas);
         const turmasVivas = snapT.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
@@ -64,7 +60,6 @@ export default function Dashboard() {
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
           
-          // Busca Tarefas (Para o Radar)
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
           const agora = new Date();
@@ -79,11 +74,10 @@ export default function Dashboard() {
             })
             .filter(t => t.diasRestantes >= 0)
             .sort((a, b) => a.diasRestantes - b.diasRestantes)
-            .slice(0, 3); // Pega só as 3 mais próximas
+            .slice(0, 3);
             
           setTarefasEmAndamento(ativas);
 
-          // Busca Atividades (Para o Kanban e Termômetro)
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
           
@@ -93,12 +87,10 @@ export default function Dashboard() {
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
             if (tIds.includes(d.turmaId)) {
-              // Contagem Kanban
               if (d.postado === true) ok++; 
               else if (d.status === 'aprovado') f++;  
               else p++;  
 
-              // Contagem Termômetro IA (Só conta se foi aprovado e se tinha sugestão da IA)
               const isAprovado = d.status === 'aprovado' || d.postado === true;
               const temSugerido = d.feedbackSugerido && String(d.feedbackSugerido).trim() !== '';
               
@@ -164,14 +156,14 @@ export default function Dashboard() {
       ) : (
         <>
           {/* PAINEL DE SITUAÇÃO DO CURSO */}
-          <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800">
+          <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800">
             <div className="flex gap-4 items-start w-full">
               <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner">
                 <Calendar size={24} className="text-blue-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-black text-white mb-2 tracking-wide">Ponto de Situação do Curso</h2>
-                <div className="space-y-1.5 text-sm font-medium text-slate-300">
+                <h2 className="text-base font-black text-white mb-1.5 tracking-wide">Ponto de Situação do Curso</h2>
+                <div className="space-y-1 text-sm font-medium text-slate-300">
                   <p className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500"></span> Base Migrada Ativa na V3</p>
                   <p className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Instituição: <span className="text-white">{escolaSelecionada.nome}</span></p>
                 </div>
@@ -179,60 +171,60 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* TERMÔMETRO DA IA (Mostra se tiver dados) */}
+          {/* TERMÔMETRO DA IA */}
           {mostrarRevisao && metricasIA.total > 0 && (
-            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl p-6 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl p-5 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="bg-white/20 p-3 rounded-xl shrink-0"><Sparkles size={28} className="text-purple-100" /></div>
+                <div className="bg-white/20 p-3 rounded-xl shrink-0"><Sparkles size={24} className="text-purple-100" /></div>
                 <div>
-                  <h2 className="text-lg md:text-xl font-black text-white tracking-wide">Termômetro da IA</h2>
-                  <p className="text-purple-200 text-sm font-medium mt-0.5">Porcentagem de feedbacks aprovados sem NENHUMA alteração.</p>
+                  <h2 className="text-lg font-black text-white tracking-wide">Termômetro da IA</h2>
+                  <p className="text-purple-200 text-xs font-medium mt-0.5">Porcentagem de feedbacks aprovados sem NENHUMA alteração.</p>
                 </div>
               </div>
               <div className="text-left md:text-right shrink-0">
-                <span className="block text-4xl md:text-5xl font-black text-white tracking-tighter">{metricasIA.percentual}%</span>
-                <span className="text-purple-200 text-xs font-bold uppercase tracking-wider">{metricasIA.originais} de {metricasIA.total} originais</span>
+                <span className="block text-4xl font-black text-white tracking-tighter">{metricasIA.percentual}%</span>
+                <span className="text-purple-200 text-[10px] font-bold uppercase tracking-wider">{metricasIA.originais} de {metricasIA.total} originais</span>
               </div>
             </div>
           )}
 
-          {/* GRID DO KANBAN */}
+          {/* GRID DO KANBAN COMPACTO */}
           <div className={`grid grid-cols-1 gap-6 mb-10 ${isAdmin ? 'md:grid-cols-3' : (mostrarRevisao ? 'md:grid-cols-2 max-w-4xl' : 'max-w-md mx-auto')}`}>
             {mostrarRevisao && (
-              <div className="bg-white border-2 border-yellow-200 p-8 rounded-3xl shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-6">
-                  <h3 className="text-xs font-black text-yellow-600 uppercase tracking-widest">Aguardando Revisão</h3>
-                  <div className="bg-yellow-50 p-2 rounded-lg"><Clock className="text-yellow-500" size={24}/></div>
+              <div className="bg-white border border-yellow-200 p-6 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-[11px] font-black text-yellow-600 uppercase tracking-widest mt-1">Aguardando Revisão</h3>
+                  <div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div>
                 </div>
-                <span className="text-6xl font-black text-gray-800">{kanban.pendentes}</span>
-                <Link to="/aguardandorevisao" className="mt-6 text-xs font-bold text-yellow-600 flex items-center gap-1 hover:underline">Ver lista <ChevronRight size={14}/></Link>
+                <span className="text-5xl font-black text-gray-800">{kanban.pendentes}</span>
+                <Link to="/aguardandorevisao" className="mt-5 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline">Ver lista <ChevronRight size={14}/></Link>
               </div>
             )}
 
             {isAdmin && (
-              <div className="bg-white border-2 border-blue-200 p-8 rounded-3xl shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-start mb-6">
-                  <h3 className="text-xs font-black text-blue-600 uppercase tracking-widest">Aguardando Postar</h3>
-                  <div className="bg-blue-50 p-2 rounded-lg"><Send className="text-blue-500" size={24}/></div>
+              <div className="bg-white border border-blue-200 p-6 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest mt-1">Aguardando Postar</h3>
+                  <div className="text-blue-500 bg-blue-50 p-1.5 rounded-lg"><Send size={20}/></div>
                 </div>
-                <span className="text-6xl font-black text-gray-800">{kanban.faltaLancar}</span>
-                <Link to="/faltapostar" className="mt-6 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline">Copiar p/ Site <ChevronRight size={14}/></Link>
+                <span className="text-5xl font-black text-gray-800">{kanban.faltaLancar}</span>
+                <Link to="/faltapostar" className="mt-5 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline">Copiar p/ Site <ChevronRight size={14}/></Link>
               </div>
             )}
 
-            <div className="bg-white border-2 border-green-200 p-8 rounded-3xl shadow-sm flex flex-col justify-between">
-              <div className="flex justify-between items-start mb-6">
-                <h3 className="text-xs font-black text-green-600 uppercase tracking-widest">Histórico Finalizado</h3>
-                <div className="bg-green-50 p-2 rounded-lg"><CheckCheck className="text-green-500" size={24}/></div>
+            <div className="bg-white border border-green-200 p-6 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
+                <div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div>
               </div>
-              <span className="text-6xl font-black text-gray-800">{finalizadosVisor}</span>
-              <Link to="/historico" className="mt-6 text-xs font-bold text-green-600 flex items-center gap-1 hover:underline">Ver histórico <ChevronRight size={14}/></Link>
+              <span className="text-5xl font-black text-gray-800">{finalizadosVisor}</span>
+              <Link to="/historico" className="mt-5 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline">Ver histórico <ChevronRight size={14}/></Link>
             </div>
           </div>
 
-          {/* RADAR DE TAREFAS (Se houver tarefas) */}
+          {/* RADAR DE TAREFAS */}
           {tarefasEmAndamento.length > 0 && (
-            <div className="bg-white rounded-3xl border border-gray-200 p-6 md:p-8 shadow-sm">
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 md:p-8 shadow-sm">
               <h2 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">Gestão à Vista: Foco Atual</h2>
               <div className="space-y-4">
                 {tarefasEmAndamento.map(t => (
@@ -247,7 +239,6 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-
         </>
       )}
     </div>
