@@ -16,27 +16,38 @@ export default function Dashboard() {
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
   const [loading, setLoading] = useState(true);
 
-  // 1. Busca as Instituições Ativas (Com Raio-X para Admin)
+  // 1. Busca Instituições e CORRIGE A MEMÓRIA DO NAVEGADOR
   useEffect(() => {
     async function fetchInst() {
       if (!currentUser) return;
       
       const instRef = collection(db, 'instituicoes');
-      // Admin busca todas, professor busca só as dele
       const q = isAdmin ? instRef : query(instRef, where('professorUid', '==', currentUser.uid));
       
       const snap = await getDocs(q);
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
-      
-      // Ordena alfabeticamente
       lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
       
       setInstituicoes(lista);
-      if (lista.length > 0 && !escolaSelecionada) setEscolaSelecionada(lista[0]);
+      
+      // AQUI ESTÁ A MÁGICA DA CORREÇÃO:
+      if (lista.length > 0) {
+        // Verifica se a instituição que estava na memória ainda existe no banco real
+        const escolaAindaExiste = escolaSelecionada && lista.find(i => i.id === escolaSelecionada.id);
+        
+        // Se ela foi deletada (resetada), forçamos o sistema a pegar a nova ID correta
+        if (!escolaAindaExiste) {
+          setEscolaSelecionada(lista[0]);
+        }
+      } else {
+        setEscolaSelecionada(null);
+      }
+      
       setLoading(false);
     }
     fetchInst();
-  }, [currentUser, isAdmin, escolaSelecionada, setEscolaSelecionada]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, isAdmin, setEscolaSelecionada]);
 
   // 2. Busca os Números Reais das Caixas
   useEffect(() => {
@@ -63,7 +74,6 @@ export default function Dashboard() {
     fetchDados();
   }, [escolaSelecionada]);
 
-  // Lógica de exibição da Caixa Verde: Se não for admin, junta as aprovadas com as postadas.
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   if (loading) return <div className="p-20 text-center font-bold">Carregando Estação...</div>;
@@ -89,7 +99,7 @@ export default function Dashboard() {
       {/* GRID DINÂMICO: 3 colunas p/ Admin, 2 colunas p/ Professor */}
       <div className={`grid grid-cols-1 gap-6 ${isAdmin ? 'md:grid-cols-3' : (mostrarRevisao ? 'md:grid-cols-2 max-w-4xl' : 'max-w-md mx-auto')}`}>
         
-        {/* CAIXA AMARELA: Aguardando Revisão */}
+        {/* CAIXA AMARELA */}
         {mostrarRevisao && (
           <div className="bg-white border-2 border-yellow-200 p-8 rounded-3xl shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start mb-6">
@@ -103,7 +113,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* CAIXA AZUL: Aguardando Postar (APENAS ADMIN) */}
+        {/* CAIXA AZUL (SÓ ADMIN) */}
         {isAdmin && (
           <div className="bg-white border-2 border-blue-200 p-8 rounded-3xl shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start mb-6">
@@ -117,7 +127,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* CAIXA VERDE: Histórico Finalizado */}
+        {/* CAIXA VERDE */}
         <div className="bg-white border-2 border-green-200 p-8 rounded-3xl shadow-sm flex flex-col justify-between">
           <div className="flex justify-between items-start mb-6">
             <h3 className="text-xs font-black text-green-600 uppercase tracking-widest">Histórico Finalizado</h3>
