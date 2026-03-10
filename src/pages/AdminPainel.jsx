@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldAlert, Users, Crown, CheckCircle, XCircle, Search, Link as LinkIcon, Trash2 } from 'lucide-react';
+import { ShieldAlert, Users, Crown, CheckCircle, XCircle, Search, Link as LinkIcon } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export default function AdminPainel() {
@@ -11,7 +11,6 @@ export default function AdminPainel() {
 
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [busca, setBusca] = useState('');
   const [atualizando, setAtualizando] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -37,20 +36,26 @@ export default function AdminPainel() {
     try {
       const batch = writeBatch(db);
 
-      // PASSO 1: FAXINA DOS CLONES (Tudo que foi criado exclusivamete pra V3 antes)
+      // PASSO 1: FAXINA TOTAL DOS CLONES DA V3
+      // Apaga as instituições criadas nos testes para esse professor
+      const snapInst = await getDocs(collection(db, 'instituicoes'));
+      snapInst.docs.forEach(d => {
+        if (d.data().professorUid === userUid) batch.delete(d.ref);
+      });
+
+      // Apaga os clones (Tudo que já tinha recebido instituicaoId)
       const apagarClones = async (colName) => {
         const q = await getDocs(collection(db, colName));
         q.docs.forEach(d => { 
-          if (d.data().instituicaoId) batch.delete(d.ref); 
+          if (d.data().instituicaoId && d.data().professorUid === userUid) batch.delete(d.ref); 
         });
       };
-      await apagarClones('instituicoes');
       await apagarClones('turmas');
       
       // PASSO 2: CRIAR AS GAVETAS DA V3 (Com os Nomes Oficiais)
       const instRef = doc(collection(db, 'instituicoes'));
       batch.set(instRef, { 
-        nome: "UFPI", // Nome oficial solicitado
+        nome: "UFPI", 
         professorUid: userUid, 
         status: 'ativa', 
         dataCriacao: serverTimestamp() 
@@ -58,46 +63,51 @@ export default function AdminPainel() {
 
       const turmaRef = doc(collection(db, 'turmas'));
       batch.set(turmaRef, { 
-        nome: "Mais Médicos", // Nome oficial solicitado
+        nome: "Mais Médicos", 
         instituicaoId: instRef.id, 
         professorUid: userUid, 
         status: 'ativa' 
       });
 
-      // PASSO 3: ETIQUETAR OS ORIGINAIS (Sem duplicar a V1)
+      // PASSO 3: ETIQUETAR OS ORIGINAIS (Resolvendo a duplicidade)
       let contAlunos = 0, contAtiv = 0, contTarefas = 0;
 
       // Etiqueta Alunos Originais
       const snapAlunos = await getDocs(collection(db, 'alunos'));
       snapAlunos.docs.forEach(d => {
-        if (!d.data().instituicaoId) { // Se não tem etiqueta, é original da V1
-          batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
-          contAlunos++;
-        } else {
-           // Se era clone nosso dos testes, apaga para desduplicar a V1
-           batch.delete(d.ref);
+        if (d.data().professorUid === userUid) {
+          if (!d.data().instituicaoId) { 
+            batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
+            contAlunos++;
+          } else {
+             batch.delete(d.ref); // Remove o clone
+          }
         }
       });
 
       // Etiqueta Atividades Originais
       const snapAtiv = await getDocs(collection(db, 'atividades'));
       snapAtiv.docs.forEach(d => {
-        if (!d.data().instituicaoId) {
-          batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
-          contAtiv++;
-        } else {
-           batch.delete(d.ref);
+        if (d.data().professorUid === userUid) {
+          if (!d.data().instituicaoId) {
+            batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
+            contAtiv++;
+          } else {
+             batch.delete(d.ref); // Remove o clone
+          }
         }
       });
 
       // Etiqueta Tarefas Originais (Cronograma)
       const snapTarefas = await getDocs(collection(db, 'tarefas'));
       snapTarefas.docs.forEach(d => {
-        if (!d.data().instituicaoId) {
-          batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
-          contTarefas++;
-        } else {
-           batch.delete(d.ref);
+        if (d.data().professorUid === userUid) {
+          if (!d.data().instituicaoId) {
+            batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
+            contTarefas++;
+          } else {
+             batch.delete(d.ref); // Remove o clone
+          }
         }
       });
 
