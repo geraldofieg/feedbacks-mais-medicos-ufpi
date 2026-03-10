@@ -1,178 +1,201 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldAlert, Users, Rocket, RefreshCw, Trash2, Search } from 'lucide-react';
+import { ShieldAlert, Users, Crown, CheckCircle, XCircle, Search } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export default function AdminPainel() {
   const { currentUser, userProfile, loading: authLoading } = useAuth();
+  
+  // A CHAVE MESTRA: Role de Admin no banco OU o seu e-mail supremo
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
-  const [migrando, setMigrando] = useState(null);
-  const [limpando, setLimpando] = useState(false);
+  const [atualizando, setAtualizando] = useState(null);
 
   useEffect(() => {
     async function fetchUsuarios() {
       if (!isAdmin || authLoading) return;
-      const querySnapshot = await getDocs(collection(db, 'usuarios'));
-      setUsuarios(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      try {
+        const querySnapshot = await getDocs(collection(db, 'usuarios'));
+        const lista = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        // Ordena por nome
+        lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+        setUsuarios(lista);
+      } catch (error) {
+        console.error("Erro ao buscar usuários:", error);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchUsuarios();
   }, [isAdmin, authLoading]);
 
-  // =========================================================================
-  // RESET TOTAL (Apaga o lixo da V3, preserva a V1 intacta)
-  // =========================================================================
-  async function handleNukeV3() {
-    if (!window.confirm("🔴 PERIGO: Isso vai DELETAR todas as Instituições, Turmas e Testes gerados na V3. Os dados originais da V1 não serão tocados. Confirma?")) return;
-    setLimpando(true);
-    try {
-      const deleteQuery = async (colName, filterFn) => {
-        const q = await getDocs(collection(db, colName));
-        const batch = writeBatch(db);
-        let deleted = 0;
-        q.docs.forEach(d => {
-          if (!filterFn || filterFn(d.data())) { batch.delete(d.ref); deleted++; }
-        });
-        if (deleted > 0) await batch.commit();
-      };
-
-      await deleteQuery('instituicoes');
-      // Apaga o resto APENAS se tiver 'instituicaoId' (A prova de que é da V3)
-      await deleteQuery('turmas', (data) => !!data.instituicaoId);
-      await deleteQuery('tarefas', (data) => !!data.instituicaoId);
-      await deleteQuery('alunos', (data) => !!data.instituicaoId);
-      await deleteQuery('atividades', (data) => !!data.instituicaoId);
-
-      alert("💥 BOOM! A V3 foi resetada. O banco está limpo e a V1 está segura.");
-      window.location.reload();
-    } catch(e) { alert("Erro: " + e.message); } finally { setLimpando(false); }
-  }
-
-  // =========================================================================
-  // MIGRAÇÃO BLINDADA
-  // =========================================================================
-  async function handleMigrarDados(userEmail, userUid) {
-    if (!window.confirm(`Iniciar migração oficial para ${userEmail}?`)) return;
-    setMigrando(userUid);
-    try {
-      // Funções de Proteção de Dados
-      const getSafeStr = (val) => (val ? String(val) : "");
-      const normalizeName = (name) => getSafeStr(name).trim().toUpperCase();
-
-      const snapAlunosV1 = await getDocs(collection(db, 'alunos'));
-      const snapAtivV1 = await getDocs(collection(db, 'atividades'));
-
-      const instRef = await addDoc(collection(db, 'instituicoes'), { nome: "UFPI - Mais Médicos (OFICIAL)", professorUid: userUid, status: 'ativa', dataCriacao: serverTimestamp() });
-      const turmaRef = await addDoc(collection(db, 'turmas'), { nome: "Turma Integrada V1", instituicaoId: instRef.id, professorUid: userUid, status: 'ativa' });
-      const tarefaRef = await addDoc(collection(db, 'tarefas'), { nomeTarefa: "Atividades V1", turmaId: turmaRef.id, instituicaoId: instRef.id, professorUid: userUid, status: 'ativa', tipo: 'entrega' });
-
-      const batch = writeBatch(db);
-      const mapaAlunosNovos = {};
-      let contAlunos = 0;
-      let contAtiv = 0;
-
-      // 1. Mapear Alunos
-      snapAlunosV1.docs.forEach((docAlu) => {
-        const d = docAlu.data();
-        if (d.instituicaoId) return; // Se já é da V3, ignora
-        
-        const nomeReal = getSafeStr(d.nome || d.nomeAluno || d.aluno || d.estudante) || "Aluno Sem Nome";
-        const chaveBusca = normalizeName(nomeReal);
-        
-        const novoAluRef = doc(collection(db, 'alunos'));
-        batch.set(novoAluRef, { nome: nomeReal, matricula: getSafeStr(d.matricula), turmaId: turmaRef.id, instituicaoId: instRef.id, professorUid: userUid, status: 'ativo' });
-        
-        mapaAlunosNovos[chaveBusca] = novoAluRef.id;
-        contAlunos++;
-      });
-
-      // 2. Mapear Atividades
-      snapAtivV1.docs.forEach((docAtiv) => {
-        const d = docAtiv.data();
-        if (d.instituicaoId) return; // Se já é da V3, ignora
-
-        const nomeNaAtiv = getSafeStr(d.nomeAluno || d.nome || d.aluno || d.estudante);
-        const chaveBusca = normalizeName(nomeNaAtiv);
-        const idNovo = mapaAlunosNovos[chaveBusca];
-
-        if (idNovo) {
-          const fFinal = getSafeStr(d.feedbackFinal);
-          const fSugerido = getSafeStr(d.feedbackIA || d.feedbackSugerido);
-          const respostaStr = getSafeStr(d.resposta);
-          const temFeedback = fFinal.trim() !== "";
-
-          const novaAtivRef = doc(collection(db, 'atividades'));
-          batch.set(novaAtivRef, {
-            alunoId: idNovo,
-            tarefaId: tarefaRef.id,
-            turmaId: turmaRef.id,
-            instituicaoId: instRef.id,
-            professorUid: userUid,
-            resposta: respostaStr,
-            feedbackSugerido: fSugerido,
-            feedbackFinal: fFinal || fSugerido,
-            status: temFeedback ? 'aprovado' : 'pendente',
-            postado: temFeedback,
-            dataAprovacao: temFeedback ? serverTimestamp() : null
-          });
-          contAtiv++;
-        }
-      });
-
-      await batch.commit();
-      alert(`🚀 SUCESSO ABSOLUTO! \n\nMigramos:\n👤 ${contAlunos} Alunos\n📝 ${contAtiv} Atividades.`);
-      window.location.reload();
-    } catch (e) { 
-      alert("Erro detalhado na migração: " + e.message); 
-      console.error(e); 
-    } finally { setMigrando(null); }
-  }
-
+  // Função genérica para atualizar qualquer campo do usuário (plano, role, status)
   async function handleUpdateUser(userId, campo, valor) {
+    setAtualizando(userId);
     try {
-      await updateDoc(doc(db, 'usuarios', userId), { [campo]: valor });
+      await updateDoc(doc(db, 'usuarios', userId), {
+        [campo]: valor
+      });
       setUsuarios(usuarios.map(u => u.id === userId ? { ...u, [campo]: valor } : u));
-    } catch (error) { alert("Erro ao atualizar."); }
+    } catch (error) {
+      alert("Erro ao atualizar usuário.");
+      console.error(error);
+    } finally {
+      setAtualizando(null);
+    }
   }
 
-  if (authLoading) return <div className="p-10 text-center">Carregando...</div>;
-  if (!isAdmin) return <Navigate to="/" />;
+  // Enquanto o Auth está carregando, mostra um spinner
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-slate-900"></div></div>;
+  }
+
+  // Se não for Admin após o carregamento, expulsa da tela
+  if (!isAdmin) {
+    return <Navigate to="/" />;
+  }
+
+  const usuariosFiltrados = usuarios.filter(u => 
+    (u.nome || '').toLowerCase().includes(busca.toLowerCase()) || 
+    (u.email || '').toLowerCase().includes(busca.toLowerCase())
+  );
+
+  const totalPremium = usuarios.filter(u => u.plano === 'premium').length;
 
   return (
-    <div className="max-w-6xl mx-auto p-8">
-      <div className="flex justify-between items-center mb-8 border-b pb-6">
-        <h1 className="text-2xl font-black flex items-center gap-2"><ShieldAlert className="text-yellow-500" /> Painel SaaS</h1>
-        <button onClick={handleNukeV3} disabled={limpando} className="bg-red-600 text-white px-5 py-2.5 rounded-xl font-black text-xs hover:bg-red-700 transition-all flex items-center gap-2 shadow-lg">
-          <Trash2 size={16}/> {limpando ? 'Resetando...' : 'RESETAR DADOS DA V3'}
-        </button>
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-gray-200 pb-6">
+        <div className="flex items-center gap-4">
+          <div className="bg-slate-900 text-yellow-400 p-3 rounded-xl shadow-lg shrink-0">
+            <ShieldAlert size={28} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-gray-800 tracking-tight">Painel SaaS (Super Admin)</h1>
+            <p className="text-sm font-medium text-gray-500 mt-1">Gestão de acessos, assinaturas e permissões.</p>
+          </div>
+        </div>
       </div>
 
+      {/* CARDS DE RESUMO */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total de Usuários</p>
+            <h3 className="text-3xl font-black text-gray-800 mt-1">{usuarios.length}</h3>
+          </div>
+          <div className="bg-blue-50 text-blue-500 p-3 rounded-xl"><Users size={24}/></div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-yellow-200 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-yellow-600 uppercase tracking-widest">Assinantes Premium</p>
+            <h3 className="text-3xl font-black text-gray-800 mt-1">{totalPremium}</h3>
+          </div>
+          <div className="bg-yellow-50 text-yellow-500 p-3 rounded-xl"><Crown size={24}/></div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between">
+          <div className="w-full">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Busca Rápida</p>
+            <div className="flex items-center bg-gray-50 rounded-lg px-3 py-2 border border-gray-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+              <Search size={16} className="text-gray-400 mr-2 shrink-0"/>
+              <input 
+                type="text" 
+                placeholder="Nome ou e-mail..." 
+                className="w-full text-sm bg-transparent outline-none text-gray-700 font-medium"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* TABELA DE USUÁRIOS */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b">
-            <tr>
-              <th className="p-4 font-bold">Usuário</th>
-              <th className="p-4 font-bold text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {usuarios.map(u => (
-              <tr key={u.id} className="border-t hover:bg-gray-50/50 transition-colors">
-                <td className="p-4"><p className="font-bold text-gray-800">{u.nome || 'Sem Nome'}</p><p className="text-xs text-gray-400">{u.email}</p></td>
-                <td className="p-4 text-center">
-                  <button onClick={() => handleMigrarDados(u.email, u.id)} disabled={migrando === u.id} className="bg-purple-600 text-white px-6 py-2 rounded-xl font-black text-xs hover:bg-purple-700 shadow-md">
-                    {migrando === u.id ? <RefreshCw className="animate-spin inline mr-2" size={14}/> : <Rocket className="inline mr-2" size={14}/>}
-                    MIGRAR DADOS
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {loading ? (
+          <div className="text-center py-12 text-gray-500 font-bold animate-pulse">Carregando base de usuários...</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 text-xs uppercase tracking-widest text-gray-500 border-b border-gray-200">
+                  <th className="p-4 font-bold">Usuário</th>
+                  <th className="p-4 font-bold">Plano SaaS</th>
+                  <th className="p-4 font-bold">Nível (Role)</th>
+                  <th className="p-4 font-bold text-center">Status de Acesso</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {usuariosFiltrados.map((user) => (
+                  <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${atualizando === user.id ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <td className="p-4">
+                      <p className="font-bold text-gray-900">{user.nome || 'Sem Nome'}</p>
+                      <p className="text-xs font-medium text-gray-500 mt-0.5">{user.email}</p>
+                    </td>
+                    
+                    <td className="p-4">
+                      <select 
+                        className={`text-sm font-bold p-2.5 rounded-lg border outline-none cursor-pointer transition-colors ${
+                          user.plano === 'premium' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 
+                          user.plano === 'intermediario' ? 'bg-blue-50 border-blue-200 text-blue-700' : 
+                          'bg-gray-50 border-gray-200 text-gray-600'
+                        }`}
+                        value={user.plano || 'basico'}
+                        onChange={(e) => handleUpdateUser(user.id, 'plano', e.target.value)}
+                        disabled={atualizando === user.id}
+                      >
+                        <option value="basico">Tier 1: Básico</option>
+                        <option value="intermediario">Tier 2: Intermediário</option>
+                        <option value="premium">Tier 3: Premium (IA)</option>
+                      </select>
+                    </td>
+
+                    <td className="p-4">
+                      <select 
+                        className={`text-sm font-bold p-2.5 rounded-lg outline-none cursor-pointer transition-colors ${
+                          user.role === 'admin' ? 'bg-slate-800 text-white border border-slate-700' : 'bg-gray-100 text-gray-700 border border-transparent'
+                        }`}
+                        value={user.role || 'professor'}
+                        onChange={(e) => handleUpdateUser(user.id, 'role', e.target.value)}
+                        disabled={atualizando === user.id}
+                      >
+                        <option value="professor">Professor</option>
+                        <option value="admin">Gestor (Admin)</option>
+                      </select>
+                    </td>
+
+                    <td className="p-4 text-center">
+                      <button 
+                        onClick={() => handleUpdateUser(user.id, 'status', user.status === 'bloqueado' ? 'ativo' : 'bloqueado')}
+                        disabled={atualizando === user.id}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
+                          user.status === 'bloqueado' 
+                          ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' 
+                          : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                        }`}
+                      >
+                        {user.status === 'bloqueado' ? <><XCircle size={16}/> Bloqueado</> : <><CheckCircle size={16}/> Liberado</>}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {usuariosFiltrados.length === 0 && (
+              <div className="text-center py-12">
+                <Users size={40} className="mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-500 font-medium">Nenhum usuário encontrado com esta busca.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
