@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Phone, Sparkles, Save, ShieldCheck, Mail, CheckCircle2 } from 'lucide-react';
+import { User, Phone, Sparkles, Save, ShieldCheck, Mail, CheckCircle2, Target } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Configuracoes() {
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, escolaSelecionada } = useAuth();
   
   const [nome, setNome] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -21,6 +21,11 @@ export default function Configuracoes() {
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const mostrarIA = isPremium || isAdmin;
 
+  // ESTADO DO TERMÔMETRO DA IA
+  const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
+  const [loadingMetricas, setLoadingMetricas] = useState(true);
+
+  // Busca os dados do perfil (Prompt, Nome, etc)
   useEffect(() => {
     async function fetchPerfil() {
       if (!currentUser) return;
@@ -41,6 +46,60 @@ export default function Configuracoes() {
     }
     fetchPerfil();
   }, [currentUser]);
+
+  // Busca o Termômetro da IA focado nas turmas do professor nesta Instituição
+  useEffect(() => {
+    async function fetchMetricasIA() {
+      if (!currentUser || !escolaSelecionada?.id || !mostrarIA) {
+        setLoadingMetricas(false);
+        return;
+      }
+      try {
+        // 1. Acha as tarefas criadas por este professor
+        const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        const snapTarefas = await getDocs(qTarefas);
+        const tarefasIds = snapTarefas.docs.map(d => d.id);
+
+        if (tarefasIds.length === 0) {
+          setLoadingMetricas(false);
+          return;
+        }
+
+        // 2. Busca todas as atividades da instituição e filtra em memória
+        const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
+        const snapAtividades = await getDocs(qAtividades);
+
+        let iaTotal = 0;
+        let iaOriginais = 0;
+
+        snapAtividades.docs.forEach(doc => {
+          const ativ = doc.data();
+          if (tarefasIds.includes(ativ.tarefaId)) {
+            const isAprovado = ativ.status === 'aprovado' || ativ.postado === true;
+            const temSugestaoIA = ativ.feedbackSugerido && ativ.feedbackSugerido.trim() !== '';
+
+            if (isAprovado && temSugestaoIA) {
+              iaTotal++;
+              const feedbackFinal = ativ.feedbackFinal ? ativ.feedbackFinal.trim() : '';
+              const feedbackSugerido = ativ.feedbackSugerido.trim();
+
+              if (feedbackFinal === feedbackSugerido) {
+                iaOriginais++;
+              }
+            }
+          }
+        });
+
+        const percentual = iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0;
+        setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual });
+      } catch (error) {
+        console.error("Erro ao buscar métricas de IA:", error);
+      } finally {
+        setLoadingMetricas(false);
+      }
+    }
+    fetchMetricasIA();
+  }, [currentUser, escolaSelecionada, mostrarIA]);
 
   async function handleSalvar(e) {
     e.preventDefault();
@@ -139,37 +198,58 @@ export default function Configuracoes() {
 
         {/* CARD 2: CONFIGURAÇÃO DE IA (SÓ APARECE PARA PREMIUM E ADMIN) */}
         {mostrarIA && (
-          <div className="bg-gradient-to-br from-purple-900 to-indigo-900 p-6 md:p-8 rounded-3xl shadow-lg border border-purple-700 relative overflow-hidden">
+          <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-6 md:p-8 rounded-3xl shadow-lg border border-indigo-500/30 relative overflow-hidden">
             {/* Efeito visual de fundo */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500 rounded-full blur-3xl opacity-20 -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500 rounded-full blur-3xl opacity-20 -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
 
             <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6 border-b border-purple-700/50 pb-4">
+              <div className="flex items-center justify-between mb-6 border-b border-indigo-500/30 pb-4">
                 <h2 className="text-lg font-black text-white flex items-center gap-2">
-                  <Sparkles size={20} className="text-yellow-400" /> Treinamento da IA (Premium)
+                  <Sparkles size={20} className="text-yellow-400" /> Cérebro da IA (Premium)
                 </h2>
-                <span className="bg-yellow-400 text-yellow-900 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-sm">
+                <span className="bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-sm">
                   Exclusivo
                 </span>
               </div>
               
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-black text-purple-200 uppercase tracking-widest mb-2 ml-1">
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* ÁREA DO PROMPT */}
+                <div className="flex-1">
+                  <label className="block text-xs font-black text-indigo-300 uppercase tracking-widest mb-2 ml-1">
                     Instruções de Personalidade (Prompt de Sistema)
                   </label>
-                  <p className="text-sm text-purple-300 mb-3 font-medium">
-                    Defina como a Inteligência Artificial deve se comportar ao gerar os feedbacks. Ex: "Seja acolhedor, use emojis, chame o aluno pelo primeiro nome e seja rigoroso com erros de gramática."
+                  <p className="text-sm text-indigo-200/80 mb-3 font-medium">
+                    Defina como a Inteligência Artificial deve se comportar ao gerar os feedbacks. Ex: "Seja acolhedor, use emojis e seja rigoroso com erros de gramática."
                   </p>
                   <textarea 
-                    rows="4" 
+                    rows="5" 
                     placeholder="Cole aqui suas instruções de comportamento da IA..."
-                    className="w-full p-4 bg-purple-950/50 border border-purple-600 rounded-xl focus:ring-2 focus:ring-yellow-400 outline-none font-medium text-white placeholder-purple-400/50 transition-all resize-none shadow-inner"
+                    className="w-full p-4 bg-slate-950/50 border border-indigo-500/40 rounded-xl focus:ring-2 focus:ring-yellow-400 outline-none font-medium text-white placeholder-indigo-300/30 transition-all resize-none shadow-inner"
                     value={promptIA} 
                     onChange={e => setPromptIA(e.target.value)} 
                   />
                 </div>
+
+                {/* ÁREA DO TERMÔMETRO */}
+                <div className="w-full md:w-64 bg-slate-800/50 border border-indigo-500/30 rounded-xl p-5 flex flex-col items-center justify-center text-center shadow-inner shrink-0">
+                  <Target size={32} className="text-yellow-400 mb-3 opacity-80" />
+                  <p className="text-indigo-300 text-[10px] font-black uppercase tracking-widest mb-1">Acurácia do Prompt</p>
+                  
+                  {loadingMetricas ? (
+                    <div className="h-12 flex items-center justify-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-400"></div></div>
+                  ) : metricasIA.total === 0 ? (
+                    <span className="text-lg font-bold text-slate-400 my-2">Sem dados</span>
+                  ) : (
+                    <>
+                      <span className="text-5xl font-black text-white tracking-tighter">{metricasIA.percentual}%</span>
+                      <p className="text-indigo-200/70 text-xs font-bold mt-2">
+                        {metricasIA.originais} de {metricasIA.total} feedbacks<br/>usados sem edição
+                      </p>
+                    </>
+                  )}
+                </div>
               </div>
+
             </div>
           </div>
         )}
