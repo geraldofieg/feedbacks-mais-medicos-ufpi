@@ -1,271 +1,167 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, writeBatch, query, where, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Building2, Pencil, Check, X, Calendar, Clock, Trash2, ChevronRight, Send, CheckCheck, Sparkles } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { ShieldAlert, Users, Rocket, RefreshCw, Trash2, Search, Crown, CheckCircle, XCircle } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 
-export default function Dashboard() {
-  const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
-  const navigate = useNavigate();
-  
-  const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
-  
-  const planoUsuario = userProfile?.plano || 'basico'; 
-  const mostrarRevisao = isAdmin || planoUsuario === 'intermediario' || planoUsuario === 'premium';
-  
-  const [instituicoes, setInstituicoes] = useState([]);
-  const [novaInstituicao, setNovaInstituicao] = useState('');
-  const [loadingInst, setLoadingInst] = useState(true);
-  const [salvando, setSalvando] = useState(false);
+export default function AdminPainel() {
+  const { currentUser, userProfile, loading: authLoading } = useAuth();
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
-  const [editandoInstId, setEditandoInstId] = useState(null);
-  const [nomeInstEdicao, setNomeInstEdicao] = useState('');
-
-  const [minhasTurmas, setMinhasTurmas] = useState([]);
-  const [proximosEventos, setProximosEventos] = useState([]);
-  const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]); 
-  
-  const [loadingDados, setLoadingDados] = useState(false);
-  const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
-  const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
+  const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState('');
+  const [atualizando, setAtualizando] = useState(null);
+  const [migrando, setMigrando] = useState(null);
+  const [limpando, setLimpando] = useState(false);
 
   useEffect(() => {
-    setTimeout(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, 50);
-  }, [escolaSelecionada]);
-
-  useEffect(() => {
-    async function fetchInstituicoes() {
-      if (!currentUser) return;
+    async function fetchUsuarios() {
+      if (!isAdmin || authLoading) return;
       try {
-        const instList = [];
-        const instRef = collection(db, 'instituicoes');
-        const qInst = isAdmin 
-          ? instRef 
-          : query(instRef, where('professorUid', '==', currentUser.uid));
-          
-        const snapInst = await getDocs(qInst);
-        snapInst.docs.forEach(d => {
-          const data = d.data();
-          if (data.status !== 'lixeira') instList.push({ id: d.id, nome: data.nome });
-        });
-        
-        const listaOrdenada = instList.sort((a, b) => a.nome.localeCompare(b.nome));
-        setInstituicoes(listaOrdenada);
-        if (listaOrdenada.length === 1 && !escolaSelecionada) setEscolaSelecionada(listaOrdenada[0]);
-      } catch (error) { console.error("Erro buscar instituições:", error); } 
-      finally { setLoadingInst(false); }
+        const querySnapshot = await getDocs(collection(db, 'usuarios'));
+        setUsuarios(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) { console.error(error); } finally { setLoading(false); }
     }
-    fetchInstituicoes();
-  }, [currentUser, escolaSelecionada, setEscolaSelecionada, isAdmin]);
+    fetchUsuarios();
+  }, [isAdmin, authLoading]);
 
-  useEffect(() => {
-    async function fetchDadosDashboard() {
-      if (!currentUser || !escolaSelecionada?.id) return;
-      setLoadingDados(true);
-      try {
-        const turmasRef = collection(db, 'turmas');
-        const qTurmas = isAdmin
-          ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
-          : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
-          
-        const snapTurmas = await getDocs(qTurmas);
-        const turmasData = snapTurmas.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
-        setMinhasTurmas(turmasData);
+  // FAXINA: Apaga definitivamente o que está com status 'lixeira'
+  async function handleLimpezaTotal() {
+    if (!window.confirm("ATENÇÃO: Isso vai APAGAR PARA SEMPRE todas as Instituições e Turmas que você enviou para a lixeira. Confirma?")) return;
+    setLimpando(true);
+    try {
+      const batch = writeBatch(db);
+      const snapInst = await getDocs(collection(db, 'instituicoes'));
+      snapInst.docs.forEach(d => { if (d.data().status === 'lixeira') batch.delete(d.ref); });
+      const snapTurmas = await getDocs(collection(db, 'turmas'));
+      snapTurmas.docs.forEach(d => { if (d.data().status === 'lixeira') batch.delete(d.ref); });
+      await batch.commit();
+      alert("🧹 Banco de dados limpo! Os itens fantasmas sumiram.");
+      window.location.reload();
+    } catch (e) { alert("Erro na limpeza."); } finally { setLimpando(false); }
+  }
 
-        if (turmasData.length > 0) {
-          const turmasIds = turmasData.map(d => d.id);
-          const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
-          const snapTarefas = await getDocs(qTarefas);
-          
-          const agora = new Date();
-          const hojeMeiaNoite = new Date(); hojeMeiaNoite.setHours(0, 0, 0, 0);
-          const limiteSemana = new Date(hojeMeiaNoite); limiteSemana.setDate(hojeMeiaNoite.getDate() + 7); 
+  async function handleMigrarDados(userEmail, userUid) {
+    if (!window.confirm(`Rodar migração V1 para ${userEmail}? Atividades sem feedback irão para 'Revisão'.`)) return;
+    setMigrando(userUid);
+    try {
+      const snapAlunosV1 = await getDocs(collection(db, 'alunos'));
+      const snapAtivV1 = await getDocs(collection(db, 'atividades'));
 
-          const todasTarefasFiltradas = snapTarefas.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .filter(t => t.status !== 'lixeira' && turmasIds.includes(t.turmaId) && t.dataFim)
-            .map(t => {
-              const dataF = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
-              const diasRestantes = Math.ceil((dataF.getTime() - agora.getTime()) / (1000 * 3600 * 24));
-              return { ...t, objDataFim: dataF, timestamp: dataF.getTime(), diasRestantes };
-            });
+      const instRef = await addDoc(collection(db, 'instituicoes'), {
+        nome: "UFPI - Mais Médicos (V3 Oficial)",
+        professorUid: userUid,
+        status: 'ativa',
+        dataCriacao: serverTimestamp()
+      });
 
-          const ativas = todasTarefasFiltradas
-            .filter(t => t.diasRestantes >= 0 && t.tipo === 'entrega')
-            .sort((a, b) => a.diasRestantes - b.diasRestantes);
-          setTarefasEmAndamento(ativas);
+      const turmaRef = await addDoc(collection(db, 'turmas'), {
+        nome: "Turma Integrada V1",
+        instituicaoId: instRef.id,
+        professorUid: userUid,
+        status: 'ativa'
+      });
 
-          const radar = todasTarefasFiltradas
-            .filter(t => t.timestamp >= hojeMeiaNoite.getTime() && t.timestamp <= limiteSemana.getTime())
-            .sort((a, b) => a.timestamp - b.timestamp)
-            .slice(0, 3); 
-          setProximosEventos(radar);
+      const batch = writeBatch(db);
+      const mapaAlunosNovos = {};
 
-          const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
-          const snapAtividades = await getDocs(qAtividades);
-          
-          let contPendentes = 0;
-          let contFaltaLancar = 0;
-          let contFinalizados = 0;
-          let iaTotal = 0;
-          let iaOriginais = 0;
+      snapAlunosV1.docs.forEach((docAlu) => {
+        const d = docAlu.data();
+        if (d.status === 'lixeira') return;
+        const nomeReal = d.nome || d.nomeAluno || "Aluno";
+        const novoAluRef = doc(collection(db, 'alunos'));
+        batch.set(novoAluRef, { nome: nomeReal, turmaId: turmaRef.id, instituicaoId: instRef.id, professorUid: userUid, status: 'ativo' });
+        mapaAlunosNovos[nomeReal] = novoAluRef.id;
+      });
 
-          snapAtividades.docs.forEach(doc => {
-            const ativ = doc.data();
-            if (turmasIds.includes(ativ.turmaId)) {
-              if (ativ.postado === true) {
-                contFinalizados++;
-              } else if (ativ.status === 'aprovado') {
-                contFaltaLancar++;
-              } else {
-                contPendentes++;
-              }
-
-              // PROTEÇÃO CONTRA DADOS VAZIOS DA V1
-              const isAprovado = ativ.status === 'aprovado' || ativ.postado === true;
-              const feedbackSugeridoValido = ativ.feedbackSugerido && typeof ativ.feedbackSugerido === 'string' && ativ.feedbackSugerido.trim() !== '';
-              
-              if (isAprovado && feedbackSugeridoValido) {
-                iaTotal++;
-                const feedbackFinal = ativ.feedbackFinal ? String(ativ.feedbackFinal).trim() : '';
-                const feedbackSugerido = String(ativ.feedbackSugerido).trim();
-                
-                if (feedbackFinal === feedbackSugerido) {
-                  iaOriginais++;
-                }
-              }
-            }
+      snapAtivV1.docs.forEach((docAtiv) => {
+        const d = docAtiv.data();
+        const idDoNovoAluno = mapaAlunosNovos[d.nomeAluno || d.nome];
+        if (idDoNovoAluno) {
+          const novaAtivRef = doc(collection(db, 'atividades'));
+          const temFeedback = d.feedbackFinal && d.feedbackFinal.trim() !== "";
+          batch.set(novaAtivRef, {
+            alunoId: idDoNovoAluno,
+            turmaId: turmaRef.id,
+            instituicaoId: instRef.id,
+            professorUid: userUid,
+            resposta: d.resposta || "",
+            feedbackSugerido: d.feedbackIA || "",
+            feedbackFinal: d.feedbackFinal || "",
+            status: temFeedback ? 'aprovado' : 'pendente',
+            postado: temFeedback,
+            dataAprovacao: temFeedback ? serverTimestamp() : null
           });
-
-          setKanban({ pendentes: contPendentes, faltaLancar: contFaltaLancar, finalizados: contFinalizados });
-          const percentualIA = iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0;
-          setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: percentualIA });
-
-        } else {
-          setKanban({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
-          setMetricasIA({ total: 0, originais: 0, percentual: 0 });
         }
-      } catch (error) { console.error("Erro buscar dados:", error); } 
-      finally { setLoadingDados(false); }
-    }
-    if (escolaSelecionada) fetchDadosDashboard();
-  }, [currentUser, escolaSelecionada, isAdmin]);
+      });
 
-  async function handleCriarAcessar(e) {
-    e.preventDefault(); const nomeInst = novaInstituicao.trim(); if (!nomeInst) return;
-    try { setSalvando(true); const docRef = await addDoc(collection(db, 'instituicoes'), { nome: nomeInst, professorUid: currentUser.uid, status: 'ativa', dataCriacao: serverTimestamp() }); setEscolaSelecionada({ id: docRef.id, nome: nomeInst }); } 
-    catch (error) { console.error("Erro ao criar instituição:", error); } 
-    finally { setSalvando(false); }
+      await batch.commit();
+      alert("🚀 Migração Finalizada!");
+    } catch (e) { console.error(e); } finally { setMigrando(null); }
   }
 
-  const temTurmas = minhasTurmas.length > 0;
-  const getNomeVisivelTipo = (tipo) => {
-    const t = (tipo || 'entrega').toLowerCase();
-    return t === 'compromisso' ? 'Compromisso' : t === 'lembrete' ? 'Post-it' : 'Tarefa do Aluno';
-  };
-  const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
-
-  if (!escolaSelecionada) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-8 mt-4 md:mt-8">
-        <div className="text-center mb-10">
-          <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg"><GraduationCap size={32} /></div>
-          <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
-          <p className="text-gray-500 mt-2 text-base md:text-lg px-2">Selecione o seu ambiente de trabalho para continuar.</p>
-        </div>
-        <div className="flex flex-col gap-8 w-full max-w-2xl mx-auto">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><LayoutDashboard size={18}/> Suas Instituições Ativas</h2>
-            {loadingInst ? ( <div className="text-gray-400 text-sm font-medium animate-pulse text-center py-6">Carregando...</div> ) : (
-              <div className="space-y-3">
-                {instituicoes.map(inst => (
-                  <div key={inst.id} className="w-full bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center justify-between hover:bg-blue-600 hover:text-white transition-all group cursor-pointer shadow-sm" onClick={() => setEscolaSelecionada(inst)}>
-                    <span className="flex-1 text-left font-black text-blue-800 group-hover:text-white text-lg truncate">{inst.nome}</span>
-                    <ArrowRight size={24} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+  async function handleUpdateUser(userId, campo, valor) {
+    setAtualizando(userId);
+    try {
+      await updateDoc(doc(db, 'usuarios', userId), { [campo]: valor });
+      setUsuarios(usuarios.map(u => u.id === userId ? { ...u, [campo]: valor } : u));
+    } catch (error) { alert("Erro ao atualizar."); } finally { setAtualizando(null); }
   }
+
+  if (authLoading) return <div className="p-10 text-center">Carregando...</div>;
+  if (!isAdmin) return <Navigate to="/" />;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 justify-between border-b border-gray-200 pb-6">
-        <div className="flex items-center gap-3 w-full">
-          <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm shrink-0"><GraduationCap size={28} /></div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-black text-gray-800 leading-tight">Centro de Comando</h1>
-            <div className="mt-1.5 flex items-center gap-2">
-              <span className="text-gray-500 text-sm font-medium">Instituição:</span>
-              <select className="bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-lg py-1 px-2 font-bold cursor-pointer outline-none" value={escolaSelecionada.id}
-                onChange={(e) => { const val = e.target.value; if (val === 'NOVA') setEscolaSelecionada(null); else { const inst = instituicoes.find(i => i.id === val); if (inst) setEscolaSelecionada(inst); } }}
-              >
-                {instituicoes.map(inst => <option key={inst.id} value={inst.id}>{inst.nome}</option>)}
-                <option value="NOVA">+ Nova Instituição</option>
-              </select>
-            </div>
-          </div>
-        </div>
+      <div className="flex justify-between items-center mb-8 border-b pb-6">
+        <h1 className="text-2xl font-black flex items-center gap-2"><ShieldAlert className="text-yellow-500" /> Painel SaaS</h1>
+        <button onClick={handleLimpezaTotal} disabled={limpando} className="bg-red-100 text-red-600 px-4 py-2 rounded-xl font-bold hover:bg-red-200 transition-all flex items-center gap-2">
+          <Trash2 size={18}/> {limpando ? 'Limpando...' : 'Esvaziar Lixeiras do Banco'}
+        </button>
       </div>
 
-      {!temTurmas && !loadingDados ? (
-        <div className="mb-10 text-center bg-blue-50 border-2 border-dashed border-blue-200 p-10 rounded-3xl max-w-2xl mx-auto">
-          <Building2 className="mx-auto text-blue-400 mb-4" size={48}/>
-          <h2 className="text-xl font-black text-blue-900 mb-2">Quase lá!</h2>
-          <p className="text-blue-700 font-medium mb-6">A migração criou os dados, mas você precisa entrar na aba "Turmas" para conferir se está tudo certo.</p>
-          <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-3 px-8 rounded-xl shadow-lg hover:bg-blue-700 transition-all"><Plus size={20}/> Ir para Turmas</Link>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-4 bg-gray-50 border-b flex items-center gap-2">
+          <Search size={16} className="text-gray-400" />
+          <input type="text" placeholder="Filtrar usuário..." className="bg-transparent outline-none text-sm font-medium" value={busca} onChange={e => setBusca(e.target.value)} />
         </div>
-      ) : (
-        <>
-          <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800">
-            <div className="flex gap-4 items-start w-full">
-              <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner">
-                <Calendar size={24} className="text-blue-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-base font-black text-white mb-2 tracking-wide">Situação das Atividades</h2>
-                <div className="space-y-1.5 text-sm font-medium text-slate-200">
-                  <p>Instituição: <span className="text-blue-400">{escolaSelecionada.nome}</span></p>
-                  <p>Confira o histórico migrado abaixo.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {isAdmin && metricasIA.total > 0 && (
-            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl p-6 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="bg-white/20 p-3 rounded-xl shrink-0"><Sparkles size={28} className="text-purple-100" /></div>
-                <div>
-                  <h2 className="text-lg md:text-xl font-black text-white tracking-wide">Termômetro da IA (Histórico)</h2>
-                  <p className="text-purple-200 text-sm font-medium mt-0.5">Feedbacks migrados sem alteração.</p>
-                </div>
-              </div>
-              <div className="text-left md:text-right shrink-0">
-                <span className="block text-4xl md:text-5xl font-black text-white tracking-tighter">{metricasIA.percentual}%</span>
-              </div>
-            </div>
-          )}
-
-          <div className={`grid grid-cols-1 gap-4 mb-10 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2 max-w-4xl mx-auto'}`}>
-            {mostrarRevisao && (
-              <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
-                <h3 className="text-xs font-bold text-yellow-600 uppercase tracking-widest mb-4">Aguardando Revisão</h3>
-                <span className="text-4xl font-black text-gray-800">{kanban.pendentes}</span>
-              </div>
-            )}
-            <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
-              <h3 className="text-xs font-bold text-green-600 uppercase tracking-widest mb-4">Finalizados (Migrados)</h3>
-              <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
-            </div>
-          </div>
-        </>
-      )}
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-gray-50 text-xs uppercase text-gray-500 border-b">
+              <th className="p-4 font-bold">Usuário</th>
+              <th className="p-4 font-bold">Plano</th>
+              <th className="p-4 font-bold text-center">Acesso</th>
+              <th className="p-4 text-center font-bold">Migração</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {usuarios.filter(u => u.email.includes(busca.toLowerCase())).map(user => (
+              <tr key={user.id} className="hover:bg-gray-50/50">
+                <td className="p-4"><p className="font-bold text-gray-800">{user.nome || 'Sem Nome'}</p><p className="text-xs text-gray-400">{user.email}</p></td>
+                <td className="p-4">
+                  <select className="text-xs font-bold p-2 rounded-lg border bg-white" value={user.plano || 'basico'} onChange={e => handleUpdateUser(user.id, 'plano', e.target.value)}>
+                    <option value="basico">Básico</option>
+                    <option value="intermediario">Intermediário</option>
+                    <option value="premium">Premium</option>
+                  </select>
+                </td>
+                <td className="p-4 text-center">
+                  <button onClick={() => handleUpdateUser(user.id, 'status', user.status === 'bloqueado' ? 'ativo' : 'bloqueado')} className={`px-3 py-1.5 rounded-lg text-xs font-black border ${user.status === 'bloqueado' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                    {user.status === 'bloqueado' ? 'Bloqueado' : 'Liberado'}
+                  </button>
+                </td>
+                <td className="p-4 text-center">
+                  <button onClick={() => handleMigrarDados(user.email, user.id)} disabled={migrando === user.id} className="bg-purple-600 text-white p-2 rounded-xl hover:bg-purple-700">
+                    {migrando === user.id ? <RefreshCw className="animate-spin" size={16}/> : <Rocket size={16} />}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
