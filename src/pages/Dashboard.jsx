@@ -2,18 +2,18 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Building2, Pencil, Check, X, Calendar, Clock, Trash2, ChevronRight, Send, CheckCheck } from 'lucide-react';
+import { Plus, ArrowRight, GraduationCap, Users, LayoutDashboard, Building2, Pencil, Check, X, Calendar, Clock, Trash2, ChevronRight, Send, CheckCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
-  // NOVO: Puxando o userProfile para ler o Plano
+  // Puxando o userProfile para ler o Plano
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   const navigate = useNavigate();
   
   // REGRA DE PROTEÇÃO GESTOR VS PROFESSOR
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   
-  // NOVO: Regra do Plano (Tier)
+  // Regra do Plano (Tier)
   const planoUsuario = userProfile?.plano || 'basico'; 
   const mostrarRevisao = isAdmin || planoUsuario === 'intermediario' || planoUsuario === 'premium';
   
@@ -29,9 +29,10 @@ export default function Dashboard() {
   const [proximosEventos, setProximosEventos] = useState([]);
   const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]); // Ponto de Situação
   
-  // ESTADOS DA ESTEIRA DE PRODUÇÃO (KANBAN)
+  // ESTADOS DA ESTEIRA DE PRODUÇÃO (KANBAN) E IA
   const [loadingDados, setLoadingDados] = useState(false);
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
+  const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 }); // NOVO: Estado do Termômetro
 
   useEffect(() => {
     setTimeout(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, 50);
@@ -112,17 +113,22 @@ export default function Dashboard() {
             .slice(0, 3); 
           setProximosEventos(radar);
 
-          // 3. CALCULADORA DO KANBAN DE PRODUÇÃO
+          // 3. CALCULADORA DO KANBAN E TERMÔMETRO DA IA
           const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtividades = await getDocs(qAtividades);
           
           let contPendentes = 0;
           let contFaltaLancar = 0;
           let contFinalizados = 0;
+          
+          let iaTotal = 0;
+          let iaOriginais = 0;
 
           snapAtividades.docs.forEach(doc => {
             const ativ = doc.data();
             if (turmasIds.includes(ativ.turmaId)) {
+              
+              // Lógica do Kanban
               if (ativ.postado === true) {
                 contFinalizados++;
               } else if (ativ.status === 'aprovado') {
@@ -130,15 +136,33 @@ export default function Dashboard() {
               } else {
                 contPendentes++;
               }
+
+              // Lógica do Termômetro IA (Conta apenas atividades aprovadas que tinham sugestão de IA)
+              const isAprovado = ativ.status === 'aprovado' || ativ.postado === true;
+              const temSugestaoIA = ativ.feedbackSugerido && ativ.feedbackSugerido.trim() !== '';
+              
+              if (isAprovado && temSugestaoIA) {
+                iaTotal++;
+                const feedbackFinal = ativ.feedbackFinal ? ativ.feedbackFinal.trim() : '';
+                const feedbackSugerido = ativ.feedbackSugerido.trim();
+                
+                if (feedbackFinal === feedbackSugerido) {
+                  iaOriginais++;
+                }
+              }
             }
           });
 
           setKanban({ pendentes: contPendentes, faltaLancar: contFaltaLancar, finalizados: contFinalizados });
+          
+          const percentualIA = iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0;
+          setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: percentualIA });
 
         } else {
           setProximosEventos([]);
           setTarefasEmAndamento([]);
           setKanban({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
+          setMetricasIA({ total: 0, originais: 0, percentual: 0 });
         }
       } catch (error) { console.error("Erro buscar dados:", error); } 
       finally { setLoadingDados(false); }
@@ -291,6 +315,31 @@ export default function Dashboard() {
               Ver Cronograma
             </Link>
           </div>
+
+          {/* NOVO: TERMÔMETRO DA IA (SÓ GESTOR VÊ) */}
+          {isAdmin && metricasIA.total > 0 && (
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl p-6 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in zoom-in duration-300">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 p-3 rounded-xl shrink-0">
+                  <Sparkles size={28} className="text-purple-100" />
+                </div>
+                <div>
+                  <h2 className="text-lg md:text-xl font-black text-white tracking-wide">Termômetro da IA</h2>
+                  <p className="text-purple-200 text-sm font-medium mt-0.5">
+                    Porcentagem de feedbacks aprovados sem NENHUMA alteração.
+                  </p>
+                </div>
+              </div>
+              <div className="text-left md:text-right shrink-0">
+                <span className="block text-4xl md:text-5xl font-black text-white tracking-tighter">
+                  {loadingDados ? '-' : `${metricasIA.percentual}%`}
+                </span>
+                <span className="text-purple-200 text-xs font-bold uppercase tracking-widest mt-1 block">
+                  {loadingDados ? '-' : `${metricasIA.originais} de ${metricasIA.total} originais`}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* ESTEIRA DE PRODUÇÃO (NOVO KANBAN V3) */}
           {/* AJUSTE NA GRID: Se for básico (só 1 caixa), fica menor e centralizada. Se não, usa 2 ou 3 colunas. */}
