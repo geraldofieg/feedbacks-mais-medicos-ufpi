@@ -40,9 +40,7 @@ export default function AdminPainel() {
         if (deleted > 0) await batch.commit();
       };
 
-      // Apaga Instituições (todas são V3)
       await deleteQuery('instituicoes');
-      
       // Apaga o resto APENAS se tiver 'instituicaoId' (A prova de que é da V3)
       await deleteQuery('turmas', (data) => !!data.instituicaoId);
       await deleteQuery('tarefas', (data) => !!data.instituicaoId);
@@ -55,12 +53,16 @@ export default function AdminPainel() {
   }
 
   // =========================================================================
-  // MIGRAÇÃO DEFINITIVA
+  // MIGRAÇÃO BLINDADA
   // =========================================================================
   async function handleMigrarDados(userEmail, userUid) {
     if (!window.confirm(`Iniciar migração oficial para ${userEmail}?`)) return;
     setMigrando(userUid);
     try {
+      // Funções de Proteção de Dados
+      const getSafeStr = (val) => (val ? String(val) : "");
+      const normalizeName = (name) => getSafeStr(name).trim().toUpperCase();
+
       const snapAlunosV1 = await getDocs(collection(db, 'alunos'));
       const snapAtivV1 = await getDocs(collection(db, 'atividades'));
 
@@ -73,34 +75,46 @@ export default function AdminPainel() {
       let contAlunos = 0;
       let contAtiv = 0;
 
+      // 1. Mapear Alunos
       snapAlunosV1.docs.forEach((docAlu) => {
         const d = docAlu.data();
-        if (d.instituicaoId) return; // Pula se por acaso ler algo da V3
-        const nomeReal = d.nome || d.nomeAluno || d.aluno || d.estudante || "Aluno Sem Nome";
+        if (d.instituicaoId) return; // Se já é da V3, ignora
+        
+        const nomeReal = getSafeStr(d.nome || d.nomeAluno || d.aluno || d.estudante) || "Aluno Sem Nome";
+        const chaveBusca = normalizeName(nomeReal);
+        
         const novoAluRef = doc(collection(db, 'alunos'));
-        batch.set(novoAluRef, { nome: nomeReal, matricula: d.matricula || "", turmaId: turmaRef.id, instituicaoId: instRef.id, professorUid: userUid, status: 'ativo' });
-        mapaAlunosNovos[nomeReal] = novoAluRef.id;
+        batch.set(novoAluRef, { nome: nomeReal, matricula: getSafeStr(d.matricula), turmaId: turmaRef.id, instituicaoId: instRef.id, professorUid: userUid, status: 'ativo' });
+        
+        mapaAlunosNovos[chaveBusca] = novoAluRef.id;
         contAlunos++;
       });
 
+      // 2. Mapear Atividades
       snapAtivV1.docs.forEach((docAtiv) => {
         const d = docAtiv.data();
-        if (d.instituicaoId) return; // Pula se ler algo da V3
-        const nomeNaAtiv = d.nomeAluno || d.nome || d.aluno || d.estudante;
-        const idNovo = mapaAlunosNovos[nomeNaAtiv];
+        if (d.instituicaoId) return; // Se já é da V3, ignora
+
+        const nomeNaAtiv = getSafeStr(d.nomeAluno || d.nome || d.aluno || d.estudante);
+        const chaveBusca = normalizeName(nomeNaAtiv);
+        const idNovo = mapaAlunosNovos[chaveBusca];
 
         if (idNovo) {
+          const fFinal = getSafeStr(d.feedbackFinal);
+          const fSugerido = getSafeStr(d.feedbackIA || d.feedbackSugerido);
+          const respostaStr = getSafeStr(d.resposta);
+          const temFeedback = fFinal.trim() !== "";
+
           const novaAtivRef = doc(collection(db, 'atividades'));
-          const temFeedback = d.feedbackFinal && String(d.feedbackFinal).trim() !== "";
           batch.set(novaAtivRef, {
             alunoId: idNovo,
             tarefaId: tarefaRef.id,
             turmaId: turmaRef.id,
             instituicaoId: instRef.id,
             professorUid: userUid,
-            resposta: d.resposta || "",
-            feedbackSugerido: d.feedbackIA || d.feedbackSugerido || "",
-            feedbackFinal: d.feedbackFinal || d.feedbackIA || "",
+            resposta: respostaStr,
+            feedbackSugerido: fSugerido,
+            feedbackFinal: fFinal || fSugerido,
             status: temFeedback ? 'aprovado' : 'pendente',
             postado: temFeedback,
             dataAprovacao: temFeedback ? serverTimestamp() : null
@@ -112,7 +126,10 @@ export default function AdminPainel() {
       await batch.commit();
       alert(`🚀 SUCESSO ABSOLUTO! \n\nMigramos:\n👤 ${contAlunos} Alunos\n📝 ${contAtiv} Atividades.`);
       window.location.reload();
-    } catch (e) { alert("Erro na migração."); console.error(e); } finally { setMigrando(null); }
+    } catch (e) { 
+      alert("Erro detalhado na migração: " + e.message); 
+      console.error(e); 
+    } finally { setMigrando(null); }
   }
 
   async function handleUpdateUser(userId, campo, valor) {
@@ -128,9 +145,7 @@ export default function AdminPainel() {
   return (
     <div className="max-w-6xl mx-auto p-8">
       <div className="flex justify-between items-center mb-8 border-b pb-6">
-        <div>
-          <h1 className="text-2xl font-black flex items-center gap-2"><ShieldAlert className="text-yellow-500" /> Painel SaaS</h1>
-        </div>
+        <h1 className="text-2xl font-black flex items-center gap-2"><ShieldAlert className="text-yellow-500" /> Painel SaaS</h1>
         <button onClick={handleNukeV3} disabled={limpando} className="bg-red-600 text-white px-5 py-2.5 rounded-xl font-black text-xs hover:bg-red-700 transition-all flex items-center gap-2 shadow-lg">
           <Trash2 size={16}/> {limpando ? 'Resetando...' : 'RESETAR DADOS DA V3'}
         </button>
@@ -138,8 +153,8 @@ export default function AdminPainel() {
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-left">
-          <thead>
-            <tr className="bg-gray-50 text-xs uppercase text-gray-500 border-b">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b">
+            <tr>
               <th className="p-4 font-bold">Usuário</th>
               <th className="p-4 font-bold text-center">Ações</th>
             </tr>
