@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, doc, updateDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldAlert, Users, Crown, CheckCircle, XCircle, Search, Link as LinkIcon } from 'lucide-react';
+import { ShieldAlert, Users, Search, Link as LinkIcon } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export default function AdminPainel() {
@@ -28,31 +28,22 @@ export default function AdminPainel() {
   }, [isAdmin, authLoading]);
 
   // =========================================================================
-  // A PONTE ELEGANTE: ETIQUETA ORIGINAIS E APAGA CLONES (COM NOMES OFICIAIS)
+  // A PONTE DEFINITIVA: ETIQUETA DADOS RAIZ (SEM DEPENDER DE UID ANTIGO)
   // =========================================================================
   async function handleEtiquetarOriginais(userEmail, userUid) {
-    if (!window.confirm(`Isso vai LIMPAR os clones e ETIQUETAR os dados reais de ${userEmail} para a V3 ler. Confirma?`)) return;
+    if (!window.confirm(`Isso vai ETIQUETAR definitivamente os dados raiz para a V3 ler. Confirma?`)) return;
     setSincronizando(userUid);
     try {
       const batch = writeBatch(db);
 
       // PASSO 1: FAXINA TOTAL DOS CLONES DA V3
-      // Apaga as instituições criadas nos testes para esse professor
       const snapInst = await getDocs(collection(db, 'instituicoes'));
-      snapInst.docs.forEach(d => {
-        if (d.data().professorUid === userUid) batch.delete(d.ref);
-      });
+      snapInst.docs.forEach(d => { if (d.data().professorUid === userUid) batch.delete(d.ref); });
 
-      // Apaga os clones (Tudo que já tinha recebido instituicaoId)
-      const apagarClones = async (colName) => {
-        const q = await getDocs(collection(db, colName));
-        q.docs.forEach(d => { 
-          if (d.data().instituicaoId && d.data().professorUid === userUid) batch.delete(d.ref); 
-        });
-      };
-      await apagarClones('turmas');
-      
-      // PASSO 2: CRIAR AS GAVETAS DA V3 (Com os Nomes Oficiais)
+      const snapTurmas = await getDocs(collection(db, 'turmas'));
+      snapTurmas.docs.forEach(d => { if (d.data().professorUid === userUid) batch.delete(d.ref); });
+
+      // PASSO 2: CRIAR AS GAVETAS OFICIAIS DA V3
       const instRef = doc(collection(db, 'instituicoes'));
       batch.set(instRef, { 
         nome: "UFPI", 
@@ -69,50 +60,38 @@ export default function AdminPainel() {
         status: 'ativa' 
       });
 
-      // PASSO 3: ETIQUETAR OS ORIGINAIS (Resolvendo a duplicidade)
+      // PASSO 3: ETIQUETAR OS ORIGINAIS E MATAR CLONES
       let contAlunos = 0, contAtiv = 0, contTarefas = 0;
 
-      // Etiqueta Alunos Originais
-      const snapAlunos = await getDocs(collection(db, 'alunos'));
-      snapAlunos.docs.forEach(d => {
-        if (d.data().professorUid === userUid) {
-          if (!d.data().instituicaoId) { 
-            batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
-            contAlunos++;
-          } else {
-             batch.delete(d.ref); // Remove o clone
+      const processarColecao = async (nomeColecao, tipo) => {
+        const snap = await getDocs(collection(db, nomeColecao));
+        snap.docs.forEach(d => {
+          const data = d.data();
+          
+          // Se NÃO TEM instituicaoId, é DADO RAIZ DA V1. Etiqueta e dá a posse pra Patrícia!
+          if (!data.instituicaoId) {
+            batch.update(d.ref, { 
+              instituicaoId: instRef.id, 
+              turmaId: turmaRef.id, 
+              professorUid: userUid 
+            });
+            if (tipo === 'aluno') contAlunos++;
+            if (tipo === 'ativ') contAtiv++;
+            if (tipo === 'tarefa') contTarefas++;
+          } 
+          // Se JÁ TEM instituicaoId e pertence à Patrícia, é um Clone de teste. Apaga pra não duplicar a V1!
+          else if (data.instituicaoId && data.professorUid === userUid) {
+            batch.delete(d.ref);
           }
-        }
-      });
+        });
+      };
 
-      // Etiqueta Atividades Originais
-      const snapAtiv = await getDocs(collection(db, 'atividades'));
-      snapAtiv.docs.forEach(d => {
-        if (d.data().professorUid === userUid) {
-          if (!d.data().instituicaoId) {
-            batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
-            contAtiv++;
-          } else {
-             batch.delete(d.ref); // Remove o clone
-          }
-        }
-      });
-
-      // Etiqueta Tarefas Originais (Cronograma)
-      const snapTarefas = await getDocs(collection(db, 'tarefas'));
-      snapTarefas.docs.forEach(d => {
-        if (d.data().professorUid === userUid) {
-          if (!d.data().instituicaoId) {
-            batch.update(d.ref, { instituicaoId: instRef.id, turmaId: turmaRef.id });
-            contTarefas++;
-          } else {
-             batch.delete(d.ref); // Remove o clone
-          }
-        }
-      });
+      await processarColecao('alunos', 'aluno');
+      await processarColecao('atividades', 'ativ');
+      await processarColecao('tarefas', 'tarefa');
 
       await batch.commit();
-      alert(`🔗 PONTE CRIADA COM SUCESSO!\n\nDados Reais Etiquetados:\n👤 ${contAlunos} Alunos\n📝 ${contAtiv} Atividades\n📅 ${contTarefas} Tarefas do Cronograma.\n\nDuplicidades removidas da V1!`);
+      alert(`🔗 SUCESSO!\n\nDados Raiz Sincronizados com a V3:\n👤 ${contAlunos} Alunos\n📝 ${contAtiv} Atividades\n📅 ${contTarefas} Tarefas do Cronograma.`);
       window.location.reload();
     } catch (e) {
       alert("Erro ao criar a ponte: " + e.message);
@@ -137,12 +116,10 @@ export default function AdminPainel() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-gray-200 pb-6">
         <div className="flex items-center gap-4">
-          <div className="bg-slate-900 text-yellow-400 p-3 rounded-xl shadow-lg shrink-0">
-            <ShieldAlert size={28} />
-          </div>
+          <div className="bg-slate-900 text-yellow-400 p-3 rounded-xl shadow-lg shrink-0"><ShieldAlert size={28} /></div>
           <div>
             <h1 className="text-2xl font-black text-gray-800 tracking-tight">Painel SaaS (Super Admin)</h1>
-            <p className="text-sm font-medium text-gray-500 mt-1">Gestão de acessos, assinaturas e sincronização de dados.</p>
+            <p className="text-sm font-medium text-gray-500 mt-1">Gestão de acessos e sincronização de dados.</p>
           </div>
         </div>
       </div>
@@ -153,8 +130,6 @@ export default function AdminPainel() {
             <thead>
               <tr className="bg-gray-50 text-xs uppercase tracking-widest text-gray-500 border-b border-gray-200">
                 <th className="p-4 font-bold">Usuário</th>
-                <th className="p-4 font-bold">Plano SaaS</th>
-                <th className="p-4 font-bold text-center">Status de Acesso</th>
                 <th className="p-4 font-bold text-center">Ponte V1 ➔ V3</th>
               </tr>
             </thead>
@@ -166,28 +141,14 @@ export default function AdminPainel() {
                     <p className="text-xs font-medium text-gray-500 mt-0.5">{user.email}</p>
                   </td>
                   
-                  <td className="p-4">
-                    <select className="text-sm font-bold p-2.5 rounded-lg border bg-gray-50" value={user.plano || 'basico'} onChange={(e) => handleUpdateUser(user.id, 'plano', e.target.value)} disabled={atualizando === user.id}>
-                      <option value="basico">Tier 1: Básico</option>
-                      <option value="intermediario">Tier 2: Intermediário</option>
-                      <option value="premium">Tier 3: Premium (IA)</option>
-                    </select>
-                  </td>
-
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleUpdateUser(user.id, 'status', user.status === 'bloqueado' ? 'ativo' : 'bloqueado')} disabled={atualizando === user.id} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider ${user.status === 'bloqueado' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
-                      {user.status === 'bloqueado' ? 'Bloqueado' : 'Liberado'}
-                    </button>
-                  </td>
-
                   <td className="p-4 text-center">
                     <button 
                       onClick={() => handleEtiquetarOriginais(user.email, user.id)}
                       disabled={sincronizando === user.id}
-                      className="inline-flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase hover:bg-orange-600 transition-colors shadow-sm disabled:opacity-50"
+                      className="inline-flex items-center gap-2 bg-orange-500 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase hover:bg-orange-600 transition-colors shadow-md disabled:opacity-50"
                     >
                       <LinkIcon size={16} />
-                      {sincronizando === user.id ? 'Sincronizando...' : 'Etiquetar Dados'}
+                      {sincronizando === user.id ? 'Sincronizando...' : 'Etiquetar Dados V1'}
                     </button>
                   </td>
                 </tr>
