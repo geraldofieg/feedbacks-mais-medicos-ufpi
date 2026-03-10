@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-// CORREÇÃO: Adicionados addDoc, updateDoc, doc e serverTimestamp nos imports
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -123,13 +122,14 @@ export default function Dashboard() {
                 contPendentes++;
               }
 
+              // PROTEÇÃO CONTRA DADOS VAZIOS DA V1
               const isAprovado = ativ.status === 'aprovado' || ativ.postado === true;
-              const temSugestaoIA = ativ.feedbackSugerido && ativ.feedbackSugerido.trim() !== '';
+              const feedbackSugeridoValido = ativ.feedbackSugerido && typeof ativ.feedbackSugerido === 'string' && ativ.feedbackSugerido.trim() !== '';
               
-              if (isAprovado && temSugestaoIA) {
+              if (isAprovado && feedbackSugeridoValido) {
                 iaTotal++;
-                const feedbackFinal = ativ.feedbackFinal ? ativ.feedbackFinal.trim() : '';
-                const feedbackSugerido = ativ.feedbackSugerido.trim();
+                const feedbackFinal = ativ.feedbackFinal ? String(ativ.feedbackFinal).trim() : '';
+                const feedbackSugerido = String(ativ.feedbackSugerido).trim();
                 
                 if (feedbackFinal === feedbackSugerido) {
                   iaOriginais++;
@@ -143,8 +143,6 @@ export default function Dashboard() {
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: percentualIA });
 
         } else {
-          setProximosEventos([]);
-          setTarefasEmAndamento([]);
           setKanban({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
           setMetricasIA({ total: 0, originais: 0, percentual: 0 });
         }
@@ -156,41 +154,16 @@ export default function Dashboard() {
 
   async function handleCriarAcessar(e) {
     e.preventDefault(); const nomeInst = novaInstituicao.trim(); if (!nomeInst) return;
-    try { 
-      setSalvando(true); 
-      const docRef = await addDoc(collection(db, 'instituicoes'), { 
-        nome: nomeInst, 
-        professorUid: currentUser.uid, 
-        status: 'ativa', 
-        dataCriacao: serverTimestamp() 
-      }); 
-      setEscolaSelecionada({ id: docRef.id, nome: nomeInst }); 
-    } 
+    try { setSalvando(true); const docRef = await addDoc(collection(db, 'instituicoes'), { nome: nomeInst, professorUid: currentUser.uid, status: 'ativa', dataCriacao: serverTimestamp() }); setEscolaSelecionada({ id: docRef.id, nome: nomeInst }); } 
     catch (error) { console.error("Erro ao criar instituição:", error); } 
     finally { setSalvando(false); }
   }
 
-  async function handleSalvarEdicaoInst(e, id) {
-    e.stopPropagation(); if (!nomeInstEdicao.trim()) return;
-    try { await updateDoc(doc(db, 'instituicoes', id), { nome: nomeInstEdicao.trim() }); setInstituicoes(instituicoes.map(inst => inst.id === id ? { ...inst, nome: nomeInstEdicao.trim() } : inst)); setEditandoInstId(null); if (escolaSelecionada?.id === id) setEscolaSelecionada({ id, nome: nomeInstEdicao.trim() }); } 
-    catch (error) { console.error("Erro editar:", error); }
-  }
-
-  async function handleLixeiraInstituicao(e, id, nome) {
-    e.stopPropagation(); if (!window.confirm(`Apagar o espaço "${nome}"?\n\nEle será enviado para a lixeira.`)) return;
-    try { await updateDoc(doc(db, 'instituicoes', id), { status: 'lixeira' }); setInstituicoes(instituicoes.filter(inst => inst.id !== id)); } 
-    catch (error) { console.error("Erro:", error); }
-  }
-  
   const temTurmas = minhasTurmas.length > 0;
-
   const getNomeVisivelTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
-    if (t === 'compromisso') return 'Compromisso';
-    if (t === 'lembrete') return 'Post-it';
-    return 'Tarefa do Aluno';
+    return t === 'compromisso' ? 'Compromisso' : t === 'lembrete' ? 'Post-it' : 'Tarefa do Aluno';
   };
-
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   if (!escolaSelecionada) {
@@ -201,43 +174,19 @@ export default function Dashboard() {
           <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
           <p className="text-gray-500 mt-2 text-base md:text-lg px-2">Selecione o seu ambiente de trabalho para continuar.</p>
         </div>
-
         <div className="flex flex-col gap-8 w-full max-w-2xl mx-auto">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
             <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2"><LayoutDashboard size={18}/> Suas Instituições Ativas</h2>
-            {loadingInst ? ( <div className="text-gray-400 text-sm font-medium animate-pulse text-center py-6">Carregando...</div> ) : instituicoes.length === 0 ? (
-              <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200"><p className="text-gray-500 text-sm font-medium">Nenhuma instituição cadastrada.</p></div>
-            ) : (
+            {loadingInst ? ( <div className="text-gray-400 text-sm font-medium animate-pulse text-center py-6">Carregando...</div> ) : (
               <div className="space-y-3">
                 {instituicoes.map(inst => (
                   <div key={inst.id} className="w-full bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center justify-between hover:bg-blue-600 hover:text-white transition-all group cursor-pointer shadow-sm" onClick={() => setEscolaSelecionada(inst)}>
-                    {editandoInstId === inst.id ? (
-                      <div className="flex items-center gap-2 w-full pr-2" onClick={e => e.stopPropagation()}>
-                        <input type="text" value={nomeInstEdicao} onChange={(e) => setNomeInstEdicao(e.target.value)} className="w-full border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800" autoFocus />
-                        <button onClick={(e) => handleSalvarEdicaoInst(e, inst.id)} className="bg-green-500 text-white p-1.5 rounded-lg hover:bg-green-600 shadow-sm"><Check size={16}/></button>
-                        <button onClick={(e) => { e.stopPropagation(); setEditandoInstId(null); }} className="bg-gray-200 text-gray-600 p-1.5 rounded-lg hover:bg-gray-300"><X size={16}/></button>
-                      </div>
-                    ) : (
-                      <>
-                        <span className="flex-1 text-left font-black text-blue-800 group-hover:text-white text-lg truncate">{inst.nome}</span>
-                        <div className="flex items-center gap-1">
-                          <button onClick={(e) => { e.stopPropagation(); setEditandoInstId(inst.id); setNomeInstEdicao(inst.nome); }} className="p-2 text-blue-400 hover:text-white hover:bg-blue-500 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Pencil size={18} /></button>
-                          <button onClick={(e) => handleLixeiraInstituicao(e, inst.id, inst.nome)} className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={18} /></button>
-                          <div className="p-2 text-blue-600 group-hover:text-white ml-1"><ArrowRight size={24} /></div>
-                        </div>
-                      </>
-                    )}
+                    <span className="flex-1 text-left font-black text-blue-800 group-hover:text-white text-lg truncate">{inst.nome}</span>
+                    <ArrowRight size={24} />
                   </div>
                 ))}
               </div>
             )}
-          </div>
-          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
-             <h2 className="text-sm font-bold text-gray-500 mb-4 flex items-center gap-2"><Plus size={18}/> Cadastrar Novo Vínculo</h2>
-            <form onSubmit={handleCriarAcessar} className="flex gap-2">
-              <input type="text" required placeholder="Ex: UFPI..." className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 transition-colors font-medium outline-none" value={novaInstituicao} onChange={(e) => setNovaInstituicao(e.target.value)} />
-              <button type="submit" disabled={salvando} className="bg-gray-800 text-white font-bold py-3 px-6 rounded-xl hover:bg-gray-900 disabled:opacity-50 transition-all shadow-sm">{salvando ? '...' : 'Criar'}</button>
-            </form>
           </div>
         </div>
       </div>
@@ -246,7 +195,77 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* O RESTANTE DO CÓDIGO DO SEU DASHBOARD CONTINUA EXATAMENTE IGUAL AQUI PARA BAIXO */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 justify-between border-b border-gray-200 pb-6">
+        <div className="flex items-center gap-3 w-full">
+          <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm shrink-0"><GraduationCap size={28} /></div>
+          <div className="flex-1">
+            <h1 className="text-2xl font-black text-gray-800 leading-tight">Centro de Comando</h1>
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-gray-500 text-sm font-medium">Instituição:</span>
+              <select className="bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-lg py-1 px-2 font-bold cursor-pointer outline-none" value={escolaSelecionada.id}
+                onChange={(e) => { const val = e.target.value; if (val === 'NOVA') setEscolaSelecionada(null); else { const inst = instituicoes.find(i => i.id === val); if (inst) setEscolaSelecionada(inst); } }}
+              >
+                {instituicoes.map(inst => <option key={inst.id} value={inst.id}>{inst.nome}</option>)}
+                <option value="NOVA">+ Nova Instituição</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {!temTurmas && !loadingDados ? (
+        <div className="mb-10 text-center bg-blue-50 border-2 border-dashed border-blue-200 p-10 rounded-3xl max-w-2xl mx-auto">
+          <Building2 className="mx-auto text-blue-400 mb-4" size={48}/>
+          <h2 className="text-xl font-black text-blue-900 mb-2">Quase lá!</h2>
+          <p className="text-blue-700 font-medium mb-6">A migração criou os dados, mas você precisa entrar na aba "Turmas" para conferir se está tudo certo.</p>
+          <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-3 px-8 rounded-xl shadow-lg hover:bg-blue-700 transition-all"><Plus size={20}/> Ir para Turmas</Link>
+        </div>
+      ) : (
+        <>
+          <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800">
+            <div className="flex gap-4 items-start w-full">
+              <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner">
+                <Calendar size={24} className="text-blue-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-black text-white mb-2 tracking-wide">Situação das Atividades</h2>
+                <div className="space-y-1.5 text-sm font-medium text-slate-200">
+                  <p>Instituição: <span className="text-blue-400">{escolaSelecionada.nome}</span></p>
+                  <p>Confira o histórico migrado abaixo.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {isAdmin && metricasIA.total > 0 && (
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl p-6 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 p-3 rounded-xl shrink-0"><Sparkles size={28} className="text-purple-100" /></div>
+                <div>
+                  <h2 className="text-lg md:text-xl font-black text-white tracking-wide">Termômetro da IA (Histórico)</h2>
+                  <p className="text-purple-200 text-sm font-medium mt-0.5">Feedbacks migrados sem alteração.</p>
+                </div>
+              </div>
+              <div className="text-left md:text-right shrink-0">
+                <span className="block text-4xl md:text-5xl font-black text-white tracking-tighter">{metricasIA.percentual}%</span>
+              </div>
+            </div>
+          )}
+
+          <div className={`grid grid-cols-1 gap-4 mb-10 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2 max-w-4xl mx-auto'}`}>
+            {mostrarRevisao && (
+              <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                <h3 className="text-xs font-bold text-yellow-600 uppercase tracking-widest mb-4">Aguardando Revisão</h3>
+                <span className="text-4xl font-black text-gray-800">{kanban.pendentes}</span>
+              </div>
+            )}
+            <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+              <h3 className="text-xs font-bold text-green-600 uppercase tracking-widest mb-4">Finalizados (Migrados)</h3>
+              <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
