@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -21,7 +21,11 @@ export default function Alunos() {
 
   const [novoAluno, setNovoAluno] = useState({ nome: '', whatsapp: '', email: '', turmaId: '' });
   const [salvando, setSalvando] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false); // NOVO: Controle do Modal Vapt-Vupt
+  const [isModalOpen, setIsModalOpen] = useState(false); 
+  
+  // ESTADOS DO EFEITO UAU (Vapt-Vupt)
+  const [sucessoMsg, setSucessoMsg] = useState('');
+  const nomeInputRef = useRef(null); // Puxa o mouse de volta pro campo
 
   const [editandoId, setEditandoId] = useState(null);
   const [nomeEdicao, setNomeEdicao] = useState('');
@@ -86,10 +90,12 @@ export default function Alunos() {
     e.preventDefault();
     if (!novoAluno.nome.trim() || !novoAluno.turmaId) return;
 
+    const nomeSalvo = novoAluno.nome.trim(); // Guarda o nome para a mensagem de sucesso
+
     try {
       setSalvando(true);
       const alunoData = {
-        nome: novoAluno.nome.trim(),
+        nome: nomeSalvo,
         whatsapp: novoAluno.whatsapp.trim(),
         email: novoAluno.email.trim(),
         turmaId: novoAluno.turmaId,
@@ -103,8 +109,24 @@ export default function Alunos() {
       const novaLista = [{ id: docRef.id, ...alunoData }, ...alunos];
       setAlunos(novaLista.sort((a, b) => a.nome.localeCompare(b.nome)));
       
-      // Limpa os campos para o próximo cadastro (vapt-vupt), mas mantém a turma!
+      // Limpa os campos
       setNovoAluno(prev => ({ ...prev, nome: '', whatsapp: '', email: '' }));
+
+      // GATILHA O EFEITO UAU
+      setSucessoMsg(`${nomeSalvo} matriculado(a) com sucesso!`);
+      
+      // Some com a mensagem de sucesso após 3 segundos
+      setTimeout(() => {
+        setSucessoMsg('');
+      }, 3000);
+
+      // Puxa o cursor do mouse de volta para o campo Nome automaticamente
+      setTimeout(() => {
+        if (nomeInputRef.current) {
+          nomeInputRef.current.focus();
+        }
+      }, 100);
+
     } catch (error) {
       console.error("Erro ao criar aluno:", error);
     } finally {
@@ -159,7 +181,6 @@ export default function Alunos() {
     <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Alunos' }]} />
       
-      {/* CABEÇALHO PROTAGONISTA */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-8">
         <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
           <div className="bg-green-100 text-green-600 p-2.5 rounded-xl shadow-sm"><Users size={26} /></div>
@@ -175,7 +196,6 @@ export default function Alunos() {
         )}
       </div>
 
-      {/* BARRA DE BUSCA E FILTRO EM DESTAQUE */}
       {turmas.length > 0 && (
         <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
@@ -196,7 +216,6 @@ export default function Alunos() {
         </div>
       )}
 
-      {/* CONTEÚDO PRINCIPAL (LISTA OU EMPTY STATES) */}
       <div className="space-y-4">
         {turmas.length > 0 && (
           <div className="flex items-center justify-between px-1 mb-2">
@@ -311,9 +330,22 @@ export default function Alunos() {
             
             <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50">
               <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Plus className="text-blue-600"/> Matricular Aluno</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-105"><X size={20}/></button>
+              <button 
+                onClick={() => { setIsModalOpen(false); setSucessoMsg(''); }} 
+                className="text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-105"
+              >
+                <X size={20}/>
+              </button>
             </div>
             
+            {/* ALERTA VISUAL DE SUCESSO */}
+            {sucessoMsg && (
+              <div className="mx-6 mt-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-2 fade-in duration-300">
+                <Check size={20} className="shrink-0" />
+                <span className="text-sm font-bold">{sucessoMsg}</span>
+              </div>
+            )}
+
             <form onSubmit={handleCriar} className="p-6 md:p-8 space-y-5">
               <div>
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Turma de Destino</label>
@@ -328,6 +360,7 @@ export default function Alunos() {
               <div>
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Nome Completo</label>
                 <input
+                  ref={nomeInputRef} // <-- A MÁGICA DO FOCO ESTÁ AQUI
                   type="text" required autoFocus placeholder="Ex: Maria da Silva..."
                   className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400"
                   value={novoAluno.nome} onChange={e => setNovoAluno({...novoAluno, nome: e.target.value})}
@@ -352,8 +385,17 @@ export default function Alunos() {
                 />
               </div>
 
-              <button disabled={salvando || !novoAluno.turmaId} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg">
-                <Check size={24}/> {salvando ? 'Salvando...' : 'Matricular e Continuar'}
+              {/* BOTÃO MUTANTE (Muda de cor com o sucesso) */}
+              <button 
+                disabled={salvando || !novoAluno.turmaId} 
+                className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg ${
+                  sucessoMsg 
+                    ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20 scale-105' 
+                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
+                }`}
+              >
+                <Check size={24}/> 
+                {salvando ? 'Salvando...' : sucessoMsg ? 'Cadastrado com Sucesso!' : 'Matricular e Continuar'}
               </button>
             </form>
           </div>
