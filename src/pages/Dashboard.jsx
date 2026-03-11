@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, LayoutDashboard } from 'lucide-react';
+import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, Rocket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -18,7 +18,12 @@ export default function Dashboard() {
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
   const [loading, setLoading] = useState(true);
+  
+  // Estados para o Tapete Vermelho (Onboarding)
+  const [temAlunos, setTemAlunos] = useState(true); 
+  const [temTarefasGeral, setTemTarefasGeral] = useState(true);
 
+  // 1. Busca Instituições
   useEffect(() => {
     async function fetchInst() {
       if (!currentUser) return;
@@ -43,6 +48,7 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isAdmin, setEscolaSelecionada]);
 
+  // 2. Busca Dados para Onboarding e Dashboard
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id) return;
@@ -52,6 +58,7 @@ export default function Dashboard() {
       setTarefasEmAndamento([]);
       
       try {
+        // Verifica Turmas (Passo 2)
         const qTurmas = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapT = await getDocs(qTurmas);
         const turmasVivas = snapT.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
@@ -59,25 +66,44 @@ export default function Dashboard() {
 
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
+
+          // Verifica Alunos (Passo 3)
+          const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
+          const snapAlunos = await getDocs(qAlunos);
+          const alunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira');
+          setTemAlunos(alunosVivos.length > 0);
           
+          // Verifica Tarefas Gerais (Passo 4)
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
+          const tarefasVivas = snapTarefas.docs.map(d => ({id: d.id, ...d.data()})).filter(t => t.status !== 'lixeira');
+          setTemTarefasGeral(tarefasVivas.length > 0);
+
+          // Prepara o Radar de Tarefas Ativas
           const agora = new Date();
-          
-          const ativas = snapTarefas.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId) && t.dataFim)
+          const ativas = tarefasVivas
+            .filter(t => tIds.includes(t.turmaId))
             .map(t => {
-              const dataF = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
+              const dataRaw = t.dataFim || t.data || t.prazo || t.vencimento;
+              if (!dataRaw) return null;
+              let dataF;
+              try { dataF = dataRaw.toDate ? dataRaw.toDate() : new Date(dataRaw); } catch(e) { return null; }
+              if (isNaN(dataF)) return null;
+
               const diasRestantes = Math.ceil((dataF.getTime() - agora.getTime()) / (1000 * 3600 * 24));
-              return { ...t, diasRestantes };
+              return { 
+                ...t, 
+                diasRestantes,
+                nomeTarefa: t.nomeTarefa || t.titulo || t.nome || t.modulo || 'Atividade Agendada'
+              };
             })
-            .filter(t => t.diasRestantes >= 0)
+            .filter(t => t && t.diasRestantes >= 0)
             .sort((a, b) => a.diasRestantes - b.diasRestantes)
             .slice(0, 3);
             
           setTarefasEmAndamento(ativas);
 
+          // Lógica do Kanban Bilíngue
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
           
@@ -87,19 +113,19 @@ export default function Dashboard() {
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
             if (tIds.includes(d.turmaId)) {
-              if (d.postado === true) ok++; 
-              else if (d.status === 'aprovado') f++;  
+              const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
+              const jaAprovado = d.status === 'aprovado' || d.status === 'revisado' || (d.feedbackFinal && String(d.feedbackFinal).trim() !== '');
+
+              if (jaPostado) ok++; 
+              else if (jaAprovado) f++;  
               else p++;  
 
-              const isAprovado = d.status === 'aprovado' || d.postado === true;
-              const temSugerido = d.feedbackSugerido && String(d.feedbackSugerido).trim() !== '';
+              const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
+              const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
               
-              if (isAprovado && temSugerido) {
+              if ((jaAprovado || jaPostado) && fSugerido !== '') {
                 iaTotal++;
-                const feedbackFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
-                const feedbackSugerido = String(d.feedbackSugerido).trim();
-                
-                if (feedbackFinal === feedbackSugerido) iaOriginais++;
+                if (fFinal === fSugerido) iaOriginais++;
               }
             }
           });
@@ -117,12 +143,20 @@ export default function Dashboard() {
 
   if (loading) return <div className="p-20 text-center font-bold">Carregando Estação...</div>;
 
+  // =========================================================================
+  // ONBOARDING - PASSO 1: Não tem Instituição
+  // =========================================================================
   if (!escolaSelecionada) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-12 text-center">
-        <div className="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg"><LayoutDashboard size={32} /></div>
-        <h1 className="text-3xl font-black text-gray-800 tracking-tight">Bem-vindo(a)!</h1>
-        <p className="text-gray-500 mt-2 text-lg">Você ainda não possui instituições ativas.</p>
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <div className="bg-blue-600 text-white w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-600/30">
+          <School size={48} />
+        </div>
+        <h1 className="text-4xl font-black text-gray-800 tracking-tight mb-4">Bem-vindo(a) ao seu novo painel!</h1>
+        <p className="text-gray-500 text-lg mb-10 max-w-lg mx-auto font-medium">Para começarmos a organizar sua vida acadêmica, o primeiro passo é nos dizer onde você ensina.</p>
+        <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 hover:-translate-y-1 transition-all text-lg">
+          Passo 1: Criar Instituição <ChevronRight size={20}/>
+        </Link>
       </div>
     );
   }
@@ -146,20 +180,57 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* =========================================================================
+          ONBOARDING - PASSO 2: Não tem Turma
+          ========================================================================= */}
       {minhasTurmas.length === 0 ? (
-        <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto">
-          <Building2 className="mx-auto text-blue-400 mb-4" size={48}/>
-          <h2 className="text-xl font-black text-blue-900 mb-2">Quase lá!</h2>
-          <p className="text-blue-700 font-medium mb-6">A migração criou a base, mas você precisa entrar na aba "Turmas" para conferir se está tudo certo.</p>
-          <Link to="/turmas" className="inline-flex bg-blue-600 text-white font-black py-3 px-8 rounded-xl shadow-lg hover:bg-blue-700 transition-all">Ir para Turmas</Link>
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-8">
+          <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi criada.</h2>
+          <p className="text-gray-500 font-medium mb-8 text-lg">Agora, precisamos criar a sua primeira sala de aula para começarmos a organizar as atividades.</p>
+          <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg hover:bg-blue-700 hover:-translate-y-0.5 transition-all">
+            Passo 2: Criar Turma <ChevronRight size={18}/>
+          </Link>
+        </div>
+      ) : 
+
+      /* =========================================================================
+         ONBOARDING - PASSO 3: Não tem Alunos
+         ========================================================================= */
+      !temAlunos ? (
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-8">
+          <div className="bg-orange-50 text-orange-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><UserPlus size={40}/></div>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">Turma criada! Mas e os alunos?</h2>
+          <p className="text-gray-500 font-medium mb-8 text-lg">Uma sala de aula não funciona sem eles. Vamos adicionar a lista de alunos para que eles possam receber as atividades.</p>
+          <Link to="/alunos" className="inline-flex items-center gap-2 bg-orange-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-orange-600/20 hover:bg-orange-700 hover:-translate-y-0.5 transition-all">
+            Passo 3: Cadastrar Alunos <ChevronRight size={18}/>
+          </Link>
+        </div>
+      ) : 
+
+      /* =========================================================================
+         ONBOARDING - PASSO 4: Não tem Tarefas
+         ========================================================================= */
+      !temTarefasGeral ? (
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-8">
+          <div className="bg-purple-50 text-purple-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><FileText size={40}/></div>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">Tudo pronto! Vamos ao trabalho.</h2>
+          <p className="text-gray-500 font-medium mb-8 text-lg">Sua turma já tem alunos cadastrados. Que tal lançar o seu primeiro desafio ou atividade para eles?</p>
+          <Link to="/tarefas" className="inline-flex items-center gap-2 bg-purple-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-purple-600/20 hover:bg-purple-700 hover:-translate-y-0.5 transition-all">
+            Passo 4: Criar Tarefa <ChevronRight size={18}/>
+          </Link>
         </div>
       ) : (
+
+      /* =========================================================================
+         DASHBOARD OFICIAL (Quando todos os passos estão completos)
+         ========================================================================= */
         <>
           {/* PAINEL DE SITUAÇÃO DO CURSO */}
           <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800">
             <div className="flex gap-4 items-start w-full">
               <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner">
-                <Calendar size={24} className="text-blue-400" />
+                <Rocket size={24} className="text-blue-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-base font-black text-white mb-1.5 tracking-wide">Ponto de Situação do Curso</h2>
