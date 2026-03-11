@@ -6,6 +6,23 @@ import { useAuth } from '../contexts/AuthContext';
 import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, Check, X, Clock } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
+// MOTOR DE ORDENAÇÃO INTELIGENTE (Vence primeiro no topo, sem data no final)
+const ordenarTarefas = (lista) => {
+  return [...lista].sort((a, b) => {
+    const timeA = a.dataFim?.toMillis ? a.dataFim.toMillis() : 0;
+    const timeB = b.dataFim?.toMillis ? b.dataFim.toMillis() : 0;
+
+    if (timeA === 0 && timeB !== 0) return 1; // A sem data vai pro final
+    if (timeA !== 0 && timeB === 0) return -1; // A com data vem pro começo
+    if (timeA !== 0 && timeB !== 0) return timeA - timeB; // Crescente (vence 1º aparece 1º)
+
+    // Se ambas não têm data, a mais nova criada fica no topo
+    const criaA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
+    const criaB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
+    return criaB - criaA;
+  });
+};
+
 export default function Tarefas() {
   const { currentUser, escolaSelecionada } = useAuth();
   const location = useLocation();
@@ -78,7 +95,9 @@ export default function Tarefas() {
         const qT = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id), where('turmaId', '==', turmaAtiva));
         const snapT = await getDocs(qT);
         const tarefasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
-        setTarefas(tarefasData.sort((a, b) => (b.dataCriacao?.toMillis() || 0) - (a.dataCriacao?.toMillis() || 0)));
+        
+        // Aplica a nova ordenação na primeira carga
+        setTarefas(ordenarTarefas(tarefasData));
 
         const qA = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapA = await getDocs(qA);
@@ -144,7 +163,10 @@ export default function Tarefas() {
         nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(),
         dataFim: prazoFinal, tipo: tipoEdicao
       });
-      setTarefas(tarefas.map(t => t.id === id ? { ...t, nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(), dataFim: prazoFinal, tipo: tipoEdicao } : t));
+      
+      // Reordena a lista com os novos prazos
+      const listaAtualizada = tarefas.map(t => t.id === id ? { ...t, nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(), dataFim: prazoFinal, tipo: tipoEdicao } : t);
+      setTarefas(ordenarTarefas(listaAtualizada));
       setEditandoId(null);
     } catch (error) { console.error("Erro ao salvar:", error); }
   }
@@ -201,7 +223,9 @@ export default function Tarefas() {
         await batch.commit(); 
       }
 
-      setTarefas([{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas]);
+      // Adiciona o novo registro e reordena tudo para ele cair no lugar certo
+      const listaComNovo = [{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas];
+      setTarefas(ordenarTarefas(listaComNovo));
       
       // EFEITO UAU: Limpa, avisa e foca novamente
       setNovaTarefa({ titulo: '', enunciado: '', dataFim: '', horaFim: '', tipo: 'entrega' });
@@ -288,7 +312,7 @@ export default function Tarefas() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
             <input 
               type="text" placeholder="Procurar no radar da turma..." 
-              className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-gray-700 transition-all placeholder:font-medium"
+              className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-gray-700 transition-all placeholder:font-medium"
               value={busca} onChange={e => setBusca(e.target.value)} 
             />
           </div>
@@ -296,7 +320,7 @@ export default function Tarefas() {
           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-2 min-w-[240px]">
              <GraduationCap size={20} className="text-gray-400 ml-2" />
              <select 
-               className="w-full py-3.5 bg-transparent outline-none text-sm font-black text-blue-700 cursor-pointer" 
+               className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-blue-700 cursor-pointer" 
                value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}
              >
                <option value="" disabled>Selecione a Turma...</option>
@@ -345,7 +369,7 @@ export default function Tarefas() {
                   <div className="space-y-4 animate-in fade-in zoom-in duration-200">
                     <div>
                       <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Tipo de Registro</label>
-                      <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold bg-white outline-none cursor-pointer" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
+                      <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium bg-white outline-none cursor-pointer" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
                         <option value="entrega">📝 Tarefa do Aluno</option>
                         <option value="compromisso">📅 Compromisso</option>
                         <option value="lembrete">💡 Post-it</option>
@@ -354,22 +378,22 @@ export default function Tarefas() {
 
                     <div>
                       <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Título</label>
-                      <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
+                      <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium outline-none text-slate-800" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
                     </div>
                     
                     <div>
                       <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Observações</label>
-                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm outline-none resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="2"/>
+                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-normal outline-none resize-none text-slate-700" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3"/>
                     </div>
                     
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Data Final</label>
-                        <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none text-gray-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
+                        <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium outline-none text-gray-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
                       </div>
                       <div className="w-1/3">
                         <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Hora</label>
-                        <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none text-gray-700" value={horaFimEdicao} onChange={e => setHoraFimEdicao(e.target.value)}/>
+                        <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium outline-none text-gray-700" value={horaFimEdicao} onChange={e => setHoraFimEdicao(e.target.value)}/>
                       </div>
                     </div>
 
@@ -398,7 +422,7 @@ export default function Tarefas() {
                       )}
 
                       {tarefa.enunciado && (
-                        <p className="text-sm text-gray-600 font-medium line-clamp-2 mb-4 bg-white/50 p-2 rounded-lg">{tarefa.enunciado}</p>
+                        <p className="text-sm text-gray-600 font-normal line-clamp-2 mb-4 bg-white/50 p-2 rounded-lg">{tarefa.enunciado}</p>
                       )}
                     </div>
                     
@@ -443,7 +467,7 @@ export default function Tarefas() {
               <div>
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Tipo de Registro</label>
                 <select 
-                  className="w-full px-4 py-3.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-blue-700 transition-colors cursor-pointer"
+                  className="w-full px-4 py-3.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-blue-700 transition-colors cursor-pointer"
                   value={novaTarefa.tipo} onChange={e => {setNovaTarefa({...novaTarefa, tipo: e.target.value}); setAtribuicaoEspecifica(false);}}
                 >
                   <option value="entrega">📝 Tarefa do Aluno (Requer entrega)</option>
@@ -457,7 +481,7 @@ export default function Tarefas() {
                 <input
                   ref={tituloInputRef}
                   type="text" required autoFocus placeholder="Ex: Módulo 1 - Desafio..."
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400"
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-800 transition-all placeholder:font-normal placeholder:text-gray-400"
                   value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})}
                 />
               </div>
@@ -466,7 +490,7 @@ export default function Tarefas() {
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Observações (Opcional)</label>
                 <textarea
                   placeholder="Enunciado, instruções ou link..." rows="3"
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400 resize-none"
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-normal text-slate-700 transition-all placeholder:font-normal placeholder:text-gray-400 resize-none"
                   value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}
                 />
               </div>
@@ -476,7 +500,7 @@ export default function Tarefas() {
                   <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Prazo Final</label>
                   <input
                     type="date"
-                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all"
+                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all"
                     value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}
                   />
                 </div>
@@ -484,7 +508,7 @@ export default function Tarefas() {
                   <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora</label>
                   <input
                     type="time"
-                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all"
+                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all"
                     value={novaTarefa.horaFim} onChange={e => setNovaTarefa({...novaTarefa, horaFim: e.target.value})}
                   />
                 </div>
