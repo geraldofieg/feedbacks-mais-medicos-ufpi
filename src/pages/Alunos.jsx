@@ -7,7 +7,6 @@ import { Users, Plus, Search, Pencil, Trash2, Check, X, GraduationCap, Phone, Ma
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Alunos() {
-  // AJUSTE: Inserido o userProfile para ler o Nível de Acesso
   const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const location = useLocation();
   
@@ -22,6 +21,7 @@ export default function Alunos() {
 
   const [novoAluno, setNovoAluno] = useState({ nome: '', whatsapp: '', email: '', turmaId: '' });
   const [salvando, setSalvando] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false); // NOVO: Controle do Modal Vapt-Vupt
 
   const [editandoId, setEditandoId] = useState(null);
   const [nomeEdicao, setNomeEdicao] = useState('');
@@ -29,14 +29,13 @@ export default function Alunos() {
   const [emailEdicao, setEmailEdicao] = useState('');
   const [turmaIdEdicao, setTurmaIdEdicao] = useState('');
 
-  // AJUSTE: Definição de quem é Admin lendo o banco de dados
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== filtroTurma) {
       setFiltroTurma(location.state.turmaIdSelecionada);
     }
-  }, [location.state]);
+  }, [location.state, filtroTurma]);
 
   useEffect(() => {
     if (filtroTurma && filtroTurma !== 'todas') {
@@ -50,7 +49,6 @@ export default function Alunos() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoading(true);
       try {
-        // AJUSTE: A CHAVE MESTRA NAS TURMAS PARA O GESTOR PODER MATRICULAR EM QUALQUER UMA
         const turmasRef = collection(db, 'turmas');
         const qTurmas = isAdmin 
           ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
@@ -70,10 +68,7 @@ export default function Alunos() {
           setNovoAluno(prev => ({ ...prev, turmaId: turmasData[0].id }));
         }
 
-        // Busca todos os alunos da instituição (o filtro acontece na tela)
-        const qAlunos = query(collection(db, 'alunos'), 
-          where('instituicaoId', '==', escolaSelecionada.id)
-        );
+        const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAlunos = await getDocs(qAlunos);
         const alunosData = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira');
         
@@ -85,7 +80,7 @@ export default function Alunos() {
       }
     }
     fetchData();
-  }, [currentUser, userProfile, escolaSelecionada]); // userProfile adicionado como dependência
+  }, [currentUser, isAdmin, escolaSelecionada, filtroTurma, location.state]);
 
   async function handleCriar(e) {
     e.preventDefault();
@@ -108,6 +103,7 @@ export default function Alunos() {
       const novaLista = [{ id: docRef.id, ...alunoData }, ...alunos];
       setAlunos(novaLista.sort((a, b) => a.nome.localeCompare(b.nome)));
       
+      // Limpa os campos para o próximo cadastro (vapt-vupt), mas mantém a turma!
       setNovoAluno(prev => ({ ...prev, nome: '', whatsapp: '', email: '' }));
     } catch (error) {
       console.error("Erro ao criar aluno:", error);
@@ -160,184 +156,210 @@ export default function Alunos() {
   const getNomeTurma = (idTurma) => turmas.find(t => t.id === idTurma)?.nome || 'Turma não encontrada';
   
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
-      <div className="mb-6">
-        <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Alunos' }]} />
-        <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 mt-3 tracking-tight">
-          <Users className="text-green-600" size={22} /> Gestão de Alunos
+    <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
+      <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Alunos' }]} />
+      
+      {/* CABEÇALHO PROTAGONISTA */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-8">
+        <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
+          <div className="bg-green-100 text-green-600 p-2.5 rounded-xl shadow-sm"><Users size={26} /></div>
+          Gestão de Alunos
         </h1>
+        {turmas.length > 0 && (
+          <button 
+            onClick={() => setIsModalOpen(true)} 
+            className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+          >
+            <Plus size={20}/> Novo Aluno
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1">
-          <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-200 shadow-sm sticky top-24">
-            
-            {turmas.length === 0 && !loading ? (
-              <div className="text-center py-8">
-                <GraduationCap className="mx-auto text-blue-300 mb-3" size={40} />
-                <h3 className="font-bold text-gray-700 mb-2">Nenhuma turma criada</h3>
-                <p className="text-xs text-gray-500 mb-4">Você precisa criar uma turma antes de matricular alunos.</p>
-                <Link to="/turmas" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm block text-center">Criar Turma</Link>
-              </div>
-            ) : (
-              <>
-                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Matricular Novo Aluno</h2>
-                <form onSubmit={handleCriar} className="space-y-4">
-                  
-                  <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-1 block mb-1">Turma de Destino</label>
-                    <select 
-                      className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-blue-700 transition-colors cursor-pointer"
-                      value={novoAluno.turmaId} onChange={e => setNovoAluno({...novoAluno, turmaId: e.target.value})}
-                      required
-                    >
-                      {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Nome Completo</label>
-                    <input
-                      type="text" required placeholder="Ex: Maria da Silva..."
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl mt-1 focus:ring-2 focus:ring-green-500 outline-none font-medium text-gray-800"
-                      value={novoAluno.nome} onChange={e => setNovoAluno({...novoAluno, nome: e.target.value})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-1 flex items-center gap-1"><Phone size={12}/> WhatsApp (Opcional)</label>
-                    <input
-                      type="text" placeholder="Ex: 11999999999"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl mt-1 focus:ring-2 focus:ring-green-500 outline-none font-medium text-gray-800"
-                      value={novoAluno.whatsapp} onChange={e => setNovoAluno({...novoAluno, whatsapp: e.target.value})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-1 flex items-center gap-1"><Mail size={12}/> E-mail (Opcional)</label>
-                    <input
-                      type="email" placeholder="Ex: aluno@email.com"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl mt-1 focus:ring-2 focus:ring-green-500 outline-none font-medium text-gray-800"
-                      value={novoAluno.email} onChange={e => setNovoAluno({...novoAluno, email: e.target.value})}
-                    />
-                  </div>
-
-                  <button disabled={salvando || !novoAluno.turmaId} className="w-full bg-green-600 text-white font-black py-4 rounded-xl hover:bg-green-700 transition-all shadow-md flex items-center justify-center gap-2 mt-2 disabled:opacity-50">
-                    <Plus size={20}/> {salvando ? 'Salvando...' : 'Matricular Aluno'}
-                  </button>
-                </form>
-              </>
-            )}
+      {/* BARRA DE BUSCA E FILTRO EM DESTAQUE */}
+      {turmas.length > 0 && (
+        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
+            <input 
+              type="text" placeholder="Buscar aluno por nome..." 
+              className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-gray-700 transition-all placeholder:font-medium"
+              value={busca} onChange={e => setBusca(e.target.value)}
+            />
           </div>
+          <select 
+            className="px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-gray-700 cursor-pointer min-w-[240px] transition-all"
+            value={filtroTurma} onChange={e => setFiltroTurma(e.target.value)}
+          >
+            <option value="todas">Todas as Turmas</option>
+            {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
         </div>
+      )}
 
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18}/>
-              <input 
-                type="text" placeholder="Buscar aluno por nome..." 
-                className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium shadow-sm"
-                value={busca} onChange={e => setBusca(e.target.value)}
-              />
-            </div>
-            
-            <select 
-              className="px-4 py-3 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold shadow-sm text-gray-600 cursor-pointer"
-              value={filtroTurma} onChange={e => setFiltroTurma(e.target.value)}
-            >
-              <option value="todas">Todas as Turmas</option>
-              {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
+      {/* CONTEÚDO PRINCIPAL (LISTA OU EMPTY STATES) */}
+      <div className="space-y-4">
+        {turmas.length > 0 && (
+          <div className="flex items-center justify-between px-1 mb-2">
+            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Alunos Cadastrados</h2>
+            <span className="bg-gray-100 text-gray-500 text-[11px] font-black px-3 py-1 rounded-full">{alunosFiltrados.length}</span>
           </div>
+        )}
 
-          <div className="flex items-center justify-between px-1 mt-2">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Alunos Cadastrados</h2>
-            <span className="bg-gray-100 text-gray-500 text-[10px] font-black px-2 py-0.5 rounded-full">{alunosFiltrados.length}</span>
-          </div>
-
-          {loading ? (
-            <div className="p-10 text-center animate-pulse font-bold text-gray-400">Carregando alunos...</div>
-          ) : alunosFiltrados.length === 0 ? (
-            <div className="text-center py-16 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
-              <p className="text-gray-400 font-medium">Nenhum aluno encontrado.</p>
+        {loading ? (
+          <div className="p-16 text-center animate-pulse font-black text-gray-300 text-lg">Carregando lista de alunos...</div>
+        ) : turmas.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm mt-8">
+            <div className="bg-blue-50 text-blue-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <GraduationCap size={40} />
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {alunosFiltrados.map(aluno => (
-                <div key={aluno.id} className={`bg-white p-5 rounded-2xl border transition-all group ${editandoId === aluno.id ? 'border-blue-400 shadow-md ring-2 ring-blue-50' : 'border-gray-200 shadow-sm hover:border-green-200'}`}>
-                  
-                  {editandoId === aluno.id ? (
-                    <div className="space-y-4 animate-in fade-in duration-200">
-                      <div>
-                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Nome</label>
-                        <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none" value={nomeEdicao} onChange={e => setNomeEdicao(e.target.value)}/>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">WhatsApp</label>
-                        <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none" value={whatsappEdicao} onChange={e => setWhatsappEdicao(e.target.value)}/>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">E-mail</label>
-                        <input type="email" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none" value={emailEdicao} onChange={e => setEmailEdicao(e.target.value)}/>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Turma</label>
-                        <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none bg-white cursor-pointer" value={turmaIdEdicao} onChange={e => setTurmaIdEdicao(e.target.value)}>
-                          {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                        </select>
-                      </div>
-                      <div className="flex gap-2 pt-2">
-                        <button onClick={() => handleSalvarEdicao(aluno.id)} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1 shadow-sm"><Check size={16}/> Salvar</button>
-                        <button onClick={() => setEditandoId(null)} className="flex-1 bg-gray-100 text-gray-500 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1"><X size={16}/> Cancelar</button>
+            <h3 className="text-2xl font-black text-gray-800 mb-2">Nenhuma turma criada</h3>
+            <p className="text-gray-500 font-medium mb-8 text-lg">Você precisa criar uma sala de aula antes de matricular os alunos.</p>
+            <Link to="/turmas" className="bg-blue-600 text-white font-black px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 inline-flex items-center gap-2">
+              <Plus size={20}/> Criar Turma
+            </Link>
+          </div>
+        ) : alunosFiltrados.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm">
+            <div className="bg-green-50 text-green-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Users size={40}/>
+            </div>
+            <h3 className="text-2xl font-black text-gray-800 mb-2">A turma está vazia!</h3>
+            <p className="text-gray-500 font-medium mb-8 text-lg">Nenhum aluno encontrado. Que tal matricular o primeiro da lista?</p>
+            <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 inline-flex items-center gap-2">
+              <Plus size={20}/> Matricular Aluno
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {alunosFiltrados.map(aluno => (
+              <div key={aluno.id} className={`bg-white p-5 rounded-2xl border transition-all group ${editandoId === aluno.id ? 'border-blue-400 shadow-md ring-2 ring-blue-50' : 'border-gray-200 shadow-sm hover:border-green-300 hover:shadow-md'}`}>
+                
+                {editandoId === aluno.id ? (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Nome</label>
+                      <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 outline-none" value={nomeEdicao} onChange={e => setNomeEdicao(e.target.value)} autoFocus/>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">WhatsApp</label>
+                      <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 outline-none" value={whatsappEdicao} onChange={e => setWhatsappEdicao(e.target.value)}/>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">E-mail</label>
+                      <input type="email" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 outline-none" value={emailEdicao} onChange={e => setEmailEdicao(e.target.value)}/>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Turma</label>
+                      <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 outline-none bg-white cursor-pointer" value={turmaIdEdicao} onChange={e => setTurmaIdEdicao(e.target.value)}>
+                        {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <button onClick={() => handleSalvarEdicao(aluno.id)} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg text-sm font-black flex items-center justify-center gap-1 shadow-sm hover:bg-green-700"><Check size={16}/> Salvar</button>
+                      <button onClick={() => setEditandoId(null)} className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-lg text-sm font-black flex items-center justify-center gap-1 hover:bg-gray-200"><X size={16}/> Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="bg-green-50 text-green-600 p-3 rounded-xl shrink-0"><Users size={22}/></div>
+                      <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => { setEditandoId(aluno.id); setNomeEdicao(aluno.nome); setWhatsappEdicao(aluno.whatsapp || ''); setEmailEdicao(aluno.email || ''); setTurmaIdEdicao(aluno.turmaId); }}
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar"
+                        ><Pencil size={18}/></button>
+                        <button 
+                          onClick={() => handleLixeira(aluno.id, aluno.nome)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Remover"
+                        ><Trash2 size={18}/></button>
                       </div>
                     </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="bg-green-50 text-green-600 p-2.5 rounded-xl shrink-0">
-                          <Users size={20}/>
-                        </div>
-                        <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => { setEditandoId(aluno.id); setNomeEdicao(aluno.nome); setWhatsappEdicao(aluno.whatsapp || ''); setEmailEdicao(aluno.email || ''); setTurmaIdEdicao(aluno.turmaId); }}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar"
-                          ><Pencil size={18}/></button>
-                          <button 
-                            onClick={() => handleLixeira(aluno.id, aluno.nome)}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Remover"
-                          ><Trash2 size={18}/></button>
-                        </div>
-                      </div>
 
-                      <h3 className="font-black text-gray-800 text-lg leading-tight truncate mb-3" title={aluno.nome}>{aluno.nome}</h3>
+                    <h3 className="font-black text-gray-800 text-lg leading-tight truncate mb-4" title={aluno.nome}>{aluno.nome}</h3>
+                    
+                    <div className="space-y-2.5">
+                      <div className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider truncate max-w-full">
+                        <GraduationCap size={14} className="shrink-0"/> <span className="truncate">{getNomeTurma(aluno.turmaId)}</span>
+                      </div>
                       
-                      <div className="space-y-2">
-                        <div className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider truncate max-w-full">
-                          <GraduationCap size={12} className="shrink-0"/> <span className="truncate">{getNomeTurma(aluno.turmaId)}</span>
+                      {aluno.whatsapp && (
+                        <div className="flex items-center gap-2 text-slate-600 text-xs font-bold mt-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <Phone size={14} className="text-green-500 shrink-0"/> <span className="truncate">{aluno.whatsapp}</span>
                         </div>
-                        
-                        {aluno.whatsapp && (
-                          <div className="flex items-center gap-1.5 text-gray-500 text-xs font-bold mt-1 bg-gray-50 p-1.5 rounded-md border border-gray-100">
-                            <Phone size={12} className="text-green-500 shrink-0"/> <span className="truncate">{aluno.whatsapp}</span>
-                          </div>
-                        )}
+                      )}
 
-                        {aluno.email && (
-                          <div className="flex items-center gap-1.5 text-gray-500 text-xs font-bold mt-1 bg-gray-50 p-1.5 rounded-md border border-gray-100">
-                            <Mail size={12} className="text-blue-500 shrink-0"/> <span className="truncate" title={aluno.email}>{aluno.email}</span>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
+                      {aluno.email && (
+                        <div className="flex items-center gap-2 text-slate-600 text-xs font-bold mt-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <Mail size={14} className="text-blue-500 shrink-0"/> <span className="truncate" title={aluno.email}>{aluno.email}</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* =========================================================================
+          MODAL DE MATRÍCULA (VAPT-VUPT)
+          ========================================================================= */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50">
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Plus className="text-blue-600"/> Matricular Aluno</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-105"><X size={20}/></button>
+            </div>
+            
+            <form onSubmit={handleCriar} className="p-6 md:p-8 space-y-5">
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Turma de Destino</label>
+                <select 
+                  className="w-full px-4 py-3.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-blue-700 transition-colors cursor-pointer"
+                  value={novoAluno.turmaId} onChange={e => setNovoAluno({...novoAluno, turmaId: e.target.value})} required
+                >
+                  {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Nome Completo</label>
+                <input
+                  type="text" required autoFocus placeholder="Ex: Maria da Silva..."
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400"
+                  value={novoAluno.nome} onChange={e => setNovoAluno({...novoAluno, nome: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Phone size={14}/> WhatsApp (Opcional)</label>
+                <input
+                  type="text" placeholder="Ex: 11999999999"
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400"
+                  value={novoAluno.whatsapp} onChange={e => setNovoAluno({...novoAluno, whatsapp: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Mail size={14}/> E-mail (Opcional)</label>
+                <input
+                  type="email" placeholder="Ex: aluno@email.com"
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400"
+                  value={novoAluno.email} onChange={e => setNovoAluno({...novoAluno, email: e.target.value})}
+                />
+              </div>
+
+              <button disabled={salvando || !novoAluno.turmaId} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg">
+                <Check size={24}/> {salvando ? 'Salvando...' : 'Matricular e Continuar'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
