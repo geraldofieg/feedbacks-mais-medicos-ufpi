@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, CheckSquare } from 'lucide-react';
+import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, Check, X, Clock } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Tarefas() {
@@ -20,11 +20,15 @@ export default function Tarefas() {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
 
-  // AJUSTE: Separamos a Data da Hora
   const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataFim: '', horaFim: '', tipo: 'entrega' });
   const [atribuicaoEspecifica, setAtribuicaoEspecifica] = useState(false); 
   const [alunosSelecionados, setAlunosSelecionados] = useState([]); 
   const [salvando, setSalvando] = useState(false);
+  
+  // ESTADOS DO MODAL VAPT-VUPT E EFEITO UAU
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [sucessoMsg, setSucessoMsg] = useState('');
+  const tituloInputRef = useRef(null);
 
   const [editandoId, setEditandoId] = useState(null);
   const [tituloEdicao, setTituloEdicao] = useState('');
@@ -37,7 +41,7 @@ export default function Tarefas() {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
       setTurmaAtiva(location.state.turmaIdSelecionada);
     }
-  }, [location.state]);
+  }, [location.state, turmaAtiva]);
 
   useEffect(() => {
     if (turmaAtiva) localStorage.setItem('ultimaTurmaAtiva', turmaAtiva);
@@ -63,6 +67,7 @@ export default function Tarefas() {
       } catch (error) { console.error("Erro fetch turmas:", error); }
     }
     fetchTurmas();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, escolaSelecionada]);
 
   useEffect(() => {
@@ -88,7 +93,6 @@ export default function Tarefas() {
     fetchDadosTurma();
   }, [turmaAtiva, escolaSelecionada]);
 
-  // CONVERSORES SEPARADOS DE DATA E HORA PARA O MODO EDIÇÃO
   const tsToDateInput = (ts) => {
     if (!ts) return "";
     try {
@@ -112,7 +116,6 @@ export default function Tarefas() {
     } catch (e) { return ""; }
   };
 
-  // FUNÇÃO MÁGICA PARA BLINDAR FUSO HORÁRIO E INJETAR 23:59
   const criarDataSegura = (dataStr, horaStr) => {
     if (!dataStr) return null;
     const [ano, mes, dia] = dataStr.split('-');
@@ -155,12 +158,14 @@ export default function Tarefas() {
       return;
     }
 
+    const tituloSalvo = novaTarefa.titulo.trim();
+
     try {
       setSalvando(true);
       const prazoFinal = novaTarefa.dataFim ? Timestamp.fromDate(criarDataSegura(novaTarefa.dataFim, novaTarefa.horaFim)) : null;
       
       const tData = {
-        nomeTarefa: novaTarefa.titulo.trim(), enunciado: novaTarefa.enunciado.trim(),
+        nomeTarefa: tituloSalvo, enunciado: novaTarefa.enunciado.trim(),
         dataFim: prazoFinal, tipo: novaTarefa.tipo, turmaId: turmaAtiva,
         instituicaoId: escolaSelecionada.id, professorUid: currentUser.uid,
         status: 'ativa', dataCriacao: serverTimestamp()
@@ -197,9 +202,16 @@ export default function Tarefas() {
       }
 
       setTarefas([{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas]);
+      
+      // EFEITO UAU: Limpa, avisa e foca novamente
       setNovaTarefa({ titulo: '', enunciado: '', dataFim: '', horaFim: '', tipo: 'entrega' });
       setAtribuicaoEspecifica(false);
       setAlunosSelecionados([]);
+      
+      setSucessoMsg(`"${tituloSalvo}" adicionado com sucesso!`);
+      setTimeout(() => setSucessoMsg(''), 3000);
+      setTimeout(() => { if (tituloInputRef.current) tituloInputRef.current.focus(); }, 100);
+
     } catch (error) { console.error("Erro criar:", error); } finally { setSalvando(false); }
   }
 
@@ -210,7 +222,7 @@ export default function Tarefas() {
   };
 
   async function handleLixeira(id, nome) {
-    if (!window.confirm(`Remover "${nome}"?`)) return;
+    if (!window.confirm(`Remover o registro "${nome}"?\n\nIsso apagará essa tarefa do radar de todos os alunos.`)) return;
     try {
       await updateDoc(doc(db, 'tarefas', id), { status: 'lixeira' });
       setTarefas(tarefas.filter(t => t.id !== id));
@@ -235,9 +247,9 @@ export default function Tarefas() {
 
   const getCorTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
-    if (t === 'compromisso') return 'border-purple-200 bg-purple-50/20';
-    if (t === 'lembrete') return 'border-yellow-300 bg-yellow-50/40';
-    return 'border-orange-200 bg-orange-50/20';
+    if (t === 'compromisso') return 'border-purple-200 bg-purple-50/20 hover:border-purple-300';
+    if (t === 'lembrete') return 'border-yellow-300 bg-yellow-50/40 hover:border-yellow-400';
+    return 'border-orange-200 bg-orange-50/20 hover:border-orange-300';
   };
 
   const getNomeVisivelTipo = (tipo) => {
@@ -250,134 +262,241 @@ export default function Tarefas() {
   const tarefasFiltradas = tarefas.filter(t => (t.nomeTarefa || t.titulo || '').toLowerCase().includes(busca.toLowerCase()));
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Gestão e Cronograma' }]} />
       
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600"><GraduationCap size={24}/></div>
-          <div>
-            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Turma Ativa</h2>
-            <p className="text-xs text-gray-500 font-medium">Selecione para ver ou gerenciar os registros</p>
-          </div>
-        </div>
-        {turmas.length > 0 && (
-          <select className="w-full sm:w-auto px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl font-black text-blue-700 outline-none cursor-pointer focus:ring-2 focus:ring-blue-500" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
-            {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-          </select>
+      {/* CABEÇALHO PROTAGONISTA */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-8">
+        <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
+          <div className="bg-blue-100 text-blue-600 p-2.5 rounded-xl shadow-sm"><Calendar size={26} /></div>
+          Gestão de Cronograma
+        </h1>
+        {turmas.length > 0 && turmaAtiva && (
+          <button 
+            onClick={() => setIsModalOpen(true)} 
+            className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+          >
+            <Plus size={20}/> Nova Tarefa
+          </button>
         )}
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 mt-6">
-        
-        <div className="flex-1 lg:w-2/3 space-y-4">
-          <input type="text" placeholder="Procurar no radar da turma..." className="w-full px-6 py-4 bg-white border border-gray-200 rounded-2xl outline-none shadow-sm focus:ring-2 focus:ring-blue-500" value={busca} onChange={e => setBusca(e.target.value)} />
+      {/* BARRA DE BUSCA E SELETOR DE TURMA UNIFICADOS */}
+      {turmas.length > 0 && (
+        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
+            <input 
+              type="text" placeholder="Procurar no radar da turma..." 
+              className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold text-gray-700 transition-all placeholder:font-medium"
+              value={busca} onChange={e => setBusca(e.target.value)} 
+            />
+          </div>
           
-          <div className="grid grid-cols-1 gap-4">
-            {loading ? (
-              <div className="text-center py-10 font-bold text-gray-400 animate-pulse">Carregando registros...</div>
-            ) : tarefasFiltradas.length === 0 ? (
-              <div className="text-center py-12 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                <p className="text-gray-500 font-medium">Nenhum registro encontrado para esta turma.</p>
-              </div>
-            ) : (
-              tarefasFiltradas.map(tarefa => (
-                <div key={tarefa.id} className={`bg-white p-5 rounded-2xl border transition-all ${editandoId === tarefa.id ? 'border-blue-500 ring-4 ring-blue-50 shadow-lg' : `${getCorTipo(tarefa.tipo)}`}`}>
-                  {editandoId === tarefa.id ? (
-                    <div className="space-y-4 animate-in fade-in zoom-in duration-200">
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)} placeholder="Título da tarefa..."/>
-                        <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold bg-white outline-none cursor-pointer" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
-                          <option value="entrega">Tarefa do Aluno</option>
-                          <option value="compromisso">Compromisso</option>
-                          <option value="lembrete">Post-it</option>
-                        </select>
-                      </div>
-                      
-                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm outline-none resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3" placeholder="Observações/Enunciado (Opcional)..."/>
-                      
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <label className="text-[10px] font-black uppercase text-blue-500 mb-1 block pl-1">Data</label>
-                          <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none text-gray-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
-                        </div>
-                        <div className="w-1/3">
-                          <label className="text-[10px] font-black uppercase text-blue-500 mb-1 block pl-1">Hora</label>
-                          <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none text-gray-700" value={horaFimEdicao} onChange={e => setHoraFimEdicao(e.target.value)}/>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 mt-2">
-                        <button onClick={() => handleSalvarEdicao(tarefa.id)} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold shadow-md">Salvar</button>
-                        <button onClick={() => setEditandoId(null)} className="flex-1 bg-gray-100 text-gray-500 py-3 rounded-xl font-bold">Cancelar</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3 truncate">
-                        <div className="p-2.5 bg-white rounded-xl shadow-sm border border-gray-100">{getIconeTipo(tarefa.tipo)}</div>
-                        <div className="truncate">
-                          {(tarefa.tipo === 'entrega' || !tarefa.tipo) ? (
-                            <Link to={`/revisar/${tarefa.id}`} className="font-black text-orange-700 hover:text-orange-800 hover:underline truncate leading-tight flex items-center gap-1 group/link">
-                              {tarefa.nomeTarefa || tarefa.titulo} <ArrowRight size={14} className="opacity-0 group-hover/link:opacity-100 transition-opacity hidden md:block"/>
-                            </Link>
-                          ) : (
-                            <h3 className="font-black text-gray-800 truncate leading-tight">{tarefa.nomeTarefa || tarefa.titulo}</h3>
-                          )}
-                          
-                          <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                            {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem data'}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <button onClick={() => iniciarEdicao(tarefa)} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={20}/></button>
-                        <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-2.5 text-red-400 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20}/></button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-2 min-w-[240px]">
+             <GraduationCap size={20} className="text-gray-400 ml-2" />
+             <select 
+               className="w-full py-3.5 bg-transparent outline-none text-sm font-black text-blue-700 cursor-pointer" 
+               value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}
+             >
+               <option value="" disabled>Selecione a Turma...</option>
+               {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+             </select>
           </div>
         </div>
+      )}
 
-        <div className="lg:w-1/3">
-          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-sm lg:sticky lg:top-24">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Plus size={16}/> Adicionar à Turma
-            </h2>
-            <form onSubmit={handleCriar} className="space-y-4">
+      {/* LISTA DE TAREFAS OCUPANDO TELA INTEIRA */}
+      <div className="space-y-4">
+        {turmas.length > 0 && turmaAtiva && (
+          <div className="flex items-center justify-between px-1 mb-2">
+            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Registros no Radar</h2>
+            <span className="bg-gray-100 text-gray-500 text-[11px] font-black px-3 py-1 rounded-full">{tarefasFiltradas.length}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="p-16 text-center animate-pulse font-black text-gray-300 text-lg">Carregando cronograma...</div>
+        ) : !turmaAtiva ? (
+           <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm mt-8">
+            <div className="bg-blue-50 text-blue-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <GraduationCap size={40} />
+            </div>
+            <h3 className="text-2xl font-black text-gray-800 mb-2">Nenhuma turma selecionada</h3>
+            <p className="text-gray-500 font-medium mb-8 text-lg">Selecione uma turma no menu acima para gerenciar o cronograma dela.</p>
+          </div>
+        ) : tarefasFiltradas.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm mt-8">
+            <div className="bg-orange-50 text-orange-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Calendar size={40} />
+            </div>
+            <h3 className="text-2xl font-black text-gray-800 mb-2">Cronograma Vazio!</h3>
+            <p className="text-gray-500 font-medium mb-8 text-lg">Nenhuma tarefa ou módulo encontrado para esta turma. Que tal lançar a primeira?</p>
+            <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 inline-flex items-center gap-2">
+              <Plus size={20}/> Adicionar Tarefa
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {tarefasFiltradas.map(tarefa => (
+              <div key={tarefa.id} className={`bg-white p-5 rounded-2xl border transition-all shadow-sm group ${editandoId === tarefa.id ? 'border-blue-500 ring-4 ring-blue-50 shadow-lg' : `${getCorTipo(tarefa.tipo)} hover:shadow-md`}`}>
+                
+                {editandoId === tarefa.id ? (
+                  <div className="space-y-4 animate-in fade-in zoom-in duration-200">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Tipo de Registro</label>
+                      <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold bg-white outline-none cursor-pointer" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
+                        <option value="entrega">📝 Tarefa do Aluno</option>
+                        <option value="compromisso">📅 Compromisso</option>
+                        <option value="lembrete">💡 Post-it</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Título</label>
+                      <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-bold outline-none" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Observações</label>
+                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm outline-none resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="2"/>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Data Final</label>
+                        <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none text-gray-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
+                      </div>
+                      <div className="w-1/3">
+                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Hora</label>
+                        <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 font-bold text-sm outline-none text-gray-700" value={horaFimEdicao} onChange={e => setHoraFimEdicao(e.target.value)}/>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 mt-4 pt-2 border-t border-gray-100">
+                      <button onClick={() => handleSalvarEdicao(tarefa.id)} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg text-sm font-black flex items-center justify-center gap-1 shadow-sm hover:bg-green-700"><Check size={16}/> Salvar</button>
+                      <button onClick={() => setEditandoId(null)} className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-lg text-sm font-black flex items-center justify-center gap-1 hover:bg-gray-200"><X size={16}/> Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-100 shrink-0">{getIconeTipo(tarefa.tipo)}</div>
+                        <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => iniciarEdicao(tarefa)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Editar"><Pencil size={16}/></button>
+                          <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Remover"><Trash2 size={16}/></button>
+                        </div>
+                      </div>
+                      
+                      {(tarefa.tipo === 'entrega' || !tarefa.tipo) ? (
+                        <Link to={`/revisar/${tarefa.id}`} className="block font-black text-gray-800 text-lg leading-tight mb-3 hover:text-blue-600 transition-colors group/link" title={tarefa.nomeTarefa || tarefa.titulo}>
+                          {tarefa.nomeTarefa || tarefa.titulo} <ArrowRight size={14} className="inline-block opacity-0 group-hover/link:opacity-100 transition-all -translate-x-2 group-hover/link:translate-x-0"/>
+                        </Link>
+                      ) : (
+                        <h3 className="font-black text-gray-800 text-lg leading-tight mb-3" title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</h3>
+                      )}
+
+                      {tarefa.enunciado && (
+                        <p className="text-sm text-gray-600 font-medium line-clamp-2 mb-4 bg-white/50 p-2 rounded-lg">{tarefa.enunciado}</p>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white py-1.5 px-3 rounded-lg border border-gray-100 w-fit mt-auto text-gray-500 shadow-sm">
+                      {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem prazo'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* =========================================================================
+          MODAL DE CRIAÇÃO (VAPT-VUPT)
+          ========================================================================= */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 my-8">
+            
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50 sticky top-0 z-10">
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Plus className="text-blue-600"/> Adicionar ao Cronograma</h2>
+              <button 
+                onClick={() => { setIsModalOpen(false); setSucessoMsg(''); }} 
+                className="text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-105"
+              >
+                <X size={20}/>
+              </button>
+            </div>
+            
+            {/* ALERTA VISUAL DE SUCESSO */}
+            {sucessoMsg && (
+              <div className="mx-6 mt-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-2 fade-in duration-300">
+                <Check size={20} className="shrink-0" />
+                <span className="text-sm font-bold">{sucessoMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCriar} className="p-6 md:p-8 space-y-5">
               
-              <select className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" value={novaTarefa.tipo} onChange={e => {setNovaTarefa({...novaTarefa, tipo: e.target.value}); setAtribuicaoEspecifica(false);}}>
-                <option value="entrega">📝 Tarefa do Aluno</option>
-                <option value="compromisso">📅 Compromisso</option>
-                <option value="lembrete">💡 Post-it</option>
-              </select>
-              
-              <input type="text" required placeholder="Título..." className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} />
-              
-              <textarea placeholder="Observações/Enunciado (Opcional)..." rows="3" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none resize-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})} />
-              
-              <div className="flex gap-2">
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Tipo de Registro</label>
+                <select 
+                  className="w-full px-4 py-3.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-blue-700 transition-colors cursor-pointer"
+                  value={novaTarefa.tipo} onChange={e => {setNovaTarefa({...novaTarefa, tipo: e.target.value}); setAtribuicaoEspecifica(false);}}
+                >
+                  <option value="entrega">📝 Tarefa do Aluno (Requer entrega)</option>
+                  <option value="compromisso">📅 Compromisso (Apenas agenda)</option>
+                  <option value="lembrete">💡 Post-it (Aviso rápido)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Título</label>
+                <input
+                  ref={tituloInputRef}
+                  type="text" required autoFocus placeholder="Ex: Módulo 1 - Desafio..."
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400"
+                  value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Observações (Opcional)</label>
+                <textarea
+                  placeholder="Enunciado, instruções ou link..." rows="3"
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400 resize-none"
+                  value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}
+                />
+              </div>
+
+              <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block pl-1">Data Final</label>
-                  <input type="date" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-gray-700" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})} />
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Prazo Final</label>
+                  <input
+                    type="date"
+                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all"
+                    value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}
+                  />
                 </div>
                 <div className="w-1/3">
-                  <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block pl-1">Hora</label>
-                  <input type="time" className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-gray-700" value={novaTarefa.horaFim} onChange={e => setNovaTarefa({...novaTarefa, horaFim: e.target.value})} />
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora</label>
+                  <input
+                    type="time"
+                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all"
+                    value={novaTarefa.horaFim} onChange={e => setNovaTarefa({...novaTarefa, horaFim: e.target.value})}
+                  />
                 </div>
               </div>
 
-              {/* O MENU DE EXCEÇÃO (APARECE SÓ SE FOR TAREFA DO ALUNO) */}
+              {/* O MENU DE EXCEÇÃO (SÓ SE FOR TAREFA DO ALUNO) */}
               {novaTarefa.tipo === 'entrega' && alunosTurma.length > 0 && (
-                <div className="pt-2 border-t border-gray-200">
-                  <label className="flex items-center gap-2 text-sm font-bold text-gray-600 cursor-pointer hover:text-gray-800 transition-colors mb-3">
+                <div className="pt-4 border-t border-gray-100">
+                  <label className="flex items-center gap-3 text-sm font-black text-slate-700 cursor-pointer hover:text-blue-600 transition-colors mb-3">
                     <input 
                       type="checkbox" 
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                      className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                       checked={atribuicaoEspecifica}
                       onChange={(e) => setAtribuicaoEspecifica(e.target.checked)}
                     />
@@ -387,14 +506,14 @@ export default function Tarefas() {
                   {atribuicaoEspecifica && (
                     <div className="bg-white border border-gray-200 rounded-xl max-h-48 overflow-y-auto p-2 space-y-1 shadow-inner animate-in fade-in slide-in-from-top-2">
                       {alunosTurma.map(aluno => (
-                        <label key={aluno.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-gray-100">
+                        <label key={aluno.id} className="flex items-center gap-3 p-2.5 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-blue-100">
                           <input 
                             type="checkbox"
                             className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                             checked={alunosSelecionados.includes(aluno.id)}
                             onChange={() => toggleAlunoSelecao(aluno.id)}
                           />
-                          <span className="text-sm font-medium text-gray-700 truncate">{aluno.nome}</span>
+                          <span className="text-sm font-bold text-gray-700 truncate">{aluno.nome}</span>
                         </label>
                       ))}
                     </div>
@@ -402,12 +521,22 @@ export default function Tarefas() {
                 </div>
               )}
 
-              <button disabled={salvando || !turmaAtiva} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-md hover:bg-blue-700 transition-all disabled:opacity-50 mt-2"> {salvando ? 'Criando e Distribuindo...' : 'Adicionar Tarefa'} </button>
+              {/* BOTÃO MUTANTE */}
+              <button 
+                disabled={salvando || !turmaAtiva} 
+                className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg ${
+                  sucessoMsg 
+                    ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20 scale-105' 
+                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
+                }`}
+              >
+                {salvando ? 'Processando...' : sucessoMsg ? <><Check size={24}/> Cadastrado com Sucesso!</> : 'Adicionar ao Cronograma'}
+              </button>
             </form>
           </div>
         </div>
+      )}
 
-      </div>
     </div>
   );
 }
