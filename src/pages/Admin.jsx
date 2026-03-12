@@ -1,179 +1,181 @@
 import { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
-import { collection, query, getDocs, doc, updateDoc, addDoc, serverTimestamp, writeBatch, where } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldCheck, Users, Crown, Search, CheckCircle2, AlertCircle, Rocket } from 'lucide-react';
+import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle } from 'lucide-react';
+import Breadcrumb from '../components/Breadcrumb';
 
 export default function Admin() {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [migrando, setMigrando] = useState(false);
+
+  // Proteção dupla: Só renderiza se for admin
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   // BUSCA USUÁRIOS
   useEffect(() => {
     async function fetchUsuarios() {
+      if (!isAdmin) return;
       try {
         const q = query(collection(db, 'usuarios'));
         const snap = await getDocs(q);
-        setUsuarios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
+        
+        // Ordena para que os Admins apareçam primeiro na lista
+        const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        lista.sort((a, b) => {
+          if (a.role === 'admin' && b.role !== 'admin') return -1;
+          if (a.role !== 'admin' && b.role === 'admin') return 1;
+          return (a.nome || '').localeCompare(b.nome || '');
+        });
+        
+        setUsuarios(lista);
+      } catch (e) { 
+        console.error("Erro ao buscar usuários:", e); 
+      } finally { 
+        setLoading(false); 
+      }
     }
     fetchUsuarios();
-  }, []);
+  }, [isAdmin]);
 
-  // FUNÇÃO MÁGICA DE MIGRAÇÃO
-  async function handleMigrarDados(userEmail, userUid) {
-    if (!window.confirm(`Iniciar migração de dados da V1 para ${userEmail}? Isso criará novas instituições e turmas na V3.`)) return;
-    
-    setMigrando(true);
-    try {
-      // 1. DEFINA AQUI OS NOMES DAS SUAS COLEÇÕES DA V1
-      const NOME_COLECAO_ALUNOS_V1 = 'alunos'; 
-      const NOME_COLECAO_ATIVIDADES_V1 = 'atividades';
-
-      // 2. BUSCA TUDO DA V1 NO FIREBASE
-      const snapAlunosV1 = await getDocs(collection(db, NOME_COLECAO_ALUNOS_V1));
-      const snapAtivV1 = await getDocs(collection(db, NOME_COLECAO_ATIVIDADES_V1));
-
-      // 3. CRIA A INSTITUIÇÃO "MÃE" NA V3
-      const instRef = await addDoc(collection(db, 'instituicoes'), {
-        nome: "Unasus Piauí (Migrado V1)",
-        professorUid: userUid,
-        status: 'ativa',
-        dataCriacao: serverTimestamp()
-      });
-
-      // 4. CRIA UMA TURMA PADRÃO
-      const turmaRef = await addDoc(collection(db, 'turmas'), {
-        nome: "Turma Migrada V1",
-        instituicaoId: instRef.id,
-        professorUid: userUid,
-        status: 'ativa'
-      });
-
-      // 5. CRIA UMA TAREFA "MÃE" PARA AS ATIVIDADES
-      const tarefaRef = await addDoc(collection(db, 'tarefas'), {
-        nomeTarefa: "Atividades Consolidadas V1",
-        turmaId: turmaRef.id,
-        instituicaoId: instRef.id,
-        professorUid: userUid,
-        status: 'ativa',
-        tipo: 'entrega'
-      });
-
-      // 6. MIGRA OS ALUNOS E ATIVIDADES (Batch para ser rápido e seguro)
-      const batch = writeBatch(db);
+  // FUNÇÃO: MUDAR CARGO (Professor <-> Admin)
+  async function handleMudarCargo(id, cargoAtual) {
+    const novoCargo = cargoAtual === 'admin' ? 'professor' : 'admin';
+    const msg = novoCargo === 'admin' 
+      ? "Dar superpoderes de Administrador para este usuário?" 
+      : "Rebaixar este usuário para Professor comum?";
       
-      // Mapeamento para não duplicar alunos
-      const mapaAlunosNovos = {};
+    if (!window.confirm(msg)) return;
 
-      for (const docAlu of snapAlunosV1.docs) {
-        const aluV1 = docAlu.data();
-        const novoAluRef = doc(collection(db, 'alunos'));
-        batch.set(novoAluRef, {
-          nome: aluV1.nome || "Aluno Sem Nome",
-          matricula: aluV1.matricula || "",
-          turmaId: turmaRef.id,
-          instituicaoId: instRef.id,
-          status: 'ativo'
-        });
-        mapaAlunosNovos[aluV1.nome] = novoAluRef.id;
-      }
-
-      for (const docAtiv of snapAtivV1.docs) {
-        const ativV1 = docAtiv.data();
-        const idDoNovoAluno = mapaAlunosNovos[ativV1.nomeAluno] || null;
-
-        if (idDoNovoAluno) {
-          const novaAtivRef = doc(collection(db, 'atividades'));
-          batch.set(novaAtivRef, {
-            alunoId: idDoNovoAluno,
-            tarefaId: tarefaRef.id,
-            turmaId: turmaRef.id,
-            instituicaoId: instRef.id,
-            resposta: ativV1.resposta || "",
-            feedbackSugerido: ativV1.feedbackIA || "",
-            feedbackFinal: ativV1.feedbackFinal || ativV1.feedbackIA || "",
-            status: 'aprovado',
-            postado: true,
-            dataAprovacao: serverTimestamp()
-          });
-        }
-      }
-
-      await batch.commit();
-      alert("🚀 Sucesso! Dados migrados. Patrícia já pode ver tudo no Dashboard dela.");
-    } catch (e) {
-      console.error(e);
-      alert("Erro na migração. Verifique o console.");
-    } finally {
-      setMigrando(false);
+    try {
+      await updateDoc(doc(db, 'usuarios', id), { role: novoCargo });
+      setUsuarios(usuarios.map(u => u.id === id ? { ...u, role: novoCargo } : u));
+    } catch (e) { 
+      alert("Erro ao mudar o nível de acesso."); 
     }
   }
 
-  // TROCA DE PLANO
+  // FUNÇÃO: MUDAR PLANO SAAS
   async function handleMudarPlano(id, novoPlano) {
     try {
       await updateDoc(doc(db, 'usuarios', id), { plano: novoPlano });
       setUsuarios(usuarios.map(u => u.id === id ? { ...u, plano: novoPlano } : u));
-    } catch (e) { alert("Erro ao mudar plano"); }
+    } catch (e) { 
+      alert("Erro ao mudar o plano do usuário."); 
+    }
   }
 
-  if (loading) return <div className="p-10 text-center font-bold">Carregando Painel...</div>;
+  // FUNÇÃO: EXCLUIR USUÁRIO
+  async function handleExcluirUsuario(id, nome) {
+    if (!window.confirm(`ATENÇÃO! Tem certeza que deseja excluir a conta de "${nome}" do banco de dados?\n\nEsta ação é irreversível e o usuário perderá o acesso à plataforma.`)) return;
+    try {
+      await deleteDoc(doc(db, 'usuarios', id));
+      setUsuarios(usuarios.filter(u => u.id !== id));
+    } catch (e) { 
+      console.error(e);
+      alert("Erro ao excluir usuário."); 
+    }
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
+        <AlertTriangle className="mx-auto text-red-500 mb-6" size={64}/>
+        <h1 className="text-3xl font-black text-gray-800 mb-4">Acesso Negado</h1>
+        <p className="text-gray-500 text-lg">Esta é uma área restrita apenas para a diretoria da plataforma.</p>
+      </div>
+    );
+  }
+
+  if (loading) return <div className="p-20 text-center text-gray-400 font-bold animate-pulse">Carregando painel de controle...</div>;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg"><ShieldCheck size={28} /></div>
+    <div className="max-w-6xl mx-auto px-4 py-6 md:py-8">
+      <Breadcrumb items={[{ label: 'Painel Admin' }]} />
+
+      <div className="flex items-center gap-4 mt-4 mb-8">
+        <div className="bg-slate-900 text-yellow-400 p-3.5 rounded-2xl shadow-lg border border-slate-700">
+          <ShieldCheck size={32} />
+        </div>
         <div>
-          <h1 className="text-2xl font-black text-gray-800">Painel SaaS (Super Admin)</h1>
-          <p className="text-sm text-gray-500 font-medium">Gestão de acessos e migração de dados.</p>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Painel SaaS (Super Admin)</h1>
+          <p className="text-sm text-gray-500 font-medium mt-1">Gestão de acessos, cobranças e delegação de poderes.</p>
         </div>
       </div>
 
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              <th className="p-4 text-xs font-black text-gray-400 uppercase">Usuário</th>
-              <th className="p-4 text-xs font-black text-gray-400 uppercase">Plano SaaS</th>
-              <th className="p-4 text-xs font-black text-gray-400 uppercase">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {usuarios.map(user => (
-              <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                <td className="p-4">
-                  <p className="font-black text-gray-800">{user.nome || 'Sem nome'}</p>
-                  <p className="text-xs text-gray-400 font-medium">{user.email}</p>
-                </td>
-                <td className="p-4">
-                  <select 
-                    value={user.plano} 
-                    onChange={(e) => handleMudarPlano(user.id, e.target.value)}
-                    className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg py-1.5 px-3 font-bold outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="basico">Tier 1: Básico</option>
-                    <option value="intermediario">Tier 2: Intermediário</option>
-                    <option value="premium">Tier 3: Premium</option>
-                  </select>
-                </td>
-                <td className="p-4">
-                  {/* BOTÃO DE MIGRAÇÃO SÓ PARA A PATRÍCIA (Ou outros usuários legados) */}
-                  <button 
-                    onClick={() => handleMigrarDados(user.email, user.id)}
-                    disabled={migrando}
-                    className="flex items-center gap-2 bg-purple-100 text-purple-700 px-4 py-2 rounded-xl font-black text-xs hover:bg-purple-200 transition-all disabled:opacity-50"
-                  >
-                    <Rocket size={14} /> {migrando ? 'Migrando...' : 'MIGRAR V1'}
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 border-b border-gray-100">
+              <tr>
+                <th className="p-5 text-xs font-black text-slate-500 uppercase tracking-widest">Usuário</th>
+                <th className="p-5 text-xs font-black text-slate-500 uppercase tracking-widest">Nível de Acesso</th>
+                <th className="p-5 text-xs font-black text-slate-500 uppercase tracking-widest">Plano SaaS</th>
+                <th className="p-5 text-xs font-black text-slate-500 uppercase tracking-widest text-right">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {usuarios.map(user => (
+                <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
+                  
+                  {/* COLUNA 1: NOME E EMAIL */}
+                  <td className="p-5">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${user.role === 'admin' ? 'bg-yellow-100 text-yellow-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {user.role === 'admin' ? <Crown size={18}/> : <User size={18}/>}
+                      </div>
+                      <div>
+                        <p className="font-black text-gray-800 text-base">{user.nome || 'Usuário Sem Nome'}</p>
+                        <p className="text-xs text-gray-500 font-medium">{user.email}</p>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* COLUNA 2: CARGO (ADMIN/PROFESSOR) */}
+                  <td className="p-5">
+                    <button 
+                      onClick={() => handleMudarCargo(user.id, user.role)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all border ${
+                        user.role === 'admin' 
+                          ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' 
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                      }`}
+                      title="Clique para promover/rebaixar"
+                    >
+                      {user.role === 'admin' ? <><Crown size={14}/> Super Admin</> : <><UserCog size={14}/> Professor</>}
+                    </button>
+                  </td>
+
+                  {/* COLUNA 3: PLANO SAAS */}
+                  <td className="p-5">
+                    <select 
+                      value={user.plano || 'basico'} 
+                      onChange={(e) => handleMudarPlano(user.id, e.target.value)}
+                      className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl py-2 px-3 font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer hover:border-blue-300 transition-colors"
+                    >
+                      <option value="basico">Tier 1: Básico (Gratuito)</option>
+                      <option value="intermediario">Tier 2: Intermediário</option>
+                      <option value="premium">Tier 3: Premium (Ilimitado)</option>
+                    </select>
+                  </td>
+
+                  {/* COLUNA 4: AÇÕES (LIXEIRA) */}
+                  <td className="p-5 text-right">
+                    <button 
+                      onClick={() => handleExcluirUsuario(user.id, user.nome)}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all inline-flex items-center gap-2 font-bold text-sm opacity-50 group-hover:opacity-100"
+                      title="Excluir Usuário"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
