@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, Plus, Search, Pencil, Trash2, Check, X, GraduationCap, Phone, Mail } from 'lucide-react';
+import { Users, Plus, Search, Pencil, Trash2, Check, X, GraduationCap, Phone, Mail, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Alunos() {
@@ -25,7 +25,14 @@ export default function Alunos() {
   
   // ESTADOS DO EFEITO UAU (Vapt-Vupt)
   const [sucessoMsg, setSucessoMsg] = useState('');
-  const nomeInputRef = useRef(null); // Puxa o mouse de volta pro campo
+  const nomeInputRef = useRef(null);
+
+  // ESTADOS DO IMPORTADOR EM LOTE
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [textoExcel, setTextoExcel] = useState('');
+  const [turmaImportacao, setTurmaImportacao] = useState('');
+  const [statusImportacao, setStatusImportacao] = useState('ocioso'); // ocioso, processando, concluido
+  const [progresso, setProgresso] = useState({ atual: 0, total: 0 });
 
   const [editandoId, setEditandoId] = useState(null);
   const [nomeEdicao, setNomeEdicao] = useState('');
@@ -45,6 +52,7 @@ export default function Alunos() {
     if (filtroTurma && filtroTurma !== 'todas') {
       localStorage.setItem('ultimaTurmaAtiva', filtroTurma);
       setNovoAluno(prev => ({ ...prev, turmaId: filtroTurma }));
+      setTurmaImportacao(filtroTurma); // Sincroniza o modal de importação também
     }
   }, [filtroTurma]);
 
@@ -68,8 +76,10 @@ export default function Alunos() {
         if (isValid) {
           if (targetTurma !== filtroTurma) setFiltroTurma(targetTurma);
           setNovoAluno(prev => ({ ...prev, turmaId: targetTurma }));
+          setTurmaImportacao(targetTurma);
         } else if (turmasData.length > 0) {
           setNovoAluno(prev => ({ ...prev, turmaId: turmasData[0].id }));
+          setTurmaImportacao(turmasData[0].id);
         }
 
         const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
@@ -90,7 +100,7 @@ export default function Alunos() {
     e.preventDefault();
     if (!novoAluno.nome.trim() || !novoAluno.turmaId) return;
 
-    const nomeSalvo = novoAluno.nome.trim(); // Guarda o nome para a mensagem de sucesso
+    const nomeSalvo = novoAluno.nome.trim(); 
 
     try {
       setSalvando(true);
@@ -109,28 +119,82 @@ export default function Alunos() {
       const novaLista = [{ id: docRef.id, ...alunoData }, ...alunos];
       setAlunos(novaLista.sort((a, b) => a.nome.localeCompare(b.nome)));
       
-      // Limpa os campos
       setNovoAluno(prev => ({ ...prev, nome: '', whatsapp: '', email: '' }));
-
-      // GATILHA O EFEITO UAU
       setSucessoMsg(`${nomeSalvo} matriculado(a) com sucesso!`);
       
-      // Some com a mensagem de sucesso após 3 segundos
-      setTimeout(() => {
-        setSucessoMsg('');
-      }, 3000);
-
-      // Puxa o cursor do mouse de volta para o campo Nome automaticamente
-      setTimeout(() => {
-        if (nomeInputRef.current) {
-          nomeInputRef.current.focus();
-        }
-      }, 100);
+      setTimeout(() => { setSucessoMsg(''); }, 3000);
+      setTimeout(() => { if (nomeInputRef.current) nomeInputRef.current.focus(); }, 100);
 
     } catch (error) {
       console.error("Erro ao criar aluno:", error);
     } finally {
       setSalvando(false);
+    }
+  }
+
+  // LOGICA DO IMPORTADOR EM LOTE
+  async function handleImportacao(e) {
+    e.preventDefault();
+    if (!turmaImportacao) return alert("Selecione a turma de destino!");
+    if (!textoExcel.trim()) return alert("Cole os nomes dos alunos!");
+
+    const nomesBrutos = textoExcel.split('\n');
+    const nomesLimpos = nomesBrutos
+      .map(n => n.trim().toUpperCase())
+      .filter(n => n.length > 2); // ignora linhas em branco
+
+    const nomesUnicos = [...new Set(nomesLimpos)];
+    if (nomesUnicos.length === 0) return alert("Nenhum nome válido encontrado.");
+    
+    if (!window.confirm(`Foram encontrados ${nomesUnicos.length} nomes válidos. Confirmar importação?`)) return;
+
+    setStatusImportacao('processando');
+    setProgresso({ atual: 0, total: nomesUnicos.length });
+
+    let inseridos = 0;
+    const novosParaEstado = [];
+
+    try {
+      for (const nome of nomesUnicos) {
+        // Verifica duplicidade dentro da própria turma no frontend
+        const jaExiste = alunos.find(a => a.nome.toUpperCase() === nome && a.turmaId === turmaImportacao);
+
+        if (!jaExiste) {
+          const alunoData = {
+            nome: nome,
+            whatsapp: '',
+            email: '',
+            instituicaoId: escolaSelecionada.id,
+            turmaId: turmaImportacao,
+            professorUid: currentUser.uid,
+            status: 'ativo',
+            dataCadastro: serverTimestamp()
+          };
+          const docRef = await addDoc(collection(db, 'alunos'), alunoData);
+          novosParaEstado.push({ id: docRef.id, ...alunoData });
+          inseridos++;
+        }
+        setProgresso(prev => ({ ...prev, atual: prev.atual + 1 }));
+      }
+
+      if (novosParaEstado.length > 0) {
+        const novaLista = [...novosParaEstado, ...alunos];
+        setAlunos(novaLista.sort((a, b) => a.nome.localeCompare(b.nome)));
+      }
+
+      setStatusImportacao('concluido');
+      setTextoExcel('');
+      alert(`✅ Importação Concluída! ${inseridos} alunos cadastrados com sucesso (ignoradas as duplicatas).`);
+      
+      setTimeout(() => {
+        setIsImportModalOpen(false);
+        setStatusImportacao('ocioso');
+      }, 500);
+
+    } catch (error) {
+      console.error("Erro na importação:", error);
+      alert("Ocorreu um erro durante a importação.");
+      setStatusImportacao('ocioso');
     }
   }
 
@@ -187,12 +251,20 @@ export default function Alunos() {
           Gestão de Alunos
         </h1>
         {turmas.length > 0 && (
-          <button 
-            onClick={() => setIsModalOpen(true)} 
-            className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
-          >
-            <Plus size={20}/> Novo Aluno
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button 
+              onClick={() => setIsImportModalOpen(true)} 
+              className="bg-green-50 text-green-700 border border-green-200 font-bold px-5 py-3.5 rounded-xl hover:bg-green-100 transition-all flex items-center justify-center gap-2"
+            >
+              <FileSpreadsheet size={20}/> Importar Excel
+            </button>
+            <button 
+              onClick={() => setIsModalOpen(true)} 
+              className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+            >
+              <Plus size={20}/> Novo Aluno
+            </button>
+          </div>
         )}
       </div>
 
@@ -322,7 +394,7 @@ export default function Alunos() {
       </div>
 
       {/* =========================================================================
-          MODAL DE MATRÍCULA (VAPT-VUPT)
+          MODAL DE MATRÍCULA ÚNICA (VAPT-VUPT)
           ========================================================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
@@ -338,7 +410,6 @@ export default function Alunos() {
               </button>
             </div>
             
-            {/* ALERTA VISUAL DE SUCESSO */}
             {sucessoMsg && (
               <div className="mx-6 mt-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-2 fade-in duration-300">
                 <Check size={20} className="shrink-0" />
@@ -360,7 +431,7 @@ export default function Alunos() {
               <div>
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Nome Completo</label>
                 <input
-                  ref={nomeInputRef} // <-- A MÁGICA DO FOCO ESTÁ AQUI
+                  ref={nomeInputRef} 
                   type="text" required autoFocus placeholder="Ex: Maria da Silva..."
                   className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-800 transition-all placeholder:font-medium placeholder:text-gray-400"
                   value={novoAluno.nome} onChange={e => setNovoAluno({...novoAluno, nome: e.target.value})}
@@ -385,7 +456,6 @@ export default function Alunos() {
                 />
               </div>
 
-              {/* BOTÃO MUTANTE (Muda de cor com o sucesso) */}
               <button 
                 disabled={salvando || !novoAluno.turmaId} 
                 className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg ${
@@ -398,6 +468,76 @@ export default function Alunos() {
                 {salvando ? 'Salvando...' : sucessoMsg ? 'Cadastrado com Sucesso!' : 'Matricular e Continuar'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL DE IMPORTAÇÃO EM LOTE (NOVO)
+          ========================================================================= */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50">
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><FileSpreadsheet className="text-green-600"/> Importação em Lote</h2>
+              <button 
+                onClick={() => { setIsImportModalOpen(false); setTextoExcel(''); }} 
+                className="text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-105"
+                disabled={statusImportacao === 'processando'}
+              >
+                <X size={20}/>
+              </button>
+            </div>
+
+            <div className="p-6 md:p-8">
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6">
+                <p className="text-sm font-medium text-blue-800">
+                  Copie a coluna com os <strong>nomes dos alunos</strong> do seu Excel ou Moodle e cole na caixa abaixo. O sistema vai limpar espaços e ignorar nomes já existentes nesta turma.
+                </p>
+              </div>
+
+              <form onSubmit={handleImportacao} className="space-y-5">
+                <div>
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Turma de Destino</label>
+                  <select 
+                    className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none font-bold text-gray-700 transition-colors cursor-pointer"
+                    value={turmaImportacao} onChange={e => setTurmaImportacao(e.target.value)} required
+                    disabled={statusImportacao === 'processando'}
+                  >
+                    {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Cole os nomes (Um por linha)</label>
+                  <textarea 
+                    required autoFocus
+                    className="w-full h-48 px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:bg-white outline-none font-mono text-sm text-gray-800 transition-all resize-none placeholder:text-gray-400"
+                    placeholder="Exemplo:&#10;ANA MARIA SILVA&#10;CARLOS ALBERTO SOUZA&#10;JOÃO PEDRO SANTOS"
+                    value={textoExcel} onChange={e => setTextoExcel(e.target.value)}
+                    disabled={statusImportacao === 'processando'}
+                  ></textarea>
+                </div>
+
+                {statusImportacao === 'processando' ? (
+                  <div className="bg-gray-100 rounded-xl p-4 text-center">
+                    <RefreshCw className="animate-spin text-green-600 mx-auto mb-2" size={24}/>
+                    <p className="text-sm font-bold text-gray-700">Salvando alunos... ({progresso.atual} de {progresso.total})</p>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mt-3 overflow-hidden">
+                      <div className="bg-green-500 h-2 rounded-full transition-all duration-300" style={{ width: `${(progresso.atual / Math.max(1, progresso.total)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                ) : (
+                  <button 
+                    disabled={!turmaImportacao || !textoExcel.trim()} 
+                    className="w-full bg-green-600 text-white font-black py-4 rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg"
+                  >
+                    <Users size={24}/> Iniciar Importação
+                  </button>
+                )}
+              </form>
+            </div>
           </div>
         </div>
       )}
