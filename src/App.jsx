@@ -24,15 +24,15 @@ import Configuracoes from './pages/Configuracoes';
 import MapaEntregas from './pages/MapaEntregas';
 import Pendencias from './pages/Pendencias';
 import Lixeira from './pages/Lixeira'; 
-import Migracao from './pages/Migracao'; // <-- IMPORTAÇÃO DO MOTOR DE MIGRAÇÃO
+import Migracao from './pages/Migracao'; 
 
 // ESTEIRA DE PRODUÇÃO (KANBAN)
 import AguardandoRevisao from './pages/AguardandoRevisao';
 import FaltaPostar from './pages/FaltaPostar'; 
 import Historico from './pages/Historico';
 
-// PAINEL DE GESTÃO DO CEO
-import AdminPainel from './pages/AdminPainel'; 
+// PAINEL DE GESTÃO DO CEO - AGORA APONTANDO PARA O ARQUIVO CORRETO
+import Admin from './pages/Admin'; 
 
 function PrivateRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -85,15 +85,15 @@ function App() {
           
           {/* ROTAS DE UTILIDADE */}
           <Route path="/lixeira" element={<PrivateRoute><Lixeira /></PrivateRoute>} />
-          <Route path="/migracao" element={<PrivateRoute><Migracao /></PrivateRoute>} /> {/* <-- ROTA OCULTA DA MIGRAÇÃO */}
+          <Route path="/migracao" element={<PrivateRoute><Migracao /></PrivateRoute>} /> 
           
           {/* ROTAS DO KANBAN (Esteira de Produção V3) */}
           <Route path="/aguardandorevisao" element={<PrivateRoute><AguardandoRevisao /></PrivateRoute>} />
           <Route path="/faltapostar" element={<PrivateRoute><FaltaPostar /></PrivateRoute>} />
           <Route path="/historico" element={<PrivateRoute><Historico /></PrivateRoute>} />
           
-          {/* Rota do Painel SaaS */}
-          <Route path="/admin" element={<PrivateRoute><AdminPainel /></PrivateRoute>} />
+          {/* Rota do Painel SaaS - ATUALIZADA PARA USAR O COMPONENTE ADMIN */}
+          <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
           
           {/* Rota de fallback */}
           <Route path="*" element={<Navigate to="/" />} />
