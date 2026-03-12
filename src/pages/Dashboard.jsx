@@ -24,6 +24,9 @@ export default function Dashboard() {
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
 
   const [gestaoVista, setGestaoVista] = useState({ atual: null, anterior: null });
+  
+  // ESTADO PARA O RAIO-X NA TELA
+  const [raioXVisivel, setRaioXVisivel] = useState('');
 
   useEffect(() => {
     async function fetchInst() {
@@ -111,13 +114,9 @@ export default function Dashboard() {
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
 
-          // =========================================================================
-          // MOTOR MATEMÁTICO PURO (SEM BUSCAR TEXTO, APENAS DATAS)
-          // =========================================================================
           let tarefasEntregas = tarefasVivas.filter(t => tIds.includes(t.turmaId) && t.dataFim && t.tipo === 'entrega');
 
           tarefasEntregas = tarefasEntregas.map(t => {
-            // Conversão robusta de Fim e Início (Fallback para Criação se não tiver Início)
             const endObj = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
             const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
             const startObj = startRaw ? (startRaw.toDate ? startRaw.toDate() : new Date(startRaw)) : new Date();
@@ -130,7 +129,6 @@ export default function Dashboard() {
             };
           });
 
-          // 3 Baldes Matemáticos de Cronologia
           const atuais = tarefasEntregas.filter(t => t.timeInicio <= hojeTime && t.timeFim >= hojeTime);
           const futuras = tarefasEntregas.filter(t => t.timeInicio > hojeTime).sort((a, b) => a.timeInicio - b.timeInicio);
           const passadas = tarefasEntregas.filter(t => t.timeFim < hojeTime).sort((a, b) => b.timeFim - a.timeFim);
@@ -167,14 +165,12 @@ export default function Dashboard() {
             return { blockTitle, theme, totalPendencias, tarefas: tarefasComAlunos };
           };
 
-          // Define o Bloco Destaque agrupando pela mesma Data Exata
           let blocoDestaque = null;
           let ativasParaBarraPreta = [];
           
           if (atuais.length > 0) {
             atuais.sort((a, b) => a.timeFim - b.timeFim);
             const dataFimAlvo = atuais[0].timeFim;
-            // Puxa todas as tarefas (Desafio, Fórum, Prova, etc) que terminam no exato mesmo momento
             const grupoAtual = atuais.filter(t => t.timeFim === dataFimAlvo);
             blocoDestaque = buildGroup(grupoAtual, 'atual');
             ativasParaBarraPreta = grupoAtual;
@@ -185,7 +181,6 @@ export default function Dashboard() {
             ativasParaBarraPreta = grupoFuturo;
           }
 
-          // Define o Bloco Anterior (Última rodada que passou)
           let blocoAnterior = null;
           if (passadas.length > 0) {
             const dataPassadaAlvo = passadas[0].timeFim;
@@ -194,14 +189,9 @@ export default function Dashboard() {
 
           setGestaoVista({ atual: blocoDestaque, anterior: blocoAnterior });
 
-          // =========================================================================
-          // ATUALIZA BARRA PRETA DE PONTO DE SITUAÇÃO
-          // =========================================================================
           if (ativasParaBarraPreta.length > 0) {
             const t = ativasParaBarraPreta[0];
             const isFutura = t.timeInicio > hoje.getTime();
-            
-            // Calculo dos Dias (Teto matemático da diferença de milissegundos)
             const alvoTempo = isFutura ? t.timeInicio : t.timeFim;
             const diasRestantes = Math.ceil((alvoTempo - hoje.getTime()) / (1000 * 3600 * 24));
             
@@ -244,28 +234,47 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
-        <div>
+        <div className="w-full">
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
           
-          {/* BOTÃO PROVISÓRIO DE RAIO-X */}
+          {/* BOTÃO PROVISÓRIO DE RAIO-X MELHORADO */}
           <button 
             onClick={async () => {
+              setRaioXVisivel('Carregando dados do banco...');
               try {
                 const { collection, getDocs, query, limit } = await import('firebase/firestore');
                 const snapA = await getDocs(query(collection(db, 'alunos'), limit(1)));
-                const snapT = await getDocs(query(collection(db, 'tarefas'), limit(1))); // ou 'modulos' se for esse o nome na V1
+                const snapT = await getDocs(query(collection(db, 'tarefas'), limit(1)));
                 const snapAt = await getDocs(query(collection(db, 'atividades'), limit(1)));
                 
-                console.log("=== RAIO-X DO ALUNO ===", snapA.docs[0]?.data());
-                console.log("=== RAIO-X DA TAREFA ===", snapT.docs[0]?.data());
-                console.log("=== RAIO-X DA ATIVIDADE ===", snapAt.docs[0]?.data());
-                alert("Raio-X feito! Abra o console (F12) e copie os resultados.");
-              } catch (e) { console.error(e); alert("Erro ao escanear"); }
+                const resultadoText = `
+=== RAIO-X DO ALUNO ===
+${JSON.stringify(snapA.docs[0]?.data() || 'Nenhum aluno achado', null, 2)}
+
+=== RAIO-X DA TAREFA ===
+${JSON.stringify(snapT.docs[0]?.data() || 'Nenhuma tarefa achada', null, 2)}
+
+=== RAIO-X DA ATIVIDADE ===
+${JSON.stringify(snapAt.docs[0]?.data() || 'Nenhuma atividade achada', null, 2)}
+                `;
+                setRaioXVisivel(resultadoText);
+              } catch (e) { 
+                console.error(e); 
+                setRaioXVisivel('Erro ao escanear: ' + e.message); 
+              }
             }}
             className="bg-red-600 text-white font-bold px-4 py-2 rounded-lg text-sm my-3 shadow-md hover:bg-red-700"
           >
             🔎 Escanear Banco V1
           </button>
+
+          {/* CAIXA PRETA ONDE O RESULTADO VAI APARECER */}
+          {raioXVisivel && (
+            <div className="bg-gray-900 text-green-400 p-4 rounded-xl text-xs overflow-auto max-h-96 w-full mb-4 font-mono shadow-inner">
+              <p className="text-gray-400 mb-2">// Copie o texto abaixo e mande no chat:</p>
+              <pre>{raioXVisivel}</pre>
+            </div>
+          )}
 
           <div className="flex items-center gap-2 mt-2">
             <span className="text-sm font-bold text-gray-500">Instituição:</span>
