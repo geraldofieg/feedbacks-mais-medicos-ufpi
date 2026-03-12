@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-// ADICIONEI O 'RefreshCw' NA LISTA ABAIXO
-import { User, Phone, Sparkles, Save, ShieldCheck, Mail, CheckCircle2, Target, Zap, RefreshCw } from 'lucide-react';
+import { User, Phone, Sparkles, Save, ShieldCheck, Mail, CheckCircle2, Target, Zap, RefreshCw, AlertCircle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Configuracoes() {
@@ -97,10 +96,11 @@ export default function Configuracoes() {
         whatsapp: whatsapp.trim(),
         promptPersonalizado: promptIA.trim()
       });
-      setMensagem({ tipo: 'sucesso', texto: 'Configurações atualizadas!' });
-      setTimeout(() => setMensagem(null), 3000);
+      setMensagem({ tipo: 'sucesso', texto: 'Configurações salvas com sucesso!' });
+      // Remove o timer automático para o usuário ter tempo de ver a mensagem se quiser
+      // setTimeout(() => setMensagem(null), 5000); 
     } catch (error) {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao salvar.' });
+      setMensagem({ tipo: 'erro', texto: 'Erro ao conectar com o banco de dados.' });
     } finally { setSalvando(false); }
   }
 
@@ -120,14 +120,17 @@ export default function Configuracoes() {
         </div>
       </div>
 
+      {/* MENSAGEM NO TOPO (OPCIONAL AGORA) */}
       {mensagem && (
-        <div className={`mb-8 p-4 rounded-2xl font-black flex items-center gap-2 animate-in fade-in slide-in-from-top-4 border ${mensagem.tipo === 'sucesso' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-          <CheckCircle2 size={20}/> {mensagem.texto}
+        <div className={`mb-8 p-5 rounded-3xl font-black flex items-center gap-3 animate-in fade-in slide-in-from-top-4 border-2 ${mensagem.tipo === 'sucesso' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+          {mensagem.tipo === 'sucesso' ? <CheckCircle2 size={24}/> : <AlertCircle size={24}/>}
+          {mensagem.texto}
         </div>
       )}
 
       <form onSubmit={handleSalvar} className="space-y-8">
         
+        {/* PERFIL */}
         <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-200">
           <h2 className="text-xl font-black text-slate-900 mb-8 flex items-center gap-3">
             <User size={24} className="text-blue-600" /> Perfil Profissional
@@ -167,6 +170,7 @@ export default function Configuracoes() {
           </div>
         </div>
 
+        {/* IA */}
         {mostrarIA ? (
           <div className="bg-slate-900 p-8 rounded-[32px] shadow-2xl border border-indigo-500/20 relative overflow-hidden">
             <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"></div>
@@ -191,7 +195,7 @@ export default function Configuracoes() {
                     Explique como a IA deve corrigir seus alunos. Ela seguirá esse estilo em todos os feedbacks automáticos.
                   </p>
                   <textarea 
-                    rows="6" value={promptIA} onChange={e => setPromptIA(e.target.value)}
+                    rows="8" value={promptIA} onChange={e => setPromptIA(e.target.value)}
                     className="w-full p-6 bg-slate-950/80 border-2 border-slate-800 rounded-3xl focus:border-yellow-400 outline-none font-medium text-slate-100 placeholder-slate-700 transition-all resize-none shadow-inner leading-relaxed"
                     placeholder="Ex: Seja cordial, comece elogiando e aponte os erros técnicos com firmeza..."
                   />
@@ -227,13 +231,25 @@ export default function Configuracoes() {
           </div>
         )}
 
-        <div className="pt-6">
+        {/* --- ÁREA DO BOTÃO COM FEEDBACK VISÍVEL --- */}
+        <div className="pt-6 space-y-4">
+          
+          {/* MENSAGEM LOGO ACIMA DO BOTÃO */}
+          {mensagem && (
+            <div className={`p-4 rounded-2xl font-black text-center animate-bounce border-2 ${mensagem.tipo === 'sucesso' ? 'bg-green-500 text-white border-green-400 shadow-lg shadow-green-200' : 'bg-red-500 text-white border-red-400'}`}>
+              {mensagem.texto}
+            </div>
+          )}
+
           <button 
             type="submit" disabled={salvando} 
-            className="w-full bg-blue-600 text-white font-black px-10 py-5 rounded-2xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-xl flex items-center justify-center gap-3 text-xl"
+            className={`w-full text-white font-black px-10 py-5 rounded-3xl transition-all shadow-xl flex items-center justify-center gap-3 text-xl active:scale-95 ${salvando ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
-            {salvando ? <RefreshCw className="animate-spin" size={24}/> : <Save size={24}/>}
-            {salvando ? 'Salvando...' : 'Salvar Alterações'}
+            {salvando ? (
+              <><RefreshCw className="animate-spin" size={24}/> Gravando no Banco...</>
+            ) : (
+              <><Save size={24}/> Salvar Alterações Agora</>
+            )}
           </button>
         </div>
 
