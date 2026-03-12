@@ -3,18 +3,16 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Megaphone, Copy, CheckCircle2, MessageCircle, Send, MonitorSmartphone, GraduationCap, BookOpen, Target, CalendarClock } from 'lucide-react';
+import { Megaphone, Copy, CheckCircle2, MessageCircle, Send, MonitorSmartphone, GraduationCap, BookOpen, Target, CalendarClock, User } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Comunicacao() {
-  // AJUSTE: Inserido o userProfile para ler o Nível de Acesso
   const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const location = useLocation();
   const alunoAlvo = location.state?.alunoAlvo || null;
 
   const [turmas, setTurmas] = useState([]);
   
-  // A MÁGICA DA MEMÓRIA GLOBAL
   const [turmaAtiva, setTurmaAtiva] = useState(() => {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
@@ -26,15 +24,13 @@ export default function Comunicacao() {
   const [loadingDados, setLoadingDados] = useState(false);
   const [copiado, setCopiado] = useState(null);
 
-  // AJUSTE: Definição de quem é Admin lendo o banco de dados
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
-  // ESPIÃO DE CLIQUES E SALVAMENTO NA MEMÓRIA
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
       setTurmaAtiva(location.state.turmaIdSelecionada);
     }
-  }, [location.state]);
+  }, [location.state, turmaAtiva]);
 
   useEffect(() => {
     if (turmaAtiva) localStorage.setItem('ultimaTurmaAtiva', turmaAtiva);
@@ -45,7 +41,6 @@ export default function Comunicacao() {
       if (!currentUser || !escolaSelecionada?.id) { setLoadingTurmas(false); return; }
       setLoadingTurmas(true);
       try {
-        // AJUSTE: A CHAVE MESTRA NAS TURMAS PARA O GESTOR PODER VER TODAS AS TURMAS
         const turmasRef = collection(db, 'turmas');
         const qT = isAdmin 
           ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
@@ -53,13 +48,11 @@ export default function Comunicacao() {
         
         const snapT = await getDocs(qT);
         
-        // ORDENAÇÃO INTELIGENTE: Sempre puxa a turma mais NOVA caso a memória falhe
         let turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         turmasData.sort((a, b) => (b.dataCriacao?.toMillis() || 0) - (a.dataCriacao?.toMillis() || 0));
         
         setTurmas(turmasData);
         
-        // Aplica a Memória
         const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || turmaAtiva;
         const isValid = turmasData.some(t => t.id === targetTurma);
         
@@ -71,7 +64,8 @@ export default function Comunicacao() {
       } catch (error) { console.error(error); } finally { setLoadingTurmas(false); }
     }
     fetchTurmas();
-  }, [currentUser, userProfile, escolaSelecionada, isAdmin]); // adicionado dependências
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, escolaSelecionada, isAdmin]);
 
   useEffect(() => {
     async function fetchDadosComunicacao() {
@@ -81,7 +75,6 @@ export default function Comunicacao() {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         
-        // O FILTRO: Exibe APENAS tarefas do tipo entrega para serem cobradas!
         const tarefasData = snapTarefas.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo));
@@ -191,19 +184,20 @@ export default function Comunicacao() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
       <div className="mb-6">
         <Breadcrumb items={[{ label: `Comunicação (${escolaSelecionada.nome})` }]} />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
-          <h1 className="text-xl font-black text-green-700 flex items-center gap-2 tracking-tight">
-            <Megaphone className="text-green-600" size={24} /> Central de Cobrança
+          <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
+            <div className="bg-green-100 text-green-600 p-2.5 rounded-xl shadow-sm"><Megaphone size={26} /></div>
+            Central de Cobrança
           </h1>
 
           {!loadingTurmas && turmas.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest hidden sm:block">Turma:</span>
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-2 min-w-[240px]">
+              <GraduationCap size={20} className="text-gray-400 ml-2" />
               <select 
-                className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-xl focus:ring-2 focus:ring-green-50 py-2 px-3 font-bold shadow-sm cursor-pointer w-full sm:w-auto"
+                className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-gray-700 cursor-pointer"
                 value={turmaAtiva} onChange={e => { setTurmaAtiva(e.target.value); setTarefaAtivaId(''); }}
               >
                 {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -224,12 +218,13 @@ export default function Comunicacao() {
         </div>
       ) : (
         <>
+          {/* BLOCO SUPERIOR: SELEÇÃO DA TAREFA */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mb-6 flex flex-col gap-5">
             <div>
-              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-1 flex items-center gap-2">
                 <Target size={16} /> Tarefa em Foco
               </h3>
-              <p className="text-xs text-gray-400 font-medium">Selecione qual tarefa da turma <strong>{getNomeTurmaAtiva()}</strong> você deseja cobrar neste momento.</p>
+              <p className="text-xs text-gray-400 font-medium">Selecione abaixo a tarefa ou módulo que você deseja gerenciar e cobrar neste momento.</p>
             </div>
 
             {tarefasDaTurma.length === 0 ? (
@@ -267,15 +262,19 @@ export default function Comunicacao() {
             )}
           </div>
 
+          {/* DUAS COLUNAS V1-STYLE */}
           {tarefaAtivaId && (
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
               
+              {/* COLUNA ESQUERDA: ZAP E GRUPO */}
               <div className="xl:col-span-1 space-y-6 xl:sticky xl:top-24">
+                
+                {/* CARD 1: GRUPO DA TURMA */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-200">
-                  <h3 className="text-lg font-black text-green-900 mb-2 flex items-center gap-2">
+                  <h3 className="text-lg font-black text-green-900 mb-1 flex items-center gap-2">
                     <MessageCircle size={20} className="text-green-600"/> Grupo da Turma
                   </h3>
-                  <p className="text-xs text-gray-500 mb-4 font-medium">Aviso coletivo inteligente adaptado ao prazo da tarefa.</p>
+                  <p className="text-xs text-gray-500 mb-4 font-medium">Aviso coletivo inteligente adaptado ao prazo.</p>
                   
                   <div className="bg-green-50/50 p-4 rounded-xl text-sm text-gray-700 whitespace-pre-wrap border border-green-100 mb-4 shadow-inner italic">
                     "{msgGeralPronta}"
@@ -286,23 +285,57 @@ export default function Comunicacao() {
                     disabled={loadingDados}
                     className={`w-full font-black py-3 rounded-xl transition-all flex justify-center items-center gap-2 shadow-sm text-sm disabled:opacity-50 ${copiado === 'geral' ? 'bg-green-200 text-green-900 scale-95' : 'bg-green-600 text-white hover:bg-green-700'}`}
                   >
-                    {copiado === 'geral' ? <><CheckCircle2 size={18}/> Copiado! Abrindo Zap...</> : <><Send size={18}/> Enviar para o Grupo</>}
+                    {copiado === 'geral' ? <><CheckCircle2 size={18}/> Copiado!</> : <><Send size={18}/> Enviar para o Grupo</>}
                   </button>
                 </div>
+
+                {/* CARD 2: ZAP DIRETO (RESTAURADO DA V1) */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                  <h3 className="text-lg font-black text-gray-800 mb-1 flex items-center gap-2">
+                    <User size={20} className="text-green-600"/> Zap Direto
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-4 font-medium">Envie mensagens privadas para o WhatsApp de cada aluno.</p>
+
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                    {devedores.filter(a => a.whatsapp).length === 0 ? (
+                      <p className="text-sm text-gray-400 italic text-center py-4 bg-gray-50 rounded-xl border border-gray-100">Nenhum aluno com WhatsApp cadastrado possui pendência.</p>
+                    ) : (
+                      devedores.filter(a => a.whatsapp).map((pend, idx) => {
+                        const idCopiaZap = `zap-${idx}`;
+                        return (
+                          <div key={idx} className="bg-gray-50 border border-gray-100 p-4 rounded-xl flex flex-col gap-3 hover:border-green-200 transition-colors">
+                            <div>
+                              <h4 className="font-black text-gray-800 text-sm truncate" title={pend.nome}>{getPrimeiroNome(pend.nome)} <span className="font-medium text-xs text-gray-500">({pend.nome})</span></h4>
+                              <p className="text-[10px] font-black text-red-500 uppercase mt-0.5 tracking-widest truncate">Deve: {nomeTarefa}</p>
+                            </div>
+                            <button
+                              onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
+                              className={`w-full py-2.5 rounded-lg text-xs font-bold flex justify-center items-center gap-2 transition-all ${copiado === idCopiaZap ? 'bg-green-200 text-green-900' : 'bg-white border border-green-500 text-green-600 hover:bg-green-50 shadow-sm'}`}
+                            >
+                              {copiado === idCopiaPlat ? <CheckCircle2 size={16}/> : <Send size={16}/>} {copiado === idCopiaZap ? 'Abrindo...' : 'Enviar Zap'}
+                            </button>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+
               </div>
 
+              {/* COLUNA DIREITA: COPIAR PARA PLATAFORMA */}
               <div className="xl:col-span-2 space-y-4">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                   
-                  <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-gray-100 pb-4 mb-6 gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-gray-100 pb-4 mb-6 gap-4">
                     <div>
                       <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
-                        <MonitorSmartphone size={20} className="text-blue-600"/> Textos Individualizados
+                        <Copy size={20} className="text-blue-600"/> Copiar para a Plataforma
                       </h3>
-                      <p className="text-sm text-gray-500 font-medium mt-1">Copie a mensagem e cole no sistema oficial da sua instituição ou chame direto no Zap.</p>
+                      <p className="text-sm text-gray-500 font-medium mt-1 max-w-lg">Textos individualizados. Copie a mensagem personalizada e cole no perfil do aluno na plataforma oficial (Ex: Gov.br, Moodle).</p>
                     </div>
                     {devedores.length > 0 && (
-                      <span className="bg-red-50 text-red-600 text-xs font-black px-3 py-1.5 rounded-lg shrink-0 border border-red-100">
+                      <span className="bg-red-50 text-red-600 text-xs font-black px-4 py-2 rounded-lg shrink-0 border border-red-100 shadow-sm">
                         {devedores.length} Faltam Entregar
                       </span>
                     )}
@@ -315,48 +348,40 @@ export default function Comunicacao() {
                       <div className="bg-green-100 text-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                         <CheckCircle2 size={32} strokeWidth={3} />
                       </div>
-                      100% Entregue! Ninguém devendo esta tarefa! 🎉
+                      <h3 className="text-xl font-black mb-1">100% Entregue!</h3>
+                      <p className="text-green-700/70 font-medium">Ninguém devendo esta tarefa na turma.</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                       {devedores.map((pend, idx) => {
                         const idCopiaPlat = `plat-${idx}`;
-                        const idCopiaZap = `zap-${idx}`;
                         const msgIndividualizada = gerarMensagemIndividual(pend.nome);
                         const isFocado = pend.nome === alunoAlvo;
                         
                         return (
-                          <div key={idx} className={`p-5 rounded-2xl border transition-all ${isFocado ? 'bg-blue-50/30 border-blue-300 shadow-md ring-2 ring-blue-100' : 'bg-white border-gray-200 hover:border-blue-300 shadow-sm'}`}>
+                          <div key={idx} className={`p-5 rounded-2xl border transition-all ${isFocado ? 'bg-blue-50/30 border-blue-300 shadow-md ring-4 ring-blue-50' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md'}`}>
                             
-                            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                               <div>
-                                <span className="font-black text-gray-900 text-lg block flex items-center gap-2">
-                                  {getPrimeiroNome(pend.nome)} <span className="text-gray-400 font-medium text-sm">({pend.nome})</span>
+                                <span className="font-black text-gray-900 text-lg flex items-center gap-2">
+                                  {pend.nome}
                                   {isFocado && <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">Foco</span>}
                                 </span>
+                                <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mt-1">
+                                  Deve: {nomeTarefa}
+                                </p>
                               </div>
                               
-                              <div className="flex flex-wrap gap-2 shrink-0">
-                                <button 
-                                  onClick={() => handleCopiar(msgIndividualizada, idCopiaPlat)}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm border ${copiado === idCopiaPlat ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-blue-600'}`}
-                                >
-                                  {copiado === idCopiaPlat ? <CheckCircle2 size={14}/> : <Copy size={14}/>} Copiar
-                                </button>
-                                
-                                {pend.whatsapp && (
-                                  <button 
-                                    onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm ${copiado === idCopiaZap ? 'bg-green-200 text-green-900 scale-95' : 'bg-green-600 text-white hover:bg-green-700'}`}
-                                  >
-                                    {copiado === idCopiaZap ? <CheckCircle2 size={14}/> : <Send size={14}/>} Cobrar no Zap
-                                  </button>
-                                )}
-                              </div>
+                              <button 
+                                onClick={() => handleCopiar(msgIndividualizada, idCopiaPlat)}
+                                className={`flex items-center gap-1.5 px-5 py-2.5 text-xs font-bold rounded-xl transition-all shadow-sm border ${copiado === idCopiaPlat ? 'bg-blue-600 text-white border-blue-600 scale-105' : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'}`}
+                              >
+                                {copiado === idCopiaPlat ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copiado === idCopiaPlat ? 'Copiado!' : 'Copiar Mensagem'}
+                              </button>
                             </div>
                             
-                            <div className="bg-gray-50 p-4 rounded-xl text-sm text-gray-600 whitespace-pre-wrap border border-gray-100 font-medium">
-                              {msgIndividualizada}
+                            <div className="bg-gray-50 p-5 rounded-xl text-sm text-gray-600 whitespace-pre-wrap border border-gray-100 font-medium italic shadow-inner">
+                              "{msgIndividualizada}"
                             </div>
                             
                           </div>
