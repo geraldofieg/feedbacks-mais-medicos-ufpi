@@ -312,7 +312,8 @@ export default function Comunicacao() {
                               onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
                               className={`w-full py-2.5 rounded-lg text-xs font-bold flex justify-center items-center gap-2 transition-all ${copiado === idCopiaZap ? 'bg-green-200 text-green-900' : 'bg-white border border-green-500 text-green-600 hover:bg-green-50 shadow-sm'}`}
                             >
-                              {copiado === idCopiaPlat ? <CheckCircle2 size={16}/> : <Send size={16}/>} {copiado === idCopiaZap ? 'Abrindo...' : 'Enviar Zap'}
+                              {/* CORREÇÃO DO BUG AQUI */}
+                              {copiado === idCopiaZap ? <CheckCircle2 size={16}/> : <Send size={16}/>} {copiado === idCopiaZap ? 'Abrindo...' : 'Enviar Zap'}
                             </button>
                           </div>
                         )
