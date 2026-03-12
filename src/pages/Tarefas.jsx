@@ -297,7 +297,6 @@ export default function Tarefas() {
     return 'border-orange-200 bg-orange-50/20 hover:border-orange-300';
   };
 
-  // RESTAURADA A FUNÇÃO QUE NOMEIA CORRETAMENTE OS CARTÕES
   const getNomeVisivelTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return 'Compromisso';
@@ -317,7 +316,6 @@ export default function Tarefas() {
           Gestão de Cronograma
         </h1>
         {turmas.length > 0 && turmaAtiva && (
-          {/* NOME DO BOTÃO CORRIGIDO PARA COMBINAR COM O FAB */}
           <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
             <Plus size={20}/> Novo Registro
           </button>
@@ -450,7 +448,6 @@ export default function Tarefas() {
                       )}
                     </div>
                     
-                    {/* RESTAURAÇÃO DA ETIQUETA DO TIPO DE TAREFA */}
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white py-1.5 px-3 rounded-lg border border-gray-100 w-fit mt-auto text-gray-500 shadow-sm">
                       {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem prazo'}
                     </div>
@@ -538,7 +535,7 @@ export default function Tarefas() {
               )}
 
               <button disabled={salvando || !turmaAtiva} className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg ${sucessoMsg ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20 scale-105' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'}`}>
-                {salvando ? 'Processando...' : sucessoMsg ? <><Check size={24}/> Cadastrado com Sucesso!</> : 'Adicionar ao Cronograma'}
+                {salvando ? 'Processando...' : sucessoMsg ? <><Check size={24}/> Salvo com Sucesso!</> : 'Adicionar ao Cronograma'}
               </button>
             </form>
           </div>
