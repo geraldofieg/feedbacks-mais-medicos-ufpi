@@ -5,7 +5,7 @@ import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, CheckCircle, FileText, User, Copy, 
-  Send, Sparkles, GraduationCap, Search, RefreshCw, Info
+  Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -28,6 +28,7 @@ export default function RevisarAtividade() {
   const [salvando, setSalvando] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [gerandoIA, setGerandoIA] = useState(false);
+  const [marcandoPostado, setMarcandoPostado] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
   const isPremium = userProfile?.plano === 'premium' || isAdmin;
@@ -44,11 +45,7 @@ export default function RevisarAtividade() {
 
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', snapTarefa.data().turmaId));
         const snapAlunos = await getDocs(qAlunos);
-        const listaAlunos = snapAlunos.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter(a => a.status !== 'lixeira')
-          .sort((a, b) => a.nome.localeCompare(b.nome));
-        setAlunos(listaAlunos);
+        setAlunos(snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome)));
 
         const qAtividades = query(collection(db, 'atividades'), where('tarefaId', '==', id));
         const snapAtividades = await getDocs(qAtividades);
@@ -80,44 +77,47 @@ export default function RevisarAtividade() {
         model: "gemini-3.1-flash-lite-preview",
         tools: [{ googleSearch: {} }] 
       });
-
-      const promptCompleto = `
-        Aja como um preceptor médico. Estilo: ${userProfile?.promptPersonalizado || 'Direto e técnico.'}
-        QUESTÃO: ${tarefa?.enunciado}
-        RESPOSTA: "${novaResposta}"
-        Gere um feedback direto ao aluno.
-      `;
-
+      const promptCompleto = `Aja como preceptor médico. Estilo: ${userProfile?.promptPersonalizado || 'Direto.'} Contexto: ${tarefa?.enunciado}. Resposta: "${novaResposta}". Gere feedback direto.`;
       const result = await model.generateContent(promptCompleto);
       setFeedbackEditado(result.response.text());
-    } catch (e) { alert("Limite de cota atingido. Aguarde 60s."); }
+    } catch (e) { alert("Limite de cota atingido. Tente em 60s."); }
     finally { setGerandoIA(false); }
   }
 
+  // PASSO 1: SALVAR INTERNAMENTE NA NOSSA PLATAFORMA
   async function handleAprovar() {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
     try {
       const payload = { 
         resposta: novaResposta.trim(),
-        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium ? feedbackEditado.trim() : ''),
         feedbackFinal: feedbackEditado.trim(), 
+        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium ? feedbackEditado.trim() : ''),
         nota: notaAluno.trim() || null, 
         status: 'aprovado', 
-        postado: false, 
         dataAprovacao: serverTimestamp() 
       };
-
       if (atividadeAtual) {
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
       } else {
-        const novaAtiv = { alunoId: alunoAtual.id, turmaId: tarefa.turmaId, instituicaoId: tarefa.instituicaoId, tarefaId: tarefa.id, dataCriacao: serverTimestamp(), ...payload };
+        const novaAtiv = { alunoId: alunoAtual.id, turmaId: tarefa.turmaId, instituicaoId: tarefa.instituicaoId, tarefaId: tarefa.id, dataCriacao: serverTimestamp(), postado: false, ...payload };
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Feedback Salvo!");
+      alert("Avaliação salva internamente! Agora você pode copiar e lançar no sistema oficial.");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
+  }
+
+  // PASSO 2: MARCAR COMO LANÇADO (LINHA DE CHEGADA)
+  async function handleMarcarPostado() {
+    if (marcandoPostado || !atividadeAtual) return;
+    setMarcandoPostado(true);
+    try {
+      await updateDoc(doc(db, 'atividades', atividadeAtual.id), { postado: true, dataPostagem: serverTimestamp() });
+      setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], postado: true } }));
+      alert("Sucesso! Este aluno agora está com status FINALIZADO.");
+    } catch (error) { console.error(error); } finally { setMarcandoPostado(false); }
   }
 
   if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse text-xl">Iniciando estação...</div>;
@@ -145,24 +145,12 @@ export default function RevisarAtividade() {
               <option value="">Buscar Aluno na Lista...</option>
               {alunos.map(a => {
                 const registro = atividadesMap[a.id];
-                let icone = '🔴'; // Padrão: Sem entrega
-                
+                let icone = '🔴'; 
                 if (registro) {
-                  // Se já foi aprovado ou postado
-                  if (registro.status === 'aprovado' || registro.postado) {
-                    icone = '✅';
-                  } 
-                  // Se tem texto na resposta, mas não foi aprovado ainda
-                  else if (registro.resposta && registro.resposta.trim() !== '') {
-                    icone = '🟡';
-                  }
+                  if (registro.postado) icone = '✅'; // Só fica verde se foi lançado oficialmente
+                  else icone = '🟡'; // Se existe registro mas não postou, é amarelo
                 }
-
-                return (
-                  <option key={a.id} value={a.id}>
-                    {icone} {a.nome}
-                  </option>
-                );
+                return <option key={a.id} value={a.id}>{icone} {a.nome}</option>;
               })}
             </select>
           </div>
@@ -171,87 +159,47 @@ export default function RevisarAtividade() {
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6 md:mt-10">
         {!alunoAtual ? (
-          /* TELA INICIAL COM LEGENDA DE STATUS */
-          <div className="bg-white p-12 md:p-24 rounded-[32px] md:rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
-             <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-8">
-                <User className="text-blue-200" size={40} />
-             </div>
-             <h3 className="text-2xl font-black text-slate-800 mb-2">Selecione um aluno para começar</h3>
-             <p className="text-slate-500 font-medium mb-12 text-center max-w-md">Escolha um nome na barra de busca superior para abrir a ficha de avaliação e gerar o feedback.</p>
-             
-             {/* LEGENDA VISUAL */}
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
+          <div className="bg-white p-12 md:p-24 rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
+             <h3 className="text-2xl font-black text-slate-800 mb-8">Status das Atividades</h3>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
                 <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col items-center text-center">
                    <span className="text-3xl mb-3">🔴</span>
-                   <h4 className="font-black text-slate-700 text-sm uppercase tracking-widest mb-1">Não entregue</h4>
-                   <p className="text-[11px] text-slate-500 font-bold leading-tight">O aluno ainda não enviou nenhuma resposta para esta tarefa.</p>
+                   <h4 className="font-black text-slate-700 text-sm uppercase mb-1">Aguardando</h4>
+                   <p className="text-[11px] text-slate-500 font-bold leading-tight">Você ainda não trouxe a resposta do aluno para esta plataforma.</p>
                 </div>
                 <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col items-center text-center">
                    <span className="text-3xl mb-3">🟡</span>
-                   <h4 className="font-black text-amber-700 text-sm uppercase tracking-widest mb-1">Pendente</h4>
-                   <p className="text-[11px] text-amber-600 font-bold leading-tight">A resposta já foi enviada, mas você ainda não salvou a correção.</p>
+                   <h4 className="font-black text-amber-700 text-sm uppercase mb-1">Em Revisão</h4>
+                   <p className="text-[11px] text-amber-600 font-bold leading-tight">A resposta já está aqui, mas o feedback ainda não foi lançado no sistema oficial.</p>
                 </div>
                 <div className="bg-green-50 p-6 rounded-3xl border border-green-100 flex flex-col items-center text-center">
                    <span className="text-3xl mb-3">✅</span>
-                   <h4 className="font-black text-green-700 text-sm uppercase tracking-widest mb-1">Finalizado</h4>
-                   <p className="text-[11px] text-green-600 font-bold leading-tight">Tudo pronto! A atividade já foi revisada e a nota atribuída.</p>
+                   <h4 className="font-black text-green-700 text-sm uppercase mb-1">Lançado</h4>
+                   <p className="text-[11px] text-green-600 font-bold leading-tight">Trabalho concluído! O feedback e a nota já foram enviados para o portal da sua instituição.</p>
                 </div>
              </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
             <div className="lg:col-span-8 space-y-6">
-              <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-6 md:p-10 space-y-8 md:space-y-12">
+              <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-6 md:p-10 space-y-12">
                   <section>
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-blue-100 shadow-lg">1</div>
-                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Enunciado</h4>
-                    </div>
-                    <div className="bg-slate-50 p-6 md:p-8 rounded-2xl border border-slate-100 text-slate-700 leading-relaxed font-medium text-base md:text-lg">
-                      {tarefa.enunciado || <span className="text-slate-300 italic">Sem enunciado.</span>}
-                    </div>
+                    <div className="flex items-center gap-3 mb-4"><div className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black">1</div><h4 className="text-xs font-black text-slate-900 uppercase">Enunciado</h4></div>
+                    <div className="bg-slate-50 p-6 md:p-8 rounded-2xl text-slate-700 leading-relaxed font-medium text-base md:text-lg">{tarefa.enunciado || "Sem enunciado."}</div>
                   </section>
-
                   <section>
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-blue-100 shadow-lg">2</div>
-                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Resposta do Aluno</h4>
-                    </div>
-                    <textarea
-                      rows="16"
-                      placeholder="Cole aqui a resposta..."
-                      className="w-full p-6 md:p-8 rounded-[24px] md:rounded-[32px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none transition-all leading-relaxed shadow-inner text-base md:text-lg"
-                      value={novaResposta}
-                      onChange={(e) => setNovaResposta(e.target.value)}
-                    />
+                    <div className="flex items-center gap-3 mb-4"><div className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black">2</div><h4 className="text-xs font-black text-slate-900 uppercase">Resposta do Aluno</h4></div>
+                    <textarea rows="14" placeholder="Cole a resposta aqui..." className="w-full p-6 md:p-8 rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-base md:text-lg" value={novaResposta} onChange={(e) => setNovaResposta(e.target.value)}/>
                   </section>
-                </div>
               </div>
             </div>
 
             <div className="lg:col-span-4 lg:sticky lg:top-24">
               <div className="bg-slate-900 rounded-[32px] p-6 md:p-8 text-white shadow-2xl border border-slate-800">
-                
                 <div className="mb-6">
-                  <h3 className="text-lg md:text-xl font-black flex items-center gap-3 mb-6">
-                    <CheckCircle className="text-green-400" size={24}/>
-                    Avaliação
-                  </h3>
-                  
+                  <h3 className="text-lg md:text-xl font-black flex items-center gap-3 mb-6"><CheckCircle className="text-green-400" size={24}/>Avaliação</h3>
                   {isPremium && (
-                    <button 
-                      onClick={handleGerarIA} 
-                      disabled={gerandoIA || respostaEstaVazia}
-                      className={`w-full py-4 rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 mb-6 ${
-                        gerandoIA 
-                        ? 'bg-slate-800 text-indigo-300' 
-                        : respostaEstaVazia 
-                          ? 'bg-slate-800 text-slate-600 border border-slate-800 cursor-not-allowed opacity-50' 
-                          : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 shadow-indigo-500/20'
-                      }`}
-                    >
+                    <button onClick={handleGerarIA} disabled={gerandoIA || respostaEstaVazia} className={`w-full py-4 rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 mb-6 ${gerandoIA ? 'bg-slate-800 text-indigo-300' : respostaEstaVazia ? 'bg-slate-800 text-slate-600 border border-slate-800 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 shadow-indigo-500/20'}`}>
                       {gerandoIA ? <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>}
                       {gerandoIA ? 'Escrevendo...' : 'Gerar Feedback IA'}
                     </button>
@@ -259,54 +207,38 @@ export default function RevisarAtividade() {
                 </div>
 
                 <div className="space-y-6">
-                  <div className="relative">
-                    <textarea
-                      rows="10"
-                      placeholder="O feedback aparecerá aqui..."
-                      className="w-full bg-slate-800 border-none rounded-2xl p-5 text-sm font-medium text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none leading-relaxed placeholder:text-slate-700"
-                      value={feedbackEditado}
-                      onChange={e => setFeedbackEditado(e.target.value)}
-                    />
-                    {gerandoIA && (
-                      <div className="absolute inset-0 bg-slate-900/40 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-                         <RefreshCw className="animate-spin text-indigo-400" size={32}/>
-                      </div>
-                    )}
-                  </div>
-
+                  <textarea rows="10" placeholder="O feedback aparecerá aqui..." className="w-full bg-slate-800 border-none rounded-2xl p-5 text-sm font-medium text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none leading-relaxed" value={feedbackEditado} onChange={e => setFeedbackEditado(e.target.value)}/>
                   <div className="flex items-center gap-3 bg-slate-800 p-4 rounded-2xl border border-slate-700">
-                    <GraduationCap className="text-blue-400" size={20}/>
-                    <div className="flex-1">
-                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-0.5 tracking-widest">Nota Final</label>
-                       <input 
-                        type="text" placeholder="Ex: 10.0" 
-                        className="bg-transparent border-none outline-none font-black text-white w-full text-base"
-                        value={notaAluno} onChange={e => setNotaAluno(e.target.value)}
-                      />
-                    </div>
+                    <GraduationCap className="text-blue-400" size={20}/><div className="flex-1"><label className="block text-[9px] font-black text-slate-500 uppercase mb-0.5">Nota</label><input type="text" placeholder="Ex: 10.0" className="bg-transparent border-none outline-none font-black text-white w-full text-base" value={notaAluno} onChange={e => setNotaAluno(e.target.value)}/></div>
                   </div>
 
-                  <button 
-                    onClick={handleAprovar} 
-                    disabled={salvando || !feedbackEditado}
-                    className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-3xl shadow-xl transition-all flex justify-center items-center gap-3 text-lg active:scale-95 disabled:opacity-50"
-                  >
+                  {/* BOTÃO SALVAR INTERNO */}
+                  <button onClick={handleAprovar} disabled={salvando || !feedbackEditado} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-3xl shadow-xl transition-all flex justify-center items-center gap-3 text-lg">
                     {salvando ? <RefreshCw className="animate-spin" size={20}/> : <CheckCircle size={20}/>}
-                    Salvar Avaliação
+                    Salvar Revisão
                   </button>
 
-                  {feedbackEditado && (
-                    <button 
-                      onClick={() => { navigator.clipboard.writeText(feedbackEditado); setCopiado(true); setTimeout(()=>setCopiado(false), 2000); }}
-                      className="w-full bg-slate-800 text-slate-400 font-bold py-3 rounded-2xl text-[10px] flex justify-center items-center gap-2 hover:bg-slate-700 transition-colors uppercase tracking-widest"
-                    >
-                      <Copy size={14}/> {copiado ? 'Copiado!' : 'Copiar Feedback'}
-                    </button>
+                  {/* AÇÕES DE LANÇAMENTO (ESTILO V1) */}
+                  {atividadeAtual?.status === 'aprovado' && (
+                    <div className="pt-4 border-t border-slate-800 space-y-4 animate-in fade-in zoom-in duration-300">
+                      <button onClick={() => { navigator.clipboard.writeText(feedbackEditado); setCopiado(true); setTimeout(()=>setCopiado(false), 2000); }} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors">
+                        <Copy size={18}/> {copiado ? 'Copiado para o seu Sistema!' : '1. Copiar Feedback'}
+                      </button>
+
+                      {atividadeAtual.postado ? (
+                         <div className="w-full bg-green-500/20 border border-green-500/30 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
+                            <CheckCheck size={18}/> LANÇADO OFICIALMENTE
+                         </div>
+                      ) : (
+                        <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl animate-pulse">
+                          <Send size={18}/> 2. Confirmar Lançamento Oficial
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
             </div>
-
           </div>
         )}
       </div>
