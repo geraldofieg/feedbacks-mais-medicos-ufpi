@@ -6,58 +6,14 @@ import { ArrowLeft, CalendarDays, Clock, CheckCircle2, GraduationCap, Calendar, 
 import { useAuth } from '../contexts/AuthContext';
 import Breadcrumb from '../components/Breadcrumb';
 
-// DADOS ESTÁTICOS DO PDF (CRONOGRAMA ASSÍNCRONO)
-const guiaCurricular = [
-  { 
-    eixo: "Eixo 1 - Princípios e Fundamentos do SUS", 
-    modulos: [
-      { num: "01", titulo: "Políticas públicas de saúde: processo histórico e a organização do SUS", ch: 15, creditos: 1, semanas: 2 },
-      { num: "02", titulo: "Atenção Primária à Saúde e Estratégia Saúde da Família", ch: 15, creditos: 1, semanas: 2 },
-      { num: "03", titulo: "Princípios da Medicina de Família e Comunidade", ch: 15, creditos: 1, semanas: 2 },
-    ]
-  },
-  { 
-    eixo: "Eixo 2 - Ferramentas da Medicina de Família e Comunidade", 
-    modulos: [
-      { num: "04", titulo: "Ferramentas de abordagem clínica", ch: 30, creditos: 2, semanas: 4 },
-      { num: "05", titulo: "Gestão da clínica e coordenação do cuidado", ch: 30, creditos: 2, semanas: 4 },
-      { num: "06", titulo: "Abordagem familiar", ch: 30, creditos: 2, semanas: 4 },
-      { num: "07", titulo: "Abordagem comunitária", ch: 30, creditos: 2, semanas: 4 },
-    ]
-  },
-  { 
-    eixo: "Eixo 3 - Cuidado a grupos específicos", 
-    modulos: [
-      { num: "08", titulo: "Saúde da criança e do adolescente", ch: 30, creditos: 2, semanas: 4 },
-      { num: "09", titulo: "Saúde da mulher", ch: 30, creditos: 2, semanas: 4 },
-      { num: "10", titulo: "Saúde do homem", ch: 15, creditos: 1, semanas: 2 },
-      { num: "11", titulo: "Saúde do idoso", ch: 15, creditos: 1, semanas: 2 },
-    ]
-  },
-  { 
-    eixo: "Eixo 4 - Atenção à Saúde", 
-    modulos: [
-      { num: "12", titulo: "Abordagem a problemas gerais e inespecíficos", ch: 30, creditos: 2, semanas: 4 },
-      { num: "13", titulo: "Problemas Respiratórios, nariz, ouvido e garganta", ch: 30, creditos: 2, semanas: 4 },
-      { num: "14", titulo: "Problemas de Saúde Mental", ch: 30, creditos: 2, semanas: 4 },
-      { num: "15", titulo: "Problemas Digestivos", ch: 15, creditos: 1, semanas: 2 },
-    ]
-  },
-  { 
-    eixo: "Eixo Transversal", 
-    modulos: [
-      { num: "34", titulo: "Metodologia científica (TCC)", ch: 45, creditos: 3, semanas: 6 }
-    ]
-  }
-];
+// IMPORTAMOS O ARQUIVO EXTERNO (Limpa o código principal)
+import { ementaMaisMedicos } from '../data/ementaMaisMedicos';
 
 export default function Cronograma() {
   const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const location = useLocation();
   
-  // ESTADO DA ABA (Alterna entre Agenda e PDF)
-  const [abaAtiva, setAbaAtiva] = useState('agenda'); // 'agenda' ou 'guia'
-
+  const [abaAtiva, setAbaAtiva] = useState('agenda'); 
   const [esconderPassados, setEsconderPassados] = useState(true);
   const [turmas, setTurmas] = useState([]);
   const [turmaAtiva, setTurmaAtiva] = useState(() => {
@@ -152,6 +108,10 @@ export default function Cronograma() {
 
   const itensSemPrazo = tarefas.filter(t => !t.dataFim);
 
+  // SEGURANÇA BLINDADA: Só abre a aba premium para a dupla exata.
+  const turmaObj = turmas.find(t => t.id === turmaAtiva);
+  const isTurmaMaisMedicos = escolaSelecionada?.nome?.trim() === 'UFPI' && turmaObj?.nome?.trim() === 'Facilitador Mais Médico';
+
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -171,7 +131,6 @@ export default function Cronograma() {
       <div className="max-w-4xl mx-auto">
         <Breadcrumb items={[{ label: `Cronograma (${escolaSelecionada.nome})` }]} />
         
-        {/* CABEÇALHO */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-6">
           <div className="flex items-center gap-4">
             <Link to="/" className="text-gray-400 hover:text-blue-600 transition-colors bg-white p-2 rounded-xl border border-gray-200 shadow-sm hidden md:block"><ArrowLeft size={20} /></Link>
@@ -189,24 +148,26 @@ export default function Cronograma() {
           </div>
         </div>
 
-        {/* NAVEGAÇÃO DE ABAS */}
-        <div className="flex bg-gray-200/50 p-1.5 rounded-2xl mb-8">
-          <button 
-            onClick={() => setAbaAtiva('agenda')} 
-            className={`flex-1 py-3 rounded-xl font-black text-sm flex justify-center items-center gap-2 transition-all ${abaAtiva === 'agenda' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            <LayoutList size={18} /> Agenda de Entregas (Turma)
-          </button>
-          <button 
-            onClick={() => setAbaAtiva('guia')} 
-            className={`flex-1 py-3 rounded-xl font-black text-sm flex justify-center items-center gap-2 transition-all ${abaAtiva === 'guia' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            <BookOpen size={18} /> Cronograma Assíncrono (PDF)
-          </button>
-        </div>
+        {/* TABS SÓ APARECEM SE FOR MAIS MÉDICOS (Pacote Premium) */}
+        {isTurmaMaisMedicos && (
+          <div className="flex bg-gray-200/50 p-1.5 rounded-2xl mb-8">
+            <button 
+              onClick={() => setAbaAtiva('agenda')} 
+              className={`flex-1 py-3 rounded-xl font-black text-sm flex justify-center items-center gap-2 transition-all ${abaAtiva === 'agenda' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <LayoutList size={18} /> Agenda de Entregas (Turma)
+            </button>
+            <button 
+              onClick={() => setAbaAtiva('guia')} 
+              className={`flex-1 py-3 rounded-xl font-black text-sm flex justify-center items-center gap-2 transition-all ${abaAtiva === 'guia' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <BookOpen size={18} /> Cronograma Assíncrono (PDF)
+            </button>
+          </div>
+        )}
 
-        {/* CONTEÚDO DA ABA 1: AGENDA DE ENTREGAS */}
-        {abaAtiva === 'agenda' && (
+        {/* CONTEÚDO DA ABA 1: AGENDA DE ENTREGAS (Sempre visível por padrão) */}
+        {(!isTurmaMaisMedicos || abaAtiva === 'agenda') && (
           <div>
             <div className="flex justify-end mb-6">
               <button onClick={() => setEsconderPassados(!esconderPassados)} className={`px-4 py-2 rounded-full text-xs font-bold border transition-colors shadow-sm ${esconderPassados ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}>
@@ -224,7 +185,6 @@ export default function Cronograma() {
               </div>
             ) : (
               <div className="space-y-10">
-                {/* LINHA DO TEMPO */}
                 {itensComPrazo.length > 0 && (
                   <div className="relative border-l-2 border-gray-200 ml-4 md:ml-8 pl-6 md:pl-10 space-y-10">
                     {itensComPrazo.map((item) => {
@@ -234,10 +194,8 @@ export default function Cronograma() {
 
                       return (
                         <div key={item.id} className="relative group">
-                          {/* Linha do Tempo Dot */}
                           <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 transition-all ${isAtual ? 'bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.6)] scale-110' : isPassado ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
 
-                          {/* Badge "EM ANDAMENTO" */}
                           {isAtual && (
                             <span className="absolute -top-3 left-6 bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md z-20">
                               <Clock size={12}/> EM ANDAMENTO (Faltam {diasRestantes} dias)
@@ -269,7 +227,6 @@ export default function Cronograma() {
                   </div>
                 )}
 
-                {/* Radar / Sem Prazo */}
                 {itensSemPrazo.length > 0 && (
                   <div className="bg-gray-100/50 p-6 rounded-3xl border border-gray-200 mt-20">
                     <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -290,19 +247,19 @@ export default function Cronograma() {
           </div>
         )}
 
-        {/* CONTEÚDO DA ABA 2: CRONOGRAMA ASSÍNCRONO (GUIA) */}
-        {abaAtiva === 'guia' && (
+        {/* CONTEÚDO DA ABA 2: CRONOGRAMA ASSÍNCRONO (SÓ P/ MAIS MÉDICOS) */}
+        {isTurmaMaisMedicos && abaAtiva === 'guia' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
             <div className="bg-purple-50 border border-purple-200 p-5 rounded-2xl flex items-start gap-4 mb-8">
               <BookOpen className="text-purple-500 shrink-0 mt-1" size={24} />
               <div>
-                <h3 className="font-black text-purple-900 text-lg">Ficha Técnica Oficial</h3>
-                <p className="text-purple-700 text-sm font-medium mt-1">Este é o documento oficial de referência com eixos, horas e créditos. Para ver os prazos e corrigir atividades da sua turma atual, utilize a aba "Agenda de Entregas".</p>
+                <h3 className="font-black text-purple-900 text-lg">Ficha Técnica Oficial (Mais Médicos)</h3>
+                <p className="text-purple-700 text-sm font-medium mt-1">Benefício exclusivo do seu pacote. Este é o documento oficial de referência com eixos, horas e créditos.</p>
               </div>
             </div>
 
-            {guiaCurricular.map((eixoObj, idx) => (
-              <div key={idx} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            {ementaMaisMedicos.map((eixoObj, idx) => (
+              <div key={idx} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
                 <div className="bg-slate-800 p-4 border-b border-slate-700">
                   <h3 className="text-white font-black text-lg tracking-wide">{eixoObj.eixo}</h3>
                 </div>
