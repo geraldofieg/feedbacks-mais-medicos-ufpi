@@ -46,11 +46,11 @@ export default function Migracao() {
 
   const addLog = (msg) => setLogs(prev => [...prev, msg]);
 
-  // FUNÇÃO AUXILIAR PARA CRIAR DATAS SEGURAS DO FIREBASE
+  // FUNÇÃO AUXILIAR PARA CRIAR DATAS SEGURAS (Início 00:00 / Fim 23:59)
   const criarTimestampSeguro = (dataStr, isFim = false) => {
     if (!dataStr) return null;
     const [ano, mes, dia] = dataStr.split('-');
-    // Início é 00:00, Fim é 23:59
+    // Mês em JavaScript começa no 0 (Janeiro = 0)
     const d = new Date(ano, mes - 1, dia, isFim ? 23 : 0, isFim ? 59 : 0, isFim ? 59 : 0);
     return Timestamp.fromDate(d);
   };
@@ -61,25 +61,36 @@ export default function Migracao() {
       return;
     }
     setStatus('injeçãoDatas');
-    addLog('--- INICIANDO INJEÇÃO DE DATAS NO BANCO ---');
+    addLog('--- INICIANDO CRUZAMENTO INTELIGENTE DE DATAS ---');
 
     try {
       const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAlvo));
       const snapTarefas = await getDocs(qTarefas);
       const tarefasBanco = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      addLog(`Avaliando ${tarefasBanco.length} tarefas da turma para atualização...`);
+      addLog(`Avaliando ${tarefasBanco.length} tarefas encontradas nesta turma...`);
 
       let atualizadas = 0;
 
       for (let tarefa of tarefasBanco) {
-        const nomeDaTarefa = (tarefa.nomeTarefa || tarefa.titulo || tarefa.nome || '').trim().toLowerCase();
+        const nomeReal = tarefa.nomeTarefa || tarefa.titulo || tarefa.nome || 'Sem Nome';
+        const nomeBusca = nomeReal.trim().toLowerCase();
         
-        // Tenta achar um "match" no cronograma usando a palavra-chave (Ex: "Módulo 8")
-        const cronogramaMatch = cronogramaAssincrono.find(c => 
-          nomeDaTarefa.includes(c.modulo.split(' - ')[0].toLowerCase()) || // Ex: acha "módulo 8"
-          nomeDaTarefa.includes(c.modulo.toLowerCase())
-        );
+        // INTELIGÊNCIA: Tenta achar "Módulo 8", "M08", "M-08", etc.
+        const cronogramaMatch = cronogramaAssincrono.find(c => {
+          const matchNum = c.modulo.match(/\d+/);
+          if (!matchNum) return false;
+          const num = matchNum[0]; // ex: "8"
+          const numPad = num.padStart(2, '0'); // ex: "08"
+
+          const variacoes = [
+            `módulo ${num}`, `modulo ${num}`,
+            `m${numPad}`, `m-${numPad}`, `m ${numPad}`,
+            `m${num}`, `m-${num}`
+          ];
+
+          return variacoes.some(v => nomeBusca.includes(v));
+        });
 
         if (cronogramaMatch) {
           const startTs = criarTimestampSeguro(cronogramaMatch.inicio, false);
@@ -91,13 +102,15 @@ export default function Migracao() {
           });
           
           atualizadas++;
-          addLog(`Injetado prazo em: ${tarefa.nomeTarefa || tarefa.titulo} (Fim: ${cronogramaMatch.fim})`);
+          addLog(`✅ INJETADO: [${nomeReal}] linkou com [${cronogramaMatch.modulo}]`);
+        } else {
+          addLog(`⚠️ IGNORADO: Não achei módulo compatível para [${nomeReal}]`);
         }
       }
 
-      addLog(`✅ INJEÇÃO DE DATAS CONCLUÍDA! (${atualizadas} tarefas atualizadas)`);
+      addLog(`🎯 FIM! ${atualizadas} tarefas receberam prazos (00:00 até 23:59).`);
       setStatus('concluido');
-      alert("Datas aplicadas com sucesso! Vá para o Dashboard para ver a Barra Preta.");
+      alert("Datas aplicadas com sucesso! Volte para o Início.");
     } catch (error) {
       console.error(error);
       addLog('❌ ERRO NA INJEÇÃO: ' + error.message);
@@ -142,13 +155,13 @@ export default function Migracao() {
 
             {status !== 'injeçãoDatas' && (
               <button onClick={injetarDatasFaltantes} className="w-full py-4 rounded-xl font-black text-lg bg-orange-600 text-white hover:bg-orange-700 transition-all flex justify-center items-center gap-2 shadow-lg shadow-orange-600/30">
-                <CalendarDays /> Injetar Datas nas Tarefas Migradas
+                <CalendarDays /> Injetar Datas (Corrige Barra Preta)
               </button>
             )}
 
             {status === 'injeçãoDatas' && (
               <div className="w-full py-4 rounded-xl font-black text-lg bg-yellow-500 text-white flex justify-center items-center gap-2 shadow-lg">
-                <RefreshCw className="animate-spin"/> Cruzando dados e atualizando banco...
+                <RefreshCw className="animate-spin"/> Cruzando nomes e atualizando banco...
               </div>
             )}
           </div>
