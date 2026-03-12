@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Phone, Sparkles, Save, ShieldCheck, Mail, CheckCircle2, Target, Zap } from 'lucide-react';
+// ADICIONEI O 'RefreshCw' NA LISTA ABAIXO
+import { User, Phone, Sparkles, Save, ShieldCheck, Mail, CheckCircle2, Target, Zap, RefreshCw } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Configuracoes() {
@@ -16,7 +17,6 @@ export default function Configuracoes() {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState(null);
 
-  // LOGICA DE ACESSO: Se for Premium ou Admin, libera a IA
   const isPremium = userProfile?.plano === 'premium';
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const mostrarIA = isPremium || isAdmin;
@@ -128,7 +128,6 @@ export default function Configuracoes() {
 
       <form onSubmit={handleSalvar} className="space-y-8">
         
-        {/* SEÇÃO: DADOS DO PROFESSOR */}
         <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-200">
           <h2 className="text-xl font-black text-slate-900 mb-8 flex items-center gap-3">
             <User size={24} className="text-blue-600" /> Perfil Profissional
@@ -168,7 +167,6 @@ export default function Configuracoes() {
           </div>
         </div>
 
-        {/* SEÇÃO: IA (Aparece se for Premium/Admin) */}
         {mostrarIA ? (
           <div className="bg-slate-900 p-8 rounded-[32px] shadow-2xl border border-indigo-500/20 relative overflow-hidden">
             <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"></div>
@@ -199,7 +197,6 @@ export default function Configuracoes() {
                   />
                 </div>
 
-                {/* TERMÔMETRO */}
                 <div className="w-full lg:w-72 bg-slate-800/40 rounded-3xl p-6 flex flex-col items-center justify-center text-center border border-slate-700/50">
                   <Target size={32} className="text-yellow-400 mb-4 opacity-50" />
                   <p className="text-indigo-300 text-[10px] font-black uppercase tracking-widest mb-2">Acurácia do Prompt</p>
@@ -221,7 +218,6 @@ export default function Configuracoes() {
             </div>
           </div>
         ) : (
-          /* AVISO PARA QUEM NÃO É PREMIUM */
           <div className="bg-blue-50 p-8 rounded-[32px] border-2 border-dashed border-blue-200 text-center">
             <Sparkles className="mx-auto text-blue-300 mb-4" size={48} />
             <h3 className="text-xl font-black text-blue-900 mb-2">IA de Correção Indisponível</h3>
