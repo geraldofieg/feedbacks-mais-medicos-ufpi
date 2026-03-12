@@ -13,26 +13,22 @@ export default function Cronograma() {
   const [esconderPassados, setEsconderPassados] = useState(true);
   const [turmas, setTurmas] = useState([]);
   
-  // A MÁGICA DA MEMÓRIA: Verifica o localStorage antes de ficar vazio
   const [turmaAtiva, setTurmaAtiva] = useState(() => {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
   const [tarefas, setTarefas] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // O ESPIÃO DE CLIQUES: Força a atualização se a URL trouxer uma turma nova
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
       setTurmaAtiva(location.state.turmaIdSelecionada);
     }
-  }, [location.state]);
+  }, [location.state, turmaAtiva]);
 
-  // SALVA NA MEMÓRIA: Toda vez que a turma ativa mudar, guarda no celular
   useEffect(() => {
     if (turmaAtiva) localStorage.setItem('ultimaTurmaAtiva', turmaAtiva);
   }, [turmaAtiva]);
 
-  // 1. Busca as Turmas do Professor na Instituição
   useEffect(() => {
     async function fetchTurmas() {
       if (!currentUser || !escolaSelecionada?.id) return;
@@ -42,21 +38,20 @@ export default function Cronograma() {
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
         
-        // Verifica se a turma na memória ainda existe e pertence a essa instituição
         const targetTurma = location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || turmaAtiva;
         const isValid = turmasData.some(t => t.id === targetTurma);
         
         if (isValid) {
           if (targetTurma !== turmaAtiva) setTurmaAtiva(targetTurma);
         } else if (turmasData.length > 0) {
-          setTurmaAtiva(turmasData[0].id); // Se não for válida, pega a primeira
+          setTurmaAtiva(turmasData[0].id);
         }
       } catch (error) { console.error("Erro buscar turmas:", error); }
     }
     fetchTurmas();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, escolaSelecionada]);
 
-  // 2. Busca TODAS as Tarefas da Turma Ativa
   useEffect(() => {
     async function fetchTarefas() {
       if (!turmaAtiva) { setTarefas([]); setLoading(false); return; }
@@ -72,31 +67,42 @@ export default function Cronograma() {
     fetchTarefas();
   }, [turmaAtiva]);
 
-  // Calculadora de Prazos Dinâmica
+  // MOTOR MATEMÁTICO TEMPORAL
   const getStatusPrazo = (ts) => {
     if (!ts) return null;
     const dataFim = ts.toDate ? ts.toDate() : new Date(ts);
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-    const fimDia = new Date(dataFim); fimDia.setHours(0, 0, 0, 0);
+    const hoje = new Date(); 
+    hoje.setHours(0, 0, 0, 0); // Trava à meia-noite para cálculos precisos
+    const fimDia = new Date(dataFim); 
+    fimDia.setHours(0, 0, 0, 0); // Zera hora para comparar dias inteiros
+    
+    // Cálculo do teto para evitar floats de horas residuais
     const diff = fimDia.getTime() - hoje.getTime();
     const dias = Math.ceil(diff / (1000 * 3600 * 24));
+    
     return {
-      dataFormatada: dataFim.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      dataFormatada: dataFim.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
       diasRestantes: dias,
       vencido: dias < 0,
       timestampVal: dataFim.getTime()
     };
   };
 
-  // AJUSTE: Cores amarelas para o Post-it e adição do campo 'label' para tradução do texto
   const getEstiloCartao = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
-    if (t === 'compromisso') return { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-900', shadow: 'shadow-[0_0_10px_rgba(168,85,247,0.4)]', badge: 'bg-purple-600', icon: <Calendar size={18}/>, label: 'COMPROMISSO' };
-    if (t === 'lembrete') return { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-900', shadow: 'shadow-[0_0_10px_rgba(234,179,8,0.4)]', badge: 'bg-yellow-500', icon: <StickyNote size={18}/>, label: 'POST-IT' };
-    return { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-900', shadow: 'shadow-[0_0_10px_rgba(249,115,22,0.4)]', badge: 'bg-orange-500', icon: <FileText size={18}/>, label: 'TAREFA DO ALUNO' };
+    if (t === 'compromisso') return { icon: <Calendar size={18}/>, label: 'COMPROMISSO' };
+    if (t === 'lembrete') return { icon: <StickyNote size={18}/>, label: 'POST-IT' };
+    return { icon: <FileText size={18}/>, label: 'TAREFA DO ALUNO' };
   };
 
-  const itensComPrazo = tarefas.filter(t => t.dataFim).map(t => ({ ...t, statusObj: getStatusPrazo(t.dataFim) })).filter(t => !esconderPassados || t.statusObj.diasRestantes >= 0).sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal); 
+  // DIVISÃO DE BALDES: Com Prazo x Sem Prazo
+  // Ordenação crescente: a data mais próxima ao dia de hoje aparece no topo.
+  const itensComPrazo = tarefas
+    .filter(t => t.dataFim)
+    .map(t => ({ ...t, statusObj: getStatusPrazo(t.dataFim) }))
+    .filter(t => !esconderPassados || t.statusObj.diasRestantes >= 0)
+    .sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal); 
+    
   const itensSemPrazo = tarefas.filter(t => !t.dataFim);
   
   if (!escolaSelecionada?.id) {
@@ -129,7 +135,7 @@ export default function Cronograma() {
           
           <div className="flex items-center gap-3">
             {turmas.length > 0 && (
-              <select className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 py-2.5 px-4 font-bold shadow-sm outline-none" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
+              <select className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 py-2.5 px-4 font-bold shadow-sm outline-none cursor-pointer" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
                 {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
               </select>
             )}
@@ -140,87 +146,98 @@ export default function Cronograma() {
         </div>
 
         {loading ? (
-          <div className="p-10 text-center animate-pulse font-bold text-gray-400">Montando calendário...</div>
+          <div className="p-10 text-center animate-pulse font-black text-gray-400 text-lg">Montando calendário...</div>
         ) : tarefas.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-3xl border-2 border-dashed border-gray-200">
-            <CalendarDays className="mx-auto text-gray-300 mb-4" size={48} />
+          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-200 shadow-sm">
+            <CalendarDays className="mx-auto text-gray-300 mb-6" size={48} />
+            <h3 className="text-2xl font-black text-gray-800 mb-2">Cronograma Vazio!</h3>
             <p className="text-gray-500 font-medium text-lg">Nenhum evento programado para esta turma.</p>
-            {/* AJUSTE NO TEXTO AQUI */}
-            <p className="text-gray-400 text-sm mt-2">Vá na aba "Tarefas" para adicionar entregas, reuniões ou post-its.</p>
+            <p className="text-gray-400 text-sm mt-2 max-w-sm mx-auto">Vá na aba "Tarefas" para adicionar tarefas de entrega, compromissos ou post-its.</p>
           </div>
         ) : (
           <div className="space-y-12">
             
-            {/* SEÇÃO 1: O RADAR (ITENS SEM DATA) */}
-            {itensSemPrazo.length > 0 && (
-              <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
-                <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <AlertCircle size={18}/> No Radar (Sem prazo definido)
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {itensSemPrazo.map(item => {
-                    const estilo = getEstiloCartao(item.tipo);
-                    return (
-                      <div key={item.id} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-gray-50 border-gray-200 group`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className={`p-1.5 rounded-lg text-white ${estilo.badge}`}>{estilo.icon}</div>
-                          {/* AJUSTE AQUI PARA LER O LABEL (POST-IT) EM VEZ DO TIPO (LEMBRETE) */}
-                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{estilo.label}</span>
-                        </div>
-                        <h4 className="font-bold text-gray-800 leading-tight mb-2">{item.nomeTarefa || item.titulo}</h4>
-                        <p className="text-xs text-gray-500 italic line-clamp-3">{item.enunciado}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* SEÇÃO 2: A LINHA DO TEMPO (ITENS COM DATA) */}
+            {/* SEÇÃO 1: A LINHA DO TEMPO (ITENS COM DATA - VEM PRIMEIRO) */}
             {itensComPrazo.length > 0 && (
               <div className="relative border-l-2 border-gray-200 ml-4 md:ml-8 pl-6 md:pl-10 space-y-8">
                 {itensComPrazo.map((item) => {
                   const status = item.statusObj;
-                  const isAtual = status.diasRestantes >= 0 && status.diasRestantes <= 7;
                   const isPassado = status.vencido;
-                  const estilo = getEstiloCartao(item.tipo);
+                  const isAtual = status.diasRestantes >= 0 && status.diasRestantes <= 7;
+                  const isFuturo = status.diasRestantes > 7;
                   
-                  // A MÁGICA DO TELETRANSPORTE ACONTECE AQUI
+                  const estilo = getEstiloCartao(item.tipo);
                   const isEntrega = (item.tipo || 'entrega').toLowerCase() === 'entrega';
+
+                  // DEFINIÇÃO VISUAL BASEADA NA MATEMÁTICA DE DATAS
+                  let theme = {
+                    border: 'border-gray-200',
+                    bg: 'bg-white',
+                    shadow: 'shadow-sm',
+                    badgeBg: 'bg-gray-200',
+                    badgeText: 'text-gray-500',
+                    dot: 'bg-gray-300 border-gray-50',
+                    title: 'text-gray-800'
+                  };
+
+                  if (isAtual) {
+                    theme = {
+                      border: 'border-orange-300',
+                      bg: 'bg-orange-50',
+                      shadow: 'shadow-lg shadow-orange-500/20',
+                      badgeBg: 'bg-orange-500',
+                      badgeText: 'text-white',
+                      dot: 'bg-orange-500 border-orange-100',
+                      title: 'text-orange-900'
+                    };
+                  } else if (isFuturo) {
+                    theme = {
+                      border: 'border-blue-200',
+                      bg: 'bg-blue-50/50',
+                      shadow: 'shadow-sm',
+                      badgeBg: 'bg-blue-100 border border-blue-200',
+                      badgeText: 'text-blue-700',
+                      dot: 'bg-blue-400 border-blue-50',
+                      title: 'text-blue-900'
+                    };
+                  }
 
                   const ConteudoCartao = (
                     <>
-                      <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 ${isAtual ? `${estilo.badge} ${estilo.shadow}` : isPassado ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
+                      {/* O Ponto na Linha do Tempo */}
+                      <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 z-10 ${theme.dot}`}></div>
 
+                      {/* Selo (Badge) de Urgência */}
                       {isAtual && (
-                        <span className={`absolute -top-3 left-6 text-white px-3 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-sm ${estilo.badge}`}>
-                          <Clock size={12}/> VENCE EM {status.diasRestantes} DIAS
+                        <span className={`absolute -top-3 left-6 px-3 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-sm ${theme.badgeBg} ${theme.badgeText}`}>
+                          <Clock size={12}/> {status.diasRestantes === 0 ? 'VENCE HOJE!' : `VENCE EM ${status.diasRestantes} DIAS`}
                         </span>
                       )}
-                      {isPassado && <span className="absolute -top-3 left-6 bg-gray-200 text-gray-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Passado / Vencido</span>}
-                      {!isAtual && !isPassado && <span className="absolute -top-3 left-6 bg-gray-100 text-gray-500 border border-gray-200 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1"><CalendarDays size={12}/> Faltam {status.diasRestantes} dias</span>}
+                      {isPassado && <span className="absolute -top-3 left-6 bg-gray-200 text-gray-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Encerrado</span>}
+                      {isFuturo && <span className={`absolute -top-3 left-6 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${theme.badgeBg} ${theme.badgeText}`}><CalendarDays size={12}/> Faltam {status.diasRestantes} dias</span>}
 
                       <div className={`mt-2 ${isPassado ? 'opacity-60' : ''}`}>
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            {estilo.icon}
-                            {/* AJUSTE AQUI PARA LER O LABEL EM VEZ DO TIPO */}
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{estilo.label}</span>
+                            <span className={`p-1.5 rounded-lg ${isAtual ? 'bg-orange-500 text-white' : isFuturo ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                              {estilo.icon}
+                            </span>
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{estilo.label}</span>
                           </div>
-                          {isEntrega && <span className="text-[10px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hidden md:block">Abrir Correção &rarr;</span>}
+                          {isEntrega && !isPassado && <span className="text-[10px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hidden md:block">Abrir Correção &rarr;</span>}
                         </div>
                         
-                        <h3 className={`text-lg sm:text-xl font-black mb-2 ${isAtual ? estilo.text : 'text-gray-800'} ${isEntrega ? 'group-hover:underline' : ''}`}>
+                        <h3 className={`text-lg sm:text-xl font-black mb-2 ${theme.title} ${isEntrega && !isPassado ? 'group-hover:underline' : ''}`}>
                           {item.nomeTarefa || item.titulo}
                         </h3>
                         
-                        <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-500 bg-gray-100/50 inline-flex px-3 py-1.5 rounded-lg border border-gray-100 mt-1">
-                          <Clock size={16} className="text-gray-400"/>
-                          Data final: {status.dataFormatada}
+                        <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-500 bg-white/60 inline-flex px-3 py-1.5 rounded-lg border border-gray-200 mt-1">
+                          <Clock size={16} className={isAtual ? 'text-orange-400' : isFuturo ? 'text-blue-400' : 'text-gray-400'}/>
+                          Prazo: {status.dataFormatada}
                         </div>
 
                         {item.enunciado && (
-                          <div className="mt-4 p-3 bg-white rounded-xl border border-gray-100 text-sm shadow-sm font-medium text-gray-600">
+                          <div className={`mt-4 p-4 rounded-xl text-sm font-normal text-slate-600 whitespace-pre-wrap border ${isAtual ? 'bg-white border-orange-100' : isFuturo ? 'bg-white border-blue-100' : 'bg-gray-50 border-gray-200'}`}>
                             {item.enunciado}
                           </div>
                         )}
@@ -228,19 +245,43 @@ export default function Cronograma() {
                     </>
                   );
 
-                  // RENDERIZAÇÃO INTELIGENTE (Link ou Div)
                   return isEntrega ? (
-                    <Link key={item.id} to={`/revisar/${item.id}`} className={`block relative p-5 rounded-2xl border transition-all group cursor-pointer ${isAtual ? `${estilo.bg} ${estilo.border} shadow-md transform scale-[1.02] hover:border-orange-400` : 'bg-white border-gray-200 hover:border-orange-300 hover:shadow-md'}`}>
+                    <Link key={item.id} to={`/revisar/${item.id}`} className={`block relative p-5 rounded-2xl border transition-all group cursor-pointer ${theme.bg} ${theme.border} ${isAtual ? `transform scale-[1.02] ${theme.shadow}` : 'hover:border-blue-400 hover:shadow-md'}`}>
                       {ConteudoCartao}
                     </Link>
                   ) : (
-                    <div key={item.id} className={`relative p-5 rounded-2xl border transition-all ${isAtual ? `${estilo.bg} ${estilo.border} shadow-md transform scale-[1.02]` : 'bg-white border-gray-200'}`}>
+                    <div key={item.id} className={`relative p-5 rounded-2xl border transition-all ${theme.bg} ${theme.border} ${isAtual ? `transform scale-[1.02] ${theme.shadow}` : ''}`}>
                       {ConteudoCartao}
                     </div>
                   );
                 })}
               </div>
             )}
+
+            {/* SEÇÃO 2: O RADAR (ITENS SEM DATA - AGORA NO FINAL) */}
+            {itensSemPrazo.length > 0 && (
+              <div className="bg-gray-50 p-6 rounded-3xl border border-gray-200 shadow-inner mt-16">
+                <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <AlertCircle size={18}/> Sem Prazo (Radar / Post-its)
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {itensSemPrazo.map(item => {
+                    const estilo = getEstiloCartao(item.tipo);
+                    return (
+                      <div key={item.id} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-white border-gray-200 group`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={`p-1.5 rounded-lg bg-gray-100 text-gray-500`}>{estilo.icon}</div>
+                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{estilo.label}</span>
+                        </div>
+                        <h4 className="font-bold text-gray-800 leading-tight mb-2">{item.nomeTarefa || item.titulo}</h4>
+                        <p className="text-xs text-gray-500 font-normal whitespace-pre-wrap line-clamp-4">{item.enunciado}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
       </div>
