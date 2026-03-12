@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown, UserCircle, Settings, BookOpen, LifeBuoy, ChevronDown } from 'lucide-react';
+import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown, UserCircle, Settings, BookOpen, LifeBuoy, ChevronDown, Trash2 } from 'lucide-react';
 
 export default function Navbar() {
   const { currentUser, userProfile, logout, escolaSelecionada } = useAuth();
@@ -12,7 +12,7 @@ export default function Navbar() {
   const [menuAberto, setMenuAberto] = useState(false);
   const menuRef = useRef(null);
 
-  // FECHA O MENU SE CLICAR FORA DELE (UX Padrão)
+  // FECHA O MENU SE CLICAR FORA DELE
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -90,9 +90,7 @@ export default function Navbar() {
               </Link>
             )}
 
-            {/* =========================================================================
-                O NOVO MENU DO PROFESSOR (DROPDOWN VIP)
-                ========================================================================= */}
+            {/* O MENU DO PROFESSOR (DROPDOWN VIP) */}
             <div className="relative border-l border-gray-200 pl-5 ml-2" ref={menuRef}>
               <button 
                 onClick={() => setMenuAberto(!menuAberto)} 
@@ -116,9 +114,16 @@ export default function Navbar() {
                     <Link to="/configuracoes" onClick={() => setMenuAberto(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
                       <Settings size={18} /> Configurações / IA
                     </Link>
+                    
+                    {/* NOVO LINK DA LIXEIRA */}
+                    <Link to="/lixeira" onClick={() => setMenuAberto(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
+                      <Trash2 size={18} /> Lixeira (Recuperar)
+                    </Link>
+
                     <button onClick={() => { setMenuAberto(false); alert('O Guia de Uso será liberado em breve!'); }} className="w-full text-left flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
                       <BookOpen size={18} /> Como Funciona o SaaS
                     </button>
+                    
                     <button onClick={() => { setMenuAberto(false); window.open('https://wa.me/', '_blank'); }} className="w-full text-left flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
                       <LifeBuoy size={18} /> Ajuda e Suporte
                     </button>
@@ -136,7 +141,7 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* === MODO CELULAR (PÍLULAS EXTRAS DE UTILIDADE) === */}
+        {/* === MODO CELULAR === */}
         <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           
           <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-3 py-2 rounded-lg mr-1 font-bold text-xs gap-1 shadow-sm">
@@ -163,11 +168,15 @@ export default function Navbar() {
             </Link>
           )}
 
-          {/* DIVISOR CELULAR E NOVAS OPÇÕES DE UTILIDADE */}
           <div className="w-px h-6 bg-gray-300 shrink-0 mx-1"></div>
 
           <Link to="/configuracoes" className="shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
             <Settings size={14} /> Ajustes
+          </Link>
+
+          {/* LIXEIRA MOBILE */}
+          <Link to="/lixeira" className="shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
+            <Trash2 size={14} /> Lixeira
           </Link>
 
           <button onClick={() => window.open('https://wa.me/', '_blank')} className="shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
