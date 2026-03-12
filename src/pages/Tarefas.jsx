@@ -53,6 +53,18 @@ export default function Tarefas() {
   const [horaFimEdicao, setHoraFimEdicao] = useState('');
   const [tipoEdicao, setTipoEdicao] = useState('entrega');
 
+  // GATILHO PARA ABRIR O MODAL AUTOMATICAMENTE SE VIER DO FAB
+  useEffect(() => {
+    if (location.state?.novoRegistro || location.state?.abrirModal) {
+      setIsModalOpen(true);
+      // Limpa o state para não reabrir se ele atualizar a página
+      const stateCopy = { ...location.state };
+      delete stateCopy.novoRegistro;
+      delete stateCopy.abrirModal;
+      window.history.replaceState(stateCopy, document.title);
+    }
+  }, [location.state]);
+
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
       setTurmaAtiva(location.state.turmaIdSelecionada);
@@ -241,7 +253,7 @@ export default function Tarefas() {
       setAtribuicaoEspecifica(false);
       setAlunosSelecionados([]);
       
-      setSucessoMsg(`"${tituloSalvo}" adicionado com sucesso!`);
+      setSucessoMsg(`"${tituloSalvo}" salvo com sucesso!`);
       setTimeout(() => setSucessoMsg(''), 3000);
       setTimeout(() => { if (tituloInputRef.current) tituloInputRef.current.focus(); }, 100);
 
@@ -285,6 +297,14 @@ export default function Tarefas() {
     return 'border-orange-200 bg-orange-50/20 hover:border-orange-300';
   };
 
+  // RESTAURADA A FUNÇÃO QUE NOMEIA CORRETAMENTE OS CARTÕES
+  const getNomeVisivelTipo = (tipo) => {
+    const t = (tipo || 'entrega').toLowerCase();
+    if (t === 'compromisso') return 'Compromisso';
+    if (t === 'lembrete') return 'Post-it';
+    return 'Tarefa do Aluno';
+  };
+
   const tarefasFiltradas = tarefas.filter(t => (t.nomeTarefa || t.titulo || '').toLowerCase().includes(busca.toLowerCase()));
 
   return (
@@ -297,8 +317,9 @@ export default function Tarefas() {
           Gestão de Cronograma
         </h1>
         {turmas.length > 0 && turmaAtiva && (
+          {/* NOME DO BOTÃO CORRIGIDO PARA COMBINAR COM O FAB */}
           <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
-            <Plus size={20}/> Nova Tarefa
+            <Plus size={20}/> Novo Registro
           </button>
         )}
       </div>
@@ -345,7 +366,7 @@ export default function Tarefas() {
             <h3 className="text-2xl font-black text-gray-800 mb-2">Cronograma Vazio!</h3>
             <p className="text-gray-500 font-medium mb-8 text-lg">Nenhuma tarefa ou módulo encontrado para esta turma.</p>
             <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 inline-flex items-center gap-2">
-              <Plus size={20}/> Adicionar Tarefa
+              <Plus size={20}/> Novo Registro
             </button>
           </div>
         ) : (
@@ -401,7 +422,6 @@ export default function Tarefas() {
                 ) : (
                   <div className="flex flex-col h-full justify-between">
                     <div>
-                      {/* NOVO LAYOUT: Ícone e Título lado a lado */}
                       <div className="flex justify-between items-start gap-3 mb-3">
                         <div className="flex items-start gap-3 min-w-0 flex-1">
                           <div className="p-2 bg-white rounded-lg shadow-sm border border-gray-100 shrink-0 mt-0.5">
@@ -425,14 +445,14 @@ export default function Tarefas() {
                         </div>
                       </div>
 
-                      {/* TEXTO COM MAIS ESPAÇO E QUEBRA DE LINHA */}
                       {tarefa.enunciado && (
                         <p className="text-sm text-gray-600 font-normal line-clamp-4 mb-4 bg-white/50 p-3 rounded-lg whitespace-pre-wrap">{tarefa.enunciado}</p>
                       )}
                     </div>
                     
+                    {/* RESTAURAÇÃO DA ETIQUETA DO TIPO DE TAREFA */}
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white py-1.5 px-3 rounded-lg border border-gray-100 w-fit mt-auto text-gray-500 shadow-sm">
-                      {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem prazo final'}
+                      {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem prazo'}
                     </div>
                   </div>
                 )}
