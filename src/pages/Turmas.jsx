@@ -2,31 +2,38 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Users, Plus, ArrowRight, Pencil, Trash2, X, Check, FileText, School } from 'lucide-react';
+import { BookOpen, Users, Plus, ArrowRight, Pencil, Trash2, X, Check, FileText, School, Star, Copy, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Turmas() {
-  // AJUSTE: Trazendo o setEscolaSelecionada para atualizar o crachá assim que criar
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // ESTADOS CRIAR DO ZERO
   const [novaTurma, setNovaTurma] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  // ESTADOS DO CLONADOR DE TURMAS
+  const [modoCriacao, setModoCriacao] = useState('nova'); // 'nova' ou 'clonar'
+  const [turmasModelo, setTurmasModelo] = useState([]);
+  const [modeloSelecionado, setModeloSelecionado] = useState('');
+  const [nomeTurmaClonada, setNomeTurmaClonada] = useState('');
+  const [clonando, setClonando] = useState(false);
 
   const [editandoId, setEditandoId] = useState(null);
   const [nomeEdicao, setNomeEdicao] = useState('');
 
-  // ESTADOS DO ONBOARDING (Criação de Instituição)
+  // ESTADOS DO ONBOARDING
   const [precisaCriarEscola, setPrecisaCriarEscola] = useState(false);
   const [novaEscolaNome, setNovaEscolaNome] = useState('');
   const [salvandoEscola, setSalvandoEscola] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
-  // 1. VERIFICA SE O PROFESSOR TEM INSTITUIÇÃO (Se não tiver, ativa a tela de Onboarding)
+  // 1. VERIFICA INSTITUIÇÃO (ONBOARDING)
   useEffect(() => {
     async function checkInstituicao() {
       if (!currentUser) return;
@@ -42,10 +49,7 @@ export default function Turmas() {
           return;
         }
 
-        // Se tem instituição mas a memória perdeu, auto-seleciona a primeira
-        if (!escolaSelecionada) {
-          setEscolaSelecionada(lista[0]);
-        }
+        if (!escolaSelecionada) setEscolaSelecionada(lista[0]);
       } catch (e) {
         console.error("Erro ao verificar instituição:", e);
       }
@@ -53,25 +57,28 @@ export default function Turmas() {
     checkInstituicao();
   }, [currentUser, isAdmin, escolaSelecionada, setEscolaSelecionada]);
 
-  // 2. BUSCA TURMAS (Só roda se ele já tiver instituição selecionada)
+  // 2. BUSCA TURMAS DO USUÁRIO E TURMAS MODELO DA INSTITUIÇÃO
   useEffect(() => {
     async function fetchTurmas() {
       if (!currentUser || !escolaSelecionada?.id || precisaCriarEscola) return;
       
       try {
+        // Busca turmas do professor (ou todas se for admin)
         const turmasRef = collection(db, 'turmas');
         const q = isAdmin
           ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
           : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
 
         const querySnapshot = await getDocs(q);
-        const turmasData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        
+        const turmasData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const turmasAtivas = turmasData.filter(t => t.status !== 'lixeira');
         setTurmas(turmasAtivas.sort((a, b) => (b.dataCriacao?.toMillis() || 0) - (a.dataCriacao?.toMillis() || 0)));
+
+        // Busca QUAISQUER turmas daquela instituição que o ADMIN marcou como Modelo (isModelo = true)
+        const qModelos = query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('isModelo', '==', true));
+        const snapModelos = await getDocs(qModelos);
+        setTurmasModelo(snapModelos.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira'));
+
       } catch (error) {
         console.error("Erro ao buscar turmas:", error);
       } finally {
@@ -81,9 +88,6 @@ export default function Turmas() {
     fetchTurmas();
   }, [currentUser, escolaSelecionada, isAdmin, precisaCriarEscola]);
 
-  // =========================================================================
-  // FUNÇÃO: CRIAR INSTITUIÇÃO (ONBOARDING)
-  // =========================================================================
   async function handleCriarInstituicao(e) {
     e.preventDefault();
     if (!novaEscolaNome.trim()) return;
@@ -96,21 +100,12 @@ export default function Turmas() {
         dataCriacao: serverTimestamp()
       };
       const docRef = await addDoc(collection(db, 'instituicoes'), novaEscolaObj);
-      
-      // Salva na memória e libera a tela de turmas
       setEscolaSelecionada({ id: docRef.id, ...novaEscolaObj });
       setPrecisaCriarEscola(false);
-    } catch (error) {
-      console.error("Erro ao criar instituição:", error);
-      alert("Erro ao criar a instituição.");
-    } finally {
-      setSalvandoEscola(false);
-    }
+    } catch (error) { console.error("Erro criar inst:", error); } 
+    finally { setSalvandoEscola(false); }
   }
 
-  // =========================================================================
-  // FUNÇÃO: CRIAR TURMA
-  // =========================================================================
   async function handleCriarTurma(e) {
     e.preventDefault();
     if (!novaTurma.trim() || !escolaSelecionada?.id) return;
@@ -123,21 +118,92 @@ export default function Turmas() {
         instituicaoNome: escolaSelecionada.nome, 
         professorUid: currentUser.uid,
         status: 'ativa',
+        isModelo: false, // Nasce comum
         dataCriacao: serverTimestamp()
       };
       const docRef = await addDoc(collection(db, 'turmas'), novaTurmaObj);
-      
       setTurmas([{ id: docRef.id, ...novaTurmaObj, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]);
       setNovaTurma('');
+    } catch (error) { console.error("Erro ao criar turma:", error); } 
+    finally { setSalvando(false); }
+  }
+
+  // =========================================================================
+  // MOTOR DE CLONAGEM MÁGICA
+  // =========================================================================
+  async function handleClonarTurma(e) {
+    e.preventDefault();
+    if (!modeloSelecionado || !nomeTurmaClonada.trim() || !escolaSelecionada?.id) return;
+
+    try {
+      setClonando(true);
+      
+      // 1. Cria a nova Turma para o professor logado
+      const novaTurmaObj = {
+        nome: nomeTurmaClonada.trim(),
+        instituicaoId: escolaSelecionada.id,
+        instituicaoNome: escolaSelecionada.nome, 
+        professorUid: currentUser.uid,
+        status: 'ativa',
+        isModelo: false, // A cópia NÃO é um modelo
+        dataCriacao: serverTimestamp()
+      };
+      const turmaDocRef = await addDoc(collection(db, 'turmas'), novaTurmaObj);
+
+      // 2. Busca todas as tarefas da turma Modelo
+      const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', modeloSelecionado));
+      const snapTarefas = await getDocs(qTarefas);
+      
+      let tarefasCopiadas = 0;
+
+      // 3. Clona cada tarefa, trocando apenas o ID da Turma e o ID do Professor
+      for (const docT of snapTarefas.docs) {
+        const tarefaOriginal = docT.data();
+        if (tarefaOriginal.status !== 'lixeira') {
+          await addDoc(collection(db, 'tarefas'), {
+            ...tarefaOriginal,
+            turmaId: turmaDocRef.id,
+            professorUid: currentUser.uid,
+            dataCriacao: serverTimestamp() // Atualiza a data de criação no banco
+          });
+          tarefasCopiadas++;
+        }
+      }
+
+      // 4. Atualiza a tela
+      setTurmas([{ id: turmaDocRef.id, ...novaTurmaObj, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]);
+      setModeloSelecionado('');
+      setNomeTurmaClonada('');
+      setModoCriacao('nova');
+      
+      alert(`✅ Sucesso! Turma criada e ${tarefasCopiadas} tarefas foram importadas perfeitamente.`);
+
     } catch (error) {
-      console.error("Erro ao criar turma:", error);
-      alert("Erro ao criar a turma.");
+      console.error("Erro ao clonar turma:", error);
+      alert("Erro ao importar dados do modelo.");
     } finally {
-      setSalvando(false);
+      setClonando(false);
     }
   }
 
-  // ... (Edição e Lixeira)
+  // FUNÇÃO ADMIN: MARCAR/DESMARCAR TURMA COMO MODELO OFICIAL
+  async function toggleTurmaModelo(turmaId, statusAtual) {
+    if (!isAdmin) return;
+    try {
+      const novoStatus = !statusAtual;
+      await updateDoc(doc(db, 'turmas', turmaId), { isModelo: novoStatus });
+      setTurmas(turmas.map(t => t.id === turmaId ? { ...t, isModelo: novoStatus } : t));
+      
+      // Atualiza a lista de modelos do dropdown
+      if (novoStatus) {
+        const turmaAtualizada = turmas.find(t => t.id === turmaId);
+        setTurmasModelo([...turmasModelo, { ...turmaAtualizada, isModelo: true }]);
+      } else {
+        setTurmasModelo(turmasModelo.filter(t => t.id !== turmaId));
+      }
+    } catch (e) { console.error("Erro ao alterar status de modelo:", e); }
+  }
+
   async function handleSalvarEdicao(id) {
     if (!nomeEdicao.trim()) return;
     try {
@@ -158,7 +224,7 @@ export default function Turmas() {
   if (loading) return <div className="p-20 text-center text-gray-400 font-bold animate-pulse">Carregando painel...</div>;
 
   // =========================================================================
-  // TELA 1: ONBOARDING (Se o professor não tiver Instituição criada)
+  // TELA 1: ONBOARDING
   // =========================================================================
   if (precisaCriarEscola) {
     return (
@@ -212,31 +278,39 @@ export default function Turmas() {
             <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center">
               <BookOpen className="text-gray-300 w-16 h-16 mx-auto mb-4" />
               <h3 className="text-xl font-black text-gray-700 mb-2">Nenhuma turma criada</h3>
-              <p className="text-gray-500 mb-6 text-sm">Utilize o formulário lateral para criar o seu primeiro agrupamento na instituição {escolaSelecionada?.nome}.</p>
+              <p className="text-gray-500 mb-6 text-sm">Utilize o painel lateral para criar ou importar o seu primeiro agrupamento.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {turmas.map(turma => (
-                <div key={turma.id} className="bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-blue-300 hover:shadow-md transition-all overflow-hidden flex flex-col group">
-                  <div className="p-5 flex-1">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="bg-blue-50 text-blue-600 p-2 rounded-lg"><BookOpen size={20}/></div>
+                <div key={turma.id} className={`bg-white border rounded-2xl shadow-sm transition-all overflow-hidden flex flex-col group ${turma.isModelo ? 'border-yellow-300 shadow-yellow-500/10' : 'border-gray-200 hover:border-blue-300'}`}>
+                  <div className="p-5 flex-1 relative">
+                    
+                    {/* Estrela de Admin - Define Turma como Modelo Master */}
+                    {isAdmin && (
+                      <button 
+                        onClick={() => toggleTurmaModelo(turma.id, turma.isModelo)}
+                        className={`absolute top-4 right-4 p-2 rounded-full transition-all shadow-sm ${turma.isModelo ? 'bg-yellow-100 text-yellow-500 hover:bg-yellow-200' : 'bg-gray-50 text-gray-300 hover:bg-gray-100 hover:text-gray-500'}`}
+                        title={turma.isModelo ? 'Desmarcar como Turma Modelo' : 'Definir como Turma Modelo (Padrão)'}
+                      >
+                        <Star size={18} fill={turma.isModelo ? "currentColor" : "none"} />
+                      </button>
+                    )}
+
+                    <div className="flex justify-between items-start mb-3 pr-10">
+                      <div className={`p-2 rounded-lg ${turma.isModelo ? 'bg-yellow-50 text-yellow-600' : 'bg-blue-50 text-blue-600'}`}>
+                        <BookOpen size={20}/>
+                      </div>
                       
                       <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => { setEditandoId(turma.id); setNomeEdicao(turma.nome); }} 
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Editar Nome"
-                        >
-                          <Pencil size={18}/>
-                        </button>
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar Nome"
+                        ><Pencil size={18}/></button>
                         <button 
                           onClick={() => handleLixeira(turma.id, turma.nome)} 
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Mover para Lixeira"
-                        >
-                          <Trash2 size={18}/>
-                        </button>
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Lixeira"
+                        ><Trash2 size={18}/></button>
                       </div>
                     </div>
                     
@@ -246,13 +320,17 @@ export default function Turmas() {
                           type="text" value={nomeEdicao} onChange={(e) => setNomeEdicao(e.target.value)} 
                           className="w-full border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800" autoFocus 
                         />
-                        <button onClick={() => handleSalvarEdicao(turma.id)} className="bg-green-500 text-white p-2 rounded-lg hover:bg-green-600 shadow-sm"><Check size={16}/></button>
+                        <button onClick={() => handleSalvarEdicao(turma.id)} className="bg-green-500 text-white p-2 rounded-lg hover:bg-green-600"><Check size={16}/></button>
                         <button onClick={() => setEditandoId(null)} className="bg-gray-200 text-gray-600 p-2 rounded-lg hover:bg-gray-300"><X size={16}/></button>
                       </div>
                     ) : (
                       <h3 className="font-black text-gray-800 text-xl mb-1 truncate">{turma.nome}</h3>
                     )}
-                    <p className="text-xs text-gray-400 font-medium">Turma Ativa</p>
+                    
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xs text-gray-400 font-medium">Turma Ativa</p>
+                      {turma.isModelo && <span className="bg-yellow-100 text-yellow-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest">Master</span>}
+                    </div>
                   </div>
                   
                   <div className="bg-gray-50 border-t border-gray-100 p-3 grid grid-cols-2 gap-2">
@@ -269,22 +347,85 @@ export default function Turmas() {
           )}
         </div>
 
-        {/* BLOCO 2: Formulário de Criação de Turma */}
+        {/* BLOCO 2: Painel de Criação / Clonagem */}
         <div className="w-full lg:w-1/3 order-2">
-          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 sticky top-24">
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Plus size={16}/> Nova Turma
-            </h2>
-            <form onSubmit={handleCriarTurma} className="flex flex-col gap-3">
-              <input
-                type="text" required placeholder="Ex: Odontologia 3º Período..."
-                className="w-full px-4 py-3 bg-white border border-gray-200 text-gray-800 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold outline-none placeholder:font-medium placeholder:text-gray-400"
-                value={novaTurma} onChange={(e) => setNovaTurma(e.target.value)}
-              />
-              <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white font-bold py-3.5 px-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm flex justify-center items-center gap-2">
-                {salvando ? 'Criando...' : 'Criar Turma'}
+          <div className="bg-white p-2 rounded-3xl border border-gray-200 shadow-sm sticky top-24">
+            
+            {/* ABAS DO PAINEL */}
+            <div className="flex bg-gray-50 p-1 rounded-2xl mb-4">
+              <button 
+                onClick={() => setModoCriacao('nova')} 
+                className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${modoCriacao === 'nova' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <Plus size={16}/> Criar do Zero
               </button>
-            </form>
+              <button 
+                onClick={() => setModoCriacao('clonar')} 
+                className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${modoCriacao === 'clonar' ? 'bg-white text-purple-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <Copy size={16}/> Importar Modelo
+              </button>
+            </div>
+
+            {/* MODO 1: CRIAR DO ZERO */}
+            {modoCriacao === 'nova' && (
+              <div className="p-4 animate-in fade-in duration-300">
+                <form onSubmit={handleCriarTurma} className="flex flex-col gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Nome da nova turma</label>
+                    <input
+                      type="text" required placeholder="Ex: Odontologia 3º Período..."
+                      className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 text-gray-800 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 font-bold outline-none placeholder:font-medium placeholder:text-gray-400 transition-all"
+                      value={novaTurma} onChange={(e) => setNovaTurma(e.target.value)}
+                    />
+                  </div>
+                  <button type="submit" disabled={salvando} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm flex justify-center items-center gap-2">
+                    {salvando ? <RefreshCw className="animate-spin" size={20}/> : <Plus size={20}/>}
+                    {salvando ? 'Criando...' : 'Criar Turma em Branco'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* MODO 2: CLONAR MODELO */}
+            {modoCriacao === 'clonar' && (
+              <div className="p-4 animate-in fade-in duration-300">
+                {turmasModelo.length === 0 ? (
+                  <div className="text-center py-6 px-2 bg-purple-50 rounded-xl border border-purple-100">
+                    <Star className="mx-auto text-purple-300 mb-2" size={32}/>
+                    <p className="text-sm font-bold text-purple-800 leading-tight">A coordenação ainda não definiu turmas-modelo para {escolaSelecionada?.nome}.</p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleClonarTurma} className="flex flex-col gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Selecione o Modelo (Pacote)</label>
+                      <select 
+                        required 
+                        className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 text-gray-800 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-500 font-bold outline-none cursor-pointer"
+                        value={modeloSelecionado} onChange={e => setModeloSelecionado(e.target.value)}
+                      >
+                        <option value="">Escolha um curso...</option>
+                        {turmasModelo.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Nome da sua Turma</label>
+                      <input
+                        type="text" required placeholder="Ex: Mais Médicos - Polo Teresina"
+                        className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 text-gray-800 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-500 font-bold outline-none placeholder:font-medium placeholder:text-gray-400 transition-all"
+                        value={nomeTurmaClonada} onChange={(e) => setNomeTurmaClonada(e.target.value)}
+                      />
+                    </div>
+
+                    <button type="submit" disabled={clonando || !modeloSelecionado} className="w-full bg-purple-600 text-white font-black py-4 rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-all shadow-sm flex justify-center items-center gap-2 mt-2">
+                      {clonando ? <RefreshCw className="animate-spin" size={20}/> : <Copy size={20}/>}
+                      {clonando ? 'Importando tarefas...' : 'Clonar e Iniciar Curso'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
