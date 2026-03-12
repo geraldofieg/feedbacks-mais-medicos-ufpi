@@ -31,7 +31,7 @@ Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de 
 * **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` ('professor' ou 'admin'), `plano` ('basico', 'intermediario', 'premium'), **`promptPersonalizado`** (String para moldar a IA), **`status` ('ativo' ou 'bloqueado')**, `dataCadastro`.
 * **`turmas`:** `id`, `instituicaoId`, `nome`, `professorUid`, `status`, `dataCriacao`.
 * **`alunos`:** `id`, `nome`, `whatsapp` (opcional), `email` (opcional), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCadastro`.
-* **`tarefas`:** `id`, `nomeTarefa` (Obrigatório), `enunciado` (Opcional), `urlEnunciado` (Opcional), `dataFim` (Firebase Timestamp), `tipo` ('entrega', 'compromisso', 'lembrete'), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCriacao`.
+* **`tarefas`:** `id`, `nomeTarefa` (Obrigatório), `enunciado` (Opcional), `urlEnunciado` (Opcional), `dataInicio` (Firebase Timestamp), `dataFim` (Firebase Timestamp), `tipo` ('entrega', 'compromisso', 'lembrete'), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCriacao`.
 * **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta` (Opcional), `urlResposta` (Opcional), `status` ('pendente'|'aprovado'|'devolvido'), `nota` (Opcional), `feedbackSugerido`, `feedbackFinal`, `postado` (Booleano), `dataAprovacao`, `dataPostagem`.
 
 ## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
@@ -39,8 +39,10 @@ Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de 
 * **Troca de Contexto Inteligente:** O Dashboard possui um *Dropdown* nativo no cabeçalho para alternar entre Instituições.
 * **A Esteira de Produção (Kanban Numérico Inteligente):** O Dashboard apresenta o funil de trabalho com links diretos para páginas físicas independentes. Sua exibição se adapta ao Perfil (Role):
     * **Visão Gestor (Admin):** 3 Caixas (Aguardando Revisão `/aguardandorevisao` ➔ Pronto p/ Lançar `/faltapostar` ➔ Histórico Finalizado `/historico`).
-    * **Visão Professor:** 2 Caixas (Aguardando Revisão ➔ Histórico Finalizado). A caixa `/faltapostar` é oculta e seus valores somados ao Histórico.
-* **Termômetro da IA:** Mede a eficiência do prompt. Regra: Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA.
+    * **Visão Professor Básico (Tier 1):** 1 Caixa (Resumo do Histórico Finalizado).
+    * **Visão Professor Inter/Premium (Tier 2/3):** 2 Caixas (Aguardando Revisão ➔ Histórico Finalizado). A caixa `/faltapostar` é oculta e seus valores somados ao Histórico.
+* **Termômetro da IA:** Mede a eficiência do prompt. Regra: Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Apenas visível para Tier Premium e Admin.
+* **Motor de Urgência (Gestão à Vista):** Exibe listas nominais de pendências no Dashboard usando cruzamento matemático estrito de `dataInicio`, `dataFim` e data atual do navegador. Hierarquia de exibição: 1º Tarefa Atual (ou próxima), 2º Última Tarefa Anterior (vencida recentemente).
 
 ## 7. Perfis de Acesso (RBAC SaaS) e Painel Admin
 A plataforma diferencia quem opera de quem administra o SaaS através do campo `role`:
@@ -49,8 +51,8 @@ A plataforma diferencia quem opera de quem administra o SaaS através do campo `
 * **Painel SaaS (`/admin`):** Tela gerencial exclusiva para Admins para controle de planos, status e níveis de todos os usuários.
 
 ## 8. Modelos de Operação (Tiers/Planos de Assinatura)
-* **Tier 1: Básico (Gestão Visual):** Focado no controle de recebimento e agenda.
-* **Tier 2: Intermediário (Modelo Gestão):** Esteira de produção completa para feedbacks gerados externamente.
+* **Tier 1: Básico (Gestão Visual):** Focado no controle de recebimento e agenda. (Restrito ao funil de Histórico).
+* **Tier 2: Intermediário (Modelo Gestão):** Esteira de produção completa para feedbacks gerados externamente. (Acesso à fila de Revisão).
 * **Tier 3: Premium (IA Integrada):** Automação via API. 
     * **Configuração Privada:** O campo `promptPersonalizado` aparece na página de **Configurações** apenas para usuários Premium, permitindo treinar a personalidade da IA.
 
@@ -62,15 +64,15 @@ A página de Revisar Atividade (`/revisar/id`) atua como o HUB de entrada e saí
 
 ## 10. Gestão de Tarefas e Regra de Distribuição
 O cadastro de itens ocorre na página de `/tarefas` com as categorias: `Tarefa do Aluno`, `Compromisso` ou `Post-it`.
-* **UX de Preenchimento:** A ordem dos campos segue o fluxo natural: 1º Título, 2º Enunciado, 3º Data/Hora.
-* **Inteligência de Horário:** Caso o professor selecione uma data mas não defina o horário, o sistema injeta automaticamente **23:59** no banco, garantindo o prazo total do dia.
+* **UX Educativa (PLG):** A seleção de tipos ocorre via *Choice Cards* visuais no modal centralizado, dispensando menus ocultos. A área de observações não utiliza peso de fonte negrito para conforto visual (Carga Cognitiva).
+* **Inteligência de Horário:** Caso o professor selecione datas mas não defina horários, o sistema injeta automaticamente `00:00` no Início e `23:59` no Fim.
 * **Batch Write:** Ao criar uma "Tarefa do Aluno", o sistema distribui automaticamente o registro `pendente` para todos os alunos daquela turma.
 
 ## 11. Módulo de Comunicação e Cobrança
-Automatização de cobranças baseada no cruzamento de alunos x tarefas pendentes.
+Automatização de cobranças baseada no cruzamento de alunos x tarefas pendentes, dividida em duas "Mesas de Trabalho" (Colunas Visuais):
 
 ### Redação de Mentoria e Apoio (Regras de Data):
-* **Grupo Geral da Turma:**
+* **Grupo Geral da Turma (Coluna Esquerda):**
     * **Vencido (< 0 dias):** "Olá, pessoal! O prazo oficial de {tarefa} foi encerrado. Notei algumas pendências no sistema. Por favor, regularizem as entregas imediatamente..."
     * **Início (>= 20 dias):** "Olá, pessoal! 🌟 Passando para avisar que a etapa de {tarefa} já está em andamento. Faltam {dias} dias..."
     * **Meio (>= 8 dias):** "Olá, pessoal! Nosso lembrete de acompanhamento sobre {tarefa}. Entramos na fase intermediária e faltam {dias} dias..."
@@ -78,12 +80,12 @@ Automatização de cobranças baseada no cruzamento de alunos x tarefas pendente
 * **Templates Individuais:** Utilizam o primeiro nome do aluno e listam nominalmente as tarefas em atraso.
 
 ### Ações de Disparo:
-* **Copiar:** Para colagem manual em sistemas oficiais.
-* **Zap Privado:** Abre link direto do `wa.me` utilizando o telefone cadastrado no banco.
+* **Copiar para a Plataforma (Coluna Direita):** Textos gerados para colagem manual em sistemas oficiais (Ex: Gov.br).
+* **Zap Direto (Coluna Esquerda):** Abre link direto do `wa.me` utilizando o telefone cadastrado no banco do aluno. Oculta devedores sem telefone válido.
 
 ## 12. Mapa de Entregas e Pendências
-* **Mapa:** Tabela dinâmica (Check/X) com rolagem horizontal e coluna de nomes fixada.
-* **Pendências:** Relatório analítico por tarefa com selos de prazo e atalhos de cobrança direta. Ambas suportam a "Chave Mestra" para Admins.
+* **Mapa:** Tabela dinâmica (Check/X) com rolagem horizontal e coluna de nomes fixada. Suporta a "Chave Mestra" para Admins.
+* **Relatório de Pendências:** Organiza a inadimplência utilizando a mesma taxonomia visual do Cronograma (Cores por status temporal). Ordenação prioritária: 1º Vencidas Mais Recentes, 2º Em Andamento, 3º Futuras, 4º Sem Prazo. Possui atalho de redirecionamento focado (`location.state.alunoAlvo`) para a página de Comunicação.
 
 ## 13. Gestão de Alunos
 O cadastro exige vínculo com `Turma`.
@@ -93,16 +95,17 @@ O cadastro exige vínculo com `Turma`.
 1. **Estado Vazio Educativo (Empty States):** Bloqueia tabelas vazias e exibe "Call to Action" orientando a criação da entidade pai.
 2. **Criação "Just-in-Time":** Permite criar turmas dentro do fluxo de cadastro de alunos para evitar interrupções.
 3. **Navegação Profunda e Breadcrumbs:** Uso de trilha de navegação integrada ao título, exibindo a Instituição ativa.
-4. **CRUD Dinâmico e Soft Delete:** Oculta dados da tela sem deletar do banco, preservando o histórico acadêmico.
+4. **CRUD Dinâmico e Soft Delete:** Oculta dados da tela sem deletar do banco, preservando o histórico acadêmico. Para resgate, há o utilitário de `/lixeira`.
 5. **Proteção de Rota Invisível:** Ocultação de elementos que exigem contexto caso nenhuma instituição esteja selecionada.
 6. **Memória de Navegação (Auto-Foco):** Pré-seleção automática da última Turma ativa ou Tarefa mais recente nos Dropdowns.
 7. **Redução do Caminho do Clique (Teletransporte):** Cartões de "Entrega" no Dashboard ou Cronograma redirecionam o professor diretamente para a Estação de Correção (`/revisar/id`).
-8. **Espião de Rotas:** Rastreia `location.state` para forçar a atualização instantânea de dropdowns ao trocar de página.
+8. **Espião de Rotas:** Rastreia `location.state` para forçar a atualização instantânea de dropdowns e modais (Ex: Clicar em Novo Registro no FAB abre o Modal automaticamente) ao trocar de página.
+9. **Global Utility Menu (Menu Pessoal):** Alocado no canto superior direito para configurações privadas (`/configuracoes`), resgate de dados excluídos (`/lixeira`) e logout, desobstruindo o cabeçalho de gestão (Navbar).
 
 ## 15. Acelerador de Fluxo: Botão Global (FAB)
-* **Atalho Flutuante:** Botão "+" no canto inferior direito para acesso rápido à criação de Turmas, Tarefas e Alunos. Condicionado à seleção de uma Instituição.
+* **Atalho Flutuante:** Botão "+" no canto inferior direito para acesso rápido à criação de Turmas, Tarefas (Registro Universal) e Alunos. Condicionado à seleção de uma Instituição.
 
 ## 16. Cronograma Dinâmico
-A página `/cronograma` processa todas as tarefas do banco em tempo real.
-* **O Radar:** Lembretes/Post-its fixos no topo (sem prazo).
-* **A Linha do Tempo:** Ordenação vertical por proximidade de data com badges informativos de status.
+A página `/cronograma` processa todas as tarefas do banco em tempo real, utilizando agrupamento visual por urgência com cores semânticas:
+* **A Linha do Tempo:** Ordenação vertical por proximidade de data e status matemático. Laranja (Atual/Vencendo), Azul (Futuro), Cinza 60% (Passado/Vencido).
+* **O Radar:** Lembretes/Post-its fixos posicionados no rodapé (sem prazo definido).
