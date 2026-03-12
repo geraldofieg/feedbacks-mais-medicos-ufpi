@@ -32,6 +32,9 @@ export default function RevisarAtividade() {
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
   const isPremium = userProfile?.plano === 'premium' || isAdmin;
 
+  // Verificador se o campo de resposta tem conteúdo
+  const respostaEstaVazia = novaResposta.trim().length === 0;
+
   useEffect(() => {
     async function buscarDadosDaEstacao() {
       setLoading(true);
@@ -69,7 +72,7 @@ export default function RevisarAtividade() {
   }, [alunoSelecionadoId, atividadeAtual]);
 
   async function handleGerarIA() {
-    if (!novaResposta.trim()) return alert("Por favor, cole a resposta do aluno primeiro!");
+    if (respostaEstaVazia) return;
     setGerandoIA(true);
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -80,23 +83,17 @@ export default function RevisarAtividade() {
       });
 
       const promptCompleto = `
-        Aja como um preceptor médico experiente. Siga este estilo: ${userProfile?.promptPersonalizado || 'Direto, técnico e cordial.'}
-        
-        CONTEXTO DA QUESTÃO: ${tarefa?.enunciado || 'Verificar correção gramatical e técnica.'}
-        RESPOSTA QUE O ALUNO ENVIOU: "${novaResposta}"
-        
-        SUA MISSÃO: Analise a resposta do aluno. Use sua capacidade de busca para validar se protocolos citados estão corretos. Escreva um feedback direto para o aluno.
+        Aja como um preceptor médico experiente. Estilo: ${userProfile?.promptPersonalizado || 'Direto e técnico.'}
+        CONTEXTO: ${tarefa?.enunciado || 'Verificar correção gramatical e técnica.'}
+        RESPOSTA DO ALUNO: "${novaResposta}"
+        Analise a resposta e gere um feedback direto para o aluno.
       `;
 
       const result = await model.generateContent(promptCompleto);
       setFeedbackEditado(result.response.text());
     } catch (e) { 
-      console.error(e);
-      if (e.message?.includes('429')) {
-        alert("O Google atingiu o limite de requisições gratuitas por minuto. Aguarde 60 segundos e clique em Gerar com IA novamente.");
-      } else {
-        alert("Ops! Houve uma instabilidade na conexão com a IA. Tente salvar e clicar novamente.");
-      }
+      if (e.message?.includes('429')) alert("Limite do Google atingido. Aguarde 60s.");
+      else alert("Instabilidade na IA. Tente novamente.");
     }
     finally { setGerandoIA(false); }
   }
@@ -123,15 +120,16 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Avaliação Salva com Sucesso!");
+      alert("Avaliação Salva!");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
-  if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse">Preparando mesa de correção...</div>;
+  if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse">Carregando Estação...</div>;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans">
-      <div className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
+      {/* BARRA DE BUSCA SUPERIOR FIXA */}
+      <div className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-4">
              <Link to="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><ArrowLeft size={24} /></Link>
@@ -166,12 +164,13 @@ export default function RevisarAtividade() {
                 <User className="text-slate-200" size={48} />
              </div>
              <h3 className="text-2xl font-black text-slate-300">Selecione o aluno para avaliar</h3>
-             <p className="text-slate-400 font-medium mt-2">Escolha alguém na barra de busca superior.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 animate-in fade-in duration-500">
+          /* O GRID PRINCIPAL COM ALINHAMENTO AO TOPO PARA O STICKY FUNCIONAR */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
             
-            <div className="lg:col-span-8 space-y-8">
+            {/* COLUNA DA ESQUERDA: DOCUMENTAÇÃO (ROLA NATURALMENTE) */}
+            <div className="lg:col-span-8 space-y-8 animate-in fade-in slide-in-from-left-4 duration-500">
               <div className="bg-white rounded-[40px] shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-10 space-y-12">
                   
@@ -181,7 +180,7 @@ export default function RevisarAtividade() {
                       <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Enunciado da Questão</h4>
                     </div>
                     <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 text-slate-700 leading-relaxed font-medium text-lg">
-                      {tarefa.enunciado || <span className="text-slate-400 italic">Cadastre o enunciado na tela de tarefas para que a IA possa ser mais precisa.</span>}
+                      {tarefa.enunciado || <span className="text-slate-400 italic">Cadastre o enunciado na tela de tarefas.</span>}
                     </div>
                   </section>
 
@@ -191,39 +190,41 @@ export default function RevisarAtividade() {
                       <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Resposta do Aluno</h4>
                     </div>
                     <textarea
-                      rows="14"
-                      placeholder="Cole aqui o texto enviado pelo aluno no sistema oficial..."
+                      rows="16"
+                      placeholder="Cole aqui o texto enviado pelo aluno..."
                       className="w-full p-8 rounded-[32px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 focus:bg-white outline-none transition-all leading-relaxed shadow-inner text-lg"
                       value={novaResposta}
                       onChange={(e) => setNovaResposta(e.target.value)}
                     />
                   </section>
-
                 </div>
               </div>
             </div>
 
-            <div className="lg:col-span-4">
-              <div className="bg-slate-900 rounded-[40px] p-8 text-white shadow-2xl border border-slate-800 sticky top-28">
+            {/* COLUNA DA DIREITA: MESA DE AVALIAÇÃO (FICA PRESA NA TELA) */}
+            <div className="lg:col-span-4 sticky top-28 animate-in fade-in slide-in-from-right-4 duration-500">
+              <div className="bg-slate-900 rounded-[40px] p-8 text-white shadow-2xl border border-slate-800">
                 
                 <div className="mb-8">
                   <h3 className="text-xl font-black flex items-center gap-3 mb-6">
                     <CheckCircle className="text-green-400" size={28}/>
-                    Mesa de Avaliação
+                    Avaliação
                   </h3>
                   
                   {isPremium && (
                     <button 
                       onClick={handleGerarIA} 
-                      disabled={gerandoIA || !novaResposta}
+                      disabled={gerandoIA || respostaEstaVazia}
                       className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 mb-6 ${
                         gerandoIA 
                         ? 'bg-slate-800 text-indigo-300' 
-                        : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 shadow-indigo-500/20'
+                        : respostaEstaVazia 
+                          ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-50 grayscale' 
+                          : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 shadow-indigo-500/20'
                       }`}
                     >
                       {gerandoIA ? <RefreshCw className="animate-spin" size={20}/> : <Sparkles size={20}/>}
-                      {gerandoIA ? 'A IA está escrevendo...' : 'Gerar Feedback com IA'}
+                      {gerandoIA ? 'Gerando...' : 'Gerar Feedback com IA'}
                     </button>
                   )}
                 </div>
@@ -231,7 +232,7 @@ export default function RevisarAtividade() {
                 <div className="space-y-6">
                   <div className="relative">
                     <textarea
-                      rows="12"
+                      rows="10"
                       placeholder="O texto do feedback aparecerá aqui..."
                       className="w-full bg-slate-800 border-none rounded-3xl p-6 text-base font-medium text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none leading-relaxed placeholder:text-slate-600"
                       value={feedbackEditado}
@@ -265,7 +266,7 @@ export default function RevisarAtividade() {
                       onClick={() => { navigator.clipboard.writeText(feedbackEditado); setCopiado(true); setTimeout(()=>setCopiado(false), 2000); }}
                       className="w-full bg-slate-800 text-slate-300 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-700 transition-colors"
                     >
-                      <Copy size={18}/> {copiado ? 'Texto Copiado!' : 'Copiar Feedback'}
+                      <Copy size={18}/> {copiado ? 'Copiado!' : 'Copiar Feedback'}
                     </button>
                   )}
                 </div>
