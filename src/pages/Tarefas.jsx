@@ -6,17 +6,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, Check, X, Clock } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
-// MOTOR DE ORDENAÇÃO INTELIGENTE (Vence primeiro no topo, sem data no final)
 const ordenarTarefas = (lista) => {
   return [...lista].sort((a, b) => {
     const timeA = a.dataFim?.toMillis ? a.dataFim.toMillis() : 0;
     const timeB = b.dataFim?.toMillis ? b.dataFim.toMillis() : 0;
 
-    if (timeA === 0 && timeB !== 0) return 1; // A sem data vai pro final
-    if (timeA !== 0 && timeB === 0) return -1; // A com data vem pro começo
-    if (timeA !== 0 && timeB !== 0) return timeA - timeB; // Crescente (vence 1º aparece 1º)
+    if (timeA === 0 && timeB !== 0) return 1; 
+    if (timeA !== 0 && timeB === 0) return -1; 
+    if (timeA !== 0 && timeB !== 0) return timeA - timeB; 
 
-    // Se ambas não têm data, a mais nova criada fica no topo
     const criaA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
     const criaB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
     return criaB - criaA;
@@ -37,12 +35,12 @@ export default function Tarefas() {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
 
-  const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataFim: '', horaFim: '', tipo: 'entrega' });
+  // NOVO: Inclusão de dataInicio e horaInicio
+  const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataInicio: '', horaInicio: '', dataFim: '', horaFim: '', tipo: 'entrega' });
   const [atribuicaoEspecifica, setAtribuicaoEspecifica] = useState(false); 
   const [alunosSelecionados, setAlunosSelecionados] = useState([]); 
   const [salvando, setSalvando] = useState(false);
   
-  // ESTADOS DO MODAL VAPT-VUPT E EFEITO UAU
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sucessoMsg, setSucessoMsg] = useState('');
   const tituloInputRef = useRef(null);
@@ -50,6 +48,8 @@ export default function Tarefas() {
   const [editandoId, setEditandoId] = useState(null);
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
+  const [dataInicioEdicao, setDataInicioEdicao] = useState('');
+  const [horaInicioEdicao, setHoraInicioEdicao] = useState('');
   const [dataFimEdicao, setDataFimEdicao] = useState('');
   const [horaFimEdicao, setHoraFimEdicao] = useState('');
   const [tipoEdicao, setTipoEdicao] = useState('entrega');
@@ -96,7 +96,6 @@ export default function Tarefas() {
         const snapT = await getDocs(qT);
         const tarefasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         
-        // Aplica a nova ordenação na primeira carga
         setTarefas(ordenarTarefas(tarefasData));
 
         const qA = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
@@ -135,10 +134,12 @@ export default function Tarefas() {
     } catch (e) { return ""; }
   };
 
-  const criarDataSegura = (dataStr, horaStr) => {
+  const criarDataSegura = (dataStr, horaStr, isFim = false) => {
     if (!dataStr) return null;
     const [ano, mes, dia] = dataStr.split('-');
-    const [hora, min] = (horaStr || '23:59').split(':');
+    // Injeção cravada: 00:00 pro início, 23:59 pro fim se o usuário deixar em branco
+    const horaPadrao = isFim ? '23:59' : '00:00';
+    const [hora, min] = (horaStr || horaPadrao).split(':');
     return new Date(ano, mes - 1, dia, hora, min);
   };
 
@@ -148,6 +149,8 @@ export default function Tarefas() {
     
     setTituloEdicao(t.nomeTarefa || t.titulo || 'Tarefa sem nome');
     setEnunciadoEdicao(t.enunciado || '');
+    setDataInicioEdicao(tsToDateInput(t.dataInicio));
+    setHoraInicioEdicao(tsToTimeInput(t.dataInicio));
     setDataFimEdicao(tsToDateInput(t.dataFim));
     setHoraFimEdicao(tsToTimeInput(t.dataFim));
     setTipoEdicao(tiposValidos.includes(tipoNormalizado) ? tipoNormalizado : 'entrega');
@@ -157,15 +160,18 @@ export default function Tarefas() {
   async function handleSalvarEdicao(id) {
     if (!tituloEdicao.trim()) return;
     try {
-      const prazoFinal = dataFimEdicao ? Timestamp.fromDate(criarDataSegura(dataFimEdicao, horaFimEdicao)) : null;
+      const prazoInicial = dataInicioEdicao ? Timestamp.fromDate(criarDataSegura(dataInicioEdicao, horaInicioEdicao, false)) : null;
+      const prazoFinal = dataFimEdicao ? Timestamp.fromDate(criarDataSegura(dataFimEdicao, horaFimEdicao, true)) : null;
       
       await updateDoc(doc(db, 'tarefas', id), { 
-        nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(),
-        dataFim: prazoFinal, tipo: tipoEdicao
+        nomeTarefa: tituloEdicao.trim(), 
+        enunciado: enunciadoEdicao.trim(),
+        dataInicio: prazoInicial,
+        dataFim: prazoFinal, 
+        tipo: tipoEdicao
       });
       
-      // Reordena a lista com os novos prazos
-      const listaAtualizada = tarefas.map(t => t.id === id ? { ...t, nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(), dataFim: prazoFinal, tipo: tipoEdicao } : t);
+      const listaAtualizada = tarefas.map(t => t.id === id ? { ...t, nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(), dataInicio: prazoInicial, dataFim: prazoFinal, tipo: tipoEdicao } : t);
       setTarefas(ordenarTarefas(listaAtualizada));
       setEditandoId(null);
     } catch (error) { console.error("Erro ao salvar:", error); }
@@ -184,13 +190,20 @@ export default function Tarefas() {
 
     try {
       setSalvando(true);
-      const prazoFinal = novaTarefa.dataFim ? Timestamp.fromDate(criarDataSegura(novaTarefa.dataFim, novaTarefa.horaFim)) : null;
+      const prazoInicial = novaTarefa.dataInicio ? Timestamp.fromDate(criarDataSegura(novaTarefa.dataInicio, novaTarefa.horaInicio, false)) : Timestamp.now();
+      const prazoFinal = novaTarefa.dataFim ? Timestamp.fromDate(criarDataSegura(novaTarefa.dataFim, novaTarefa.horaFim, true)) : null;
       
       const tData = {
-        nomeTarefa: tituloSalvo, enunciado: novaTarefa.enunciado.trim(),
-        dataFim: prazoFinal, tipo: novaTarefa.tipo, turmaId: turmaAtiva,
-        instituicaoId: escolaSelecionada.id, professorUid: currentUser.uid,
-        status: 'ativa', dataCriacao: serverTimestamp()
+        nomeTarefa: tituloSalvo, 
+        enunciado: novaTarefa.enunciado.trim(),
+        dataInicio: prazoInicial,
+        dataFim: prazoFinal, 
+        tipo: novaTarefa.tipo, 
+        turmaId: turmaAtiva,
+        instituicaoId: escolaSelecionada.id, 
+        professorUid: currentUser.uid,
+        status: 'ativa', 
+        dataCriacao: serverTimestamp()
       };
       
       const docRef = await addDoc(collection(db, 'tarefas'), tData);
@@ -223,12 +236,10 @@ export default function Tarefas() {
         await batch.commit(); 
       }
 
-      // Adiciona o novo registro e reordena tudo para ele cair no lugar certo
       const listaComNovo = [{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas];
       setTarefas(ordenarTarefas(listaComNovo));
       
-      // EFEITO UAU: Limpa, avisa e foca novamente
-      setNovaTarefa({ titulo: '', enunciado: '', dataFim: '', horaFim: '', tipo: 'entrega' });
+      setNovaTarefa({ titulo: '', enunciado: '', dataInicio: '', horaInicio: '', dataFim: '', horaFim: '', tipo: 'entrega' });
       setAtribuicaoEspecifica(false);
       setAlunosSelecionados([]);
       
@@ -276,53 +287,33 @@ export default function Tarefas() {
     return 'border-orange-200 bg-orange-50/20 hover:border-orange-300';
   };
 
-  const getNomeVisivelTipo = (tipo) => {
-    const t = (tipo || 'entrega').toLowerCase();
-    if (t === 'compromisso') return 'Compromisso';
-    if (t === 'lembrete') return 'Post-it';
-    return 'Tarefa do Aluno';
-  };
-
   const tarefasFiltradas = tarefas.filter(t => (t.nomeTarefa || t.titulo || '').toLowerCase().includes(busca.toLowerCase()));
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Gestão e Cronograma' }]} />
       
-      {/* CABEÇALHO PROTAGONISTA */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-8">
         <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
           <div className="bg-blue-100 text-blue-600 p-2.5 rounded-xl shadow-sm"><Calendar size={26} /></div>
           Gestão de Cronograma
         </h1>
         {turmas.length > 0 && turmaAtiva && (
-          <button 
-            onClick={() => setIsModalOpen(true)} 
-            className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
-          >
+          <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
             <Plus size={20}/> Nova Tarefa
           </button>
         )}
       </div>
 
-      {/* BARRA DE BUSCA E SELETOR DE TURMA UNIFICADOS */}
       {turmas.length > 0 && (
         <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
-            <input 
-              type="text" placeholder="Procurar no radar da turma..." 
-              className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-gray-700 transition-all placeholder:font-medium"
-              value={busca} onChange={e => setBusca(e.target.value)} 
-            />
+            <input type="text" placeholder="Procurar no radar da turma..." className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-gray-700 transition-all placeholder:font-medium" value={busca} onChange={e => setBusca(e.target.value)} />
           </div>
-          
           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-2 min-w-[240px]">
              <GraduationCap size={20} className="text-gray-400 ml-2" />
-             <select 
-               className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-blue-700 cursor-pointer" 
-               value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}
-             >
+             <select className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-blue-700 cursor-pointer" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
                <option value="" disabled>Selecione a Turma...</option>
                {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
              </select>
@@ -330,7 +321,6 @@ export default function Tarefas() {
         </div>
       )}
 
-      {/* LISTA DE TAREFAS OCUPANDO TELA INTEIRA */}
       <div className="space-y-4">
         {turmas.length > 0 && turmaAtiva && (
           <div className="flex items-center justify-between px-1 mb-2">
@@ -355,7 +345,7 @@ export default function Tarefas() {
               <Calendar size={40} />
             </div>
             <h3 className="text-2xl font-black text-gray-800 mb-2">Cronograma Vazio!</h3>
-            <p className="text-gray-500 font-medium mb-8 text-lg">Nenhuma tarefa ou módulo encontrado para esta turma. Que tal lançar a primeira?</p>
+            <p className="text-gray-500 font-medium mb-8 text-lg">Nenhuma tarefa ou módulo encontrado para esta turma.</p>
             <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 inline-flex items-center gap-2">
               <Plus size={20}/> Adicionar Tarefa
             </button>
@@ -386,14 +376,22 @@ export default function Tarefas() {
                       <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-normal outline-none resize-none text-slate-700" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3"/>
                     </div>
                     
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Data Final</label>
-                        <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium outline-none text-gray-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Data de Início</label>
+                        <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-xs font-medium outline-none text-gray-700" value={dataInicioEdicao} onChange={e => setDataInicioEdicao(e.target.value)}/>
                       </div>
-                      <div className="w-1/3">
-                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Hora</label>
-                        <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium outline-none text-gray-700" value={horaFimEdicao} onChange={e => setHoraFimEdicao(e.target.value)}/>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Hora de Início</label>
+                        <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-xs font-medium outline-none text-gray-700" value={horaInicioEdicao} onChange={e => setHoraInicioEdicao(e.target.value)}/>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Data Final</label>
+                        <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-xs font-medium outline-none text-gray-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Hora Final</label>
+                        <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-xs font-medium outline-none text-gray-700" value={horaFimEdicao} onChange={e => setHoraFimEdicao(e.target.value)}/>
                       </div>
                     </div>
 
@@ -427,7 +425,7 @@ export default function Tarefas() {
                     </div>
                     
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white py-1.5 px-3 rounded-lg border border-gray-100 w-fit mt-auto text-gray-500 shadow-sm">
-                      {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem prazo'}
+                      {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem prazo final'}
                     </div>
                   </div>
                 )}
@@ -437,24 +435,15 @@ export default function Tarefas() {
         )}
       </div>
 
-      {/* =========================================================================
-          MODAL DE CRIAÇÃO (VAPT-VUPT)
-          ========================================================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 my-8">
             
             <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50 sticky top-0 z-10">
               <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Plus className="text-blue-600"/> Adicionar ao Cronograma</h2>
-              <button 
-                onClick={() => { setIsModalOpen(false); setSucessoMsg(''); }} 
-                className="text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-105"
-              >
-                <X size={20}/>
-              </button>
+              <button onClick={() => { setIsModalOpen(false); setSucessoMsg(''); }} className="text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-105"><X size={20}/></button>
             </div>
             
-            {/* ALERTA VISUAL DE SUCESSO */}
             {sucessoMsg && (
               <div className="mx-6 mt-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-2 fade-in duration-300">
                 <Check size={20} className="shrink-0" />
@@ -466,10 +455,7 @@ export default function Tarefas() {
               
               <div>
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Tipo de Registro</label>
-                <select 
-                  className="w-full px-4 py-3.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-blue-700 transition-colors cursor-pointer"
-                  value={novaTarefa.tipo} onChange={e => {setNovaTarefa({...novaTarefa, tipo: e.target.value}); setAtribuicaoEspecifica(false);}}
-                >
+                <select className="w-full px-4 py-3.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-blue-700 transition-colors cursor-pointer" value={novaTarefa.tipo} onChange={e => {setNovaTarefa({...novaTarefa, tipo: e.target.value}); setAtribuicaoEspecifica(false);}}>
                   <option value="entrega">📝 Tarefa do Aluno (Requer entrega)</option>
                   <option value="compromisso">📅 Compromisso (Apenas agenda)</option>
                   <option value="lembrete">💡 Post-it (Aviso rápido)</option>
@@ -478,65 +464,44 @@ export default function Tarefas() {
 
               <div>
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Título</label>
-                <input
-                  ref={tituloInputRef}
-                  type="text" required autoFocus placeholder="Ex: Módulo 1 - Desafio..."
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-800 transition-all placeholder:font-normal placeholder:text-gray-400"
-                  value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})}
-                />
+                <input ref={tituloInputRef} type="text" required autoFocus placeholder="Ex: Prova de Recuperação..." className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-800 transition-all placeholder:font-normal placeholder:text-gray-400" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})}/>
               </div>
 
               <div>
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Observações (Opcional)</label>
-                <textarea
-                  placeholder="Enunciado, instruções ou link..." rows="3"
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-normal text-slate-700 transition-all placeholder:font-normal placeholder:text-gray-400 resize-none"
-                  value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}
-                />
+                <textarea placeholder="Enunciado, instruções ou link..." rows="2" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-normal text-slate-700 transition-all placeholder:font-normal placeholder:text-gray-400 resize-none" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}/>
               </div>
 
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Prazo Final</label>
-                  <input
-                    type="date"
-                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all"
-                    value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}
-                  />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Início</label>
+                  <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all" value={novaTarefa.dataInicio} onChange={e => setNovaTarefa({...novaTarefa, dataInicio: e.target.value})}/>
                 </div>
-                <div className="w-1/3">
-                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora</label>
-                  <input
-                    type="time"
-                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all"
-                    value={novaTarefa.horaFim} onChange={e => setNovaTarefa({...novaTarefa, horaFim: e.target.value})}
-                  />
+                <div>
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora Inicial</label>
+                  <input type="time" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all" value={novaTarefa.horaInicio} onChange={e => setNovaTarefa({...novaTarefa, horaInicio: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Fim</label>
+                  <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}/>
+                </div>
+                <div>
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora Final</label>
+                  <input type="time" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all" value={novaTarefa.horaFim} onChange={e => setNovaTarefa({...novaTarefa, horaFim: e.target.value})}/>
                 </div>
               </div>
 
-              {/* O MENU DE EXCEÇÃO (SÓ SE FOR TAREFA DO ALUNO) */}
               {novaTarefa.tipo === 'entrega' && alunosTurma.length > 0 && (
                 <div className="pt-4 border-t border-gray-100">
                   <label className="flex items-center gap-3 text-sm font-black text-slate-700 cursor-pointer hover:text-blue-600 transition-colors mb-3">
-                    <input 
-                      type="checkbox" 
-                      className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                      checked={atribuicaoEspecifica}
-                      onChange={(e) => setAtribuicaoEspecifica(e.target.checked)}
-                    />
+                    <input type="checkbox" className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300" checked={atribuicaoEspecifica} onChange={(e) => setAtribuicaoEspecifica(e.target.checked)}/>
                     Atribuir apenas a alunos específicos (Exceção)
                   </label>
-                  
                   {atribuicaoEspecifica && (
                     <div className="bg-white border border-gray-200 rounded-xl max-h-48 overflow-y-auto p-2 space-y-1 shadow-inner animate-in fade-in slide-in-from-top-2">
                       {alunosTurma.map(aluno => (
                         <label key={aluno.id} className="flex items-center gap-3 p-2.5 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-blue-100">
-                          <input 
-                            type="checkbox"
-                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                            checked={alunosSelecionados.includes(aluno.id)}
-                            onChange={() => toggleAlunoSelecao(aluno.id)}
-                          />
+                          <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300" checked={alunosSelecionados.includes(aluno.id)} onChange={() => toggleAlunoSelecao(aluno.id)}/>
                           <span className="text-sm font-bold text-gray-700 truncate">{aluno.nome}</span>
                         </label>
                       ))}
@@ -545,22 +510,13 @@ export default function Tarefas() {
                 </div>
               )}
 
-              {/* BOTÃO MUTANTE */}
-              <button 
-                disabled={salvando || !turmaAtiva} 
-                className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg ${
-                  sucessoMsg 
-                    ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20 scale-105' 
-                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
-                }`}
-              >
+              <button disabled={salvando || !turmaAtiva} className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg ${sucessoMsg ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20 scale-105' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'}`}>
                 {salvando ? 'Processando...' : sucessoMsg ? <><Check size={24}/> Cadastrado com Sucesso!</> : 'Adicionar ao Cronograma'}
               </button>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 }
