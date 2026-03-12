@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, Check, X, Clock, Info } from 'lucide-react';
+import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, Check, X, Clock, Info, RefreshCw } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 const ordenarTarefas = (lista) => {
@@ -93,7 +93,6 @@ export default function Tarefas() {
       } catch (error) { console.error("Erro fetch turmas:", error); }
     }
     fetchTurmas();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, escolaSelecionada]);
 
   useEffect(() => {
@@ -309,7 +308,7 @@ export default function Tarefas() {
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Gestão e Cronograma' }]} />
       
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-8">
-        <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
+        <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
           <div className="bg-blue-100 text-blue-600 p-2.5 rounded-xl shadow-sm"><Calendar size={26} /></div>
           Gestão de Cronograma
         </h1>
@@ -339,29 +338,29 @@ export default function Tarefas() {
       <div className="space-y-4">
         {turmas.length > 0 && turmaAtiva && (
           <div className="flex items-center justify-between px-1 mb-2">
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Registros no Radar</h2>
-            <span className="bg-gray-100 text-gray-500 text-[11px] font-black px-3 py-1 rounded-full">{tarefasFiltradas.length}</span>
+            <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">Registros no Radar</h2>
+            <span className="bg-slate-100 text-slate-500 text-[11px] font-black px-3 py-1 rounded-full">{tarefasFiltradas.length}</span>
           </div>
         )}
 
         {loading ? (
-          <div className="p-16 text-center animate-pulse font-black text-gray-300 text-lg">Carregando cronograma...</div>
+          <div className="p-16 text-center animate-pulse font-black text-slate-300 text-lg">Carregando cronograma...</div>
         ) : !turmaAtiva ? (
-           <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm mt-8">
+            <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm mt-8">
             <div className="bg-blue-50 text-blue-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
               <GraduationCap size={40} />
             </div>
-            <h3 className="text-2xl font-black text-gray-800 mb-2">Nenhuma turma selecionada</h3>
-            <p className="text-gray-500 font-medium mb-8 text-lg">Selecione uma turma no menu acima para gerenciar o cronograma dela.</p>
+            <h3 className="text-2xl font-black text-slate-800 mb-2">Nenhuma turma selecionada</h3>
+            <p className="text-slate-500 font-medium mb-8 text-lg">Selecione uma turma no menu acima para gerenciar o cronograma dela.</p>
           </div>
         ) : tarefasFiltradas.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm mt-8">
             <div className="bg-blue-50 text-blue-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
               <Calendar size={40} />
             </div>
-            <h3 className="text-2xl font-black text-gray-800 mb-2">Cronograma Vazio!</h3>
-            <p className="text-gray-500 font-medium mb-6 text-lg max-w-lg mx-auto">
-              Sua turma ainda não tem atividades. Você pode criar <strong className="text-gray-700">Tarefas</strong> (que exigem entrega), <strong className="text-gray-700">Compromissos</strong> (como aulas) ou simples <strong className="text-gray-700">Post-its</strong>.
+            <h3 className="text-2xl font-black text-slate-800 mb-2">Cronograma Vazio!</h3>
+            <p className="text-slate-500 font-medium mb-6 text-lg max-w-lg mx-auto">
+              Sua turma ainda não tem atividades. Você pode criar <strong className="text-slate-700">Tarefas</strong> (que exigem entrega), <strong className="text-slate-700">Compromissos</strong> (como aulas) ou simples <strong className="text-slate-700">Post-its</strong>.
             </p>
             <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 inline-flex items-center gap-2">
               <Plus size={20}/> Novo Registro
@@ -375,7 +374,7 @@ export default function Tarefas() {
                 {editandoId === tarefa.id ? (
                   <div className="space-y-4 animate-in fade-in zoom-in duration-200">
                     <div>
-                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Tipo de Registro</label>
+                      <label className="text-[10px] font-black text-slate-800 uppercase mb-1 block">Tipo de Registro</label>
                       <select className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium bg-white outline-none cursor-pointer" value={tipoEdicao} onChange={e => setTipoEdicao(e.target.value)}>
                         <option value="entrega">📝 Tarefa do Aluno</option>
                         <option value="compromisso">📅 Compromisso</option>
@@ -384,30 +383,30 @@ export default function Tarefas() {
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Título</label>
+                      <label className="text-[10px] font-black text-slate-800 uppercase mb-1 block">Título da Atividade</label>
                       <input className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium outline-none text-slate-800" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)}/>
                     </div>
                     
                     <div>
-                      <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Observações</label>
-                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-normal outline-none resize-none text-slate-700" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="3"/>
+                      <label className="text-[10px] font-black text-slate-800 uppercase mb-1 block">Enunciado / Questão</label>
+                      <textarea className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-sm font-medium outline-none resize-none text-slate-700" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} rows="5"/>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Data de Início</label>
+                        <label className="text-[10px] font-black text-slate-800 uppercase mb-1 block">Data de Início</label>
                         <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-xs font-medium outline-none text-gray-700" value={dataInicioEdicao} onChange={e => setDataInicioEdicao(e.target.value)}/>
                       </div>
                       <div>
-                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Hora de Início</label>
+                        <label className="text-[10px] font-black text-slate-800 uppercase mb-1 block">Hora de Início</label>
                         <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-xs font-medium outline-none text-gray-700" value={horaInicioEdicao} onChange={e => setHoraInicioEdicao(e.target.value)}/>
                       </div>
                       <div>
-                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Data Final</label>
+                        <label className="text-[10px] font-black text-slate-800 uppercase mb-1 block">Data Final</label>
                         <input type="date" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-xs font-medium outline-none text-gray-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)}/>
                       </div>
                       <div>
-                        <label className="text-[10px] font-black text-slate-700 uppercase mb-1 block">Hora Final</label>
+                        <label className="text-[10px] font-black text-slate-800 uppercase mb-1 block">Hora Final</label>
                         <input type="time" className="w-full border-2 border-blue-500 rounded-xl px-3 py-2 text-xs font-medium outline-none text-gray-700" value={horaFimEdicao} onChange={e => setHoraFimEdicao(e.target.value)}/>
                       </div>
                     </div>
@@ -427,28 +426,28 @@ export default function Tarefas() {
                           </div>
                           <div className="min-w-0 flex-1">
                             {(tarefa.tipo === 'entrega' || !tarefa.tipo) ? (
-                              <Link to={`/revisar/${tarefa.id}`} className="block font-black text-gray-800 text-base md:text-lg leading-tight hover:text-blue-600 transition-colors group/link truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
+                              <Link to={`/revisar/${tarefa.id}`} className="block font-black text-slate-800 text-base md:text-lg leading-tight hover:text-blue-600 transition-colors group/link truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
                                 {tarefa.nomeTarefa || tarefa.titulo}
                               </Link>
                             ) : (
-                              <h3 className="font-black text-gray-800 text-base md:text-lg leading-tight truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
+                              <h3 className="font-black text-slate-800 text-base md:text-lg leading-tight truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
                                 {tarefa.nomeTarefa || tarefa.titulo}
                               </h3>
                             )}
                           </div>
                         </div>
                         <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
-                          <button onClick={() => iniciarEdicao(tarefa)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Editar"><Pencil size={16}/></button>
-                          <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Remover"><Trash2 size={16}/></button>
+                          <button onClick={() => iniciarEdicao(tarefa)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Editar"><Pencil size={16}/></button>
+                          <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Remover"><Trash2 size={16}/></button>
                         </div>
                       </div>
 
                       {tarefa.enunciado && (
-                        <p className="text-sm text-gray-600 font-normal line-clamp-4 mb-4 bg-white/50 p-3 rounded-lg whitespace-pre-wrap">{tarefa.enunciado}</p>
+                        <p className="text-sm text-slate-600 font-medium line-clamp-4 mb-4 bg-white/50 p-3 rounded-lg whitespace-pre-wrap">{tarefa.enunciado}</p>
                       )}
                     </div>
                     
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white py-1.5 px-3 rounded-lg border border-gray-100 w-fit mt-auto text-gray-500 shadow-sm">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white py-1.5 px-3 rounded-lg border border-slate-100 w-fit mt-auto text-slate-500 shadow-sm">
                       {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem prazo'}
                     </div>
                   </div>
@@ -459,9 +458,6 @@ export default function Tarefas() {
         )}
       </div>
 
-      {/* =========================================================================
-          MODAL DE CRIAÇÃO (COM CARDS EDUCATIVOS PLG)
-          ========================================================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-8">
@@ -474,86 +470,80 @@ export default function Tarefas() {
             {sucessoMsg && (
               <div className="mx-6 mt-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-2 fade-in duration-300">
                 <Check size={20} className="shrink-0" />
-                <span className="text-sm font-bold">{sucessoMsg}</span>
+                <span className="text-sm font-black">{sucessoMsg}</span>
               </div>
             )}
 
             <form onSubmit={handleCriar} className="p-6 md:p-8 space-y-6">
               
-              {/* SELEÇÃO DE TIPO COM CARDS EDUCATIVOS */}
               <div>
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 block">Que tipo de registro você quer criar?</label>
+                <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Que tipo de registro você quer criar?</label>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  
-                  {/* CARD TAREFA */}
                   <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'entrega'})} 
-                    className={`p-4 rounded-2xl border-2 transition-all text-left flex flex-col gap-2 ${novaTarefa.tipo === 'entrega' ? 'border-orange-500 bg-orange-50 ring-4 ring-orange-50' : 'border-gray-100 hover:border-orange-200 bg-white'}`}>
+                    className={`p-4 rounded-2xl border-2 transition-all text-left flex flex-col gap-2 ${novaTarefa.tipo === 'entrega' ? 'border-orange-500 bg-orange-50 ring-4 ring-orange-50' : 'border-slate-100 hover:border-orange-200 bg-white'}`}>
                     <div className={`p-2 rounded-lg w-fit ${novaTarefa.tipo === 'entrega' ? 'bg-orange-500 text-white' : 'bg-orange-50 text-orange-500'}`}><FileText size={20}/></div>
                     <h4 className="font-black text-slate-800 text-sm">Tarefa</h4>
                     <p className="text-[10px] leading-tight text-slate-500 font-medium italic">Exige entrega do aluno e gera pendência/nota.</p>
                   </button>
 
-                  {/* CARD COMPROMISSO */}
                   <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'compromisso'})} 
-                    className={`p-4 rounded-2xl border-2 transition-all text-left flex flex-col gap-2 ${novaTarefa.tipo === 'compromisso' ? 'border-purple-500 bg-purple-50 ring-4 ring-purple-50' : 'border-gray-100 hover:border-purple-200 bg-white'}`}>
+                    className={`p-4 rounded-2xl border-2 transition-all text-left flex flex-col gap-2 ${novaTarefa.tipo === 'compromisso' ? 'border-purple-500 bg-purple-50 ring-4 ring-purple-50' : 'border-slate-100 hover:border-purple-200 bg-white'}`}>
                     <div className={`p-2 rounded-lg w-fit ${novaTarefa.tipo === 'compromisso' ? 'bg-purple-500 text-white' : 'bg-purple-50 text-purple-500'}`}><Calendar size={20}/></div>
                     <h4 className="font-black text-slate-800 text-sm">Compromisso</h4>
                     <p className="text-[10px] leading-tight text-slate-500 font-medium italic">Ex: Aula Síncrona, Prova ou Evento na Agenda.</p>
                   </button>
 
-                  {/* CARD POST-IT */}
                   <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'lembrete'})} 
-                    className={`p-4 rounded-2xl border-2 transition-all text-left flex flex-col gap-2 ${novaTarefa.tipo === 'lembrete' ? 'border-yellow-500 bg-yellow-50 ring-4 ring-yellow-50' : 'border-gray-100 hover:border-yellow-200 bg-white'}`}>
+                    className={`p-4 rounded-2xl border-2 transition-all text-left flex flex-col gap-2 ${novaTarefa.tipo === 'lembrete' ? 'border-yellow-500 bg-yellow-50 ring-4 ring-yellow-50' : 'border-slate-100 hover:border-yellow-200 bg-white'}`}>
                     <div className={`p-2 rounded-lg w-fit ${novaTarefa.tipo === 'lembrete' ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-600'}`}><StickyNote size={20}/></div>
                     <h4 className="font-black text-slate-800 text-sm">Post-it</h4>
                     <p className="text-[10px] leading-tight text-slate-500 font-medium italic">Um aviso rápido ou dica útil fixada no topo.</p>
                   </button>
-
                 </div>
               </div>
 
               <div className="space-y-4 pt-2">
                 <div>
-                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Título</label>
-                  <input ref={tituloInputRef} type="text" required autoFocus placeholder="Ex: Módulo 1 - Fundamentos..." className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-800 transition-all placeholder:font-normal placeholder:text-gray-400" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})}/>
+                  <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 block">Título da Atividade</label>
+                  <input ref={tituloInputRef} type="text" required autoFocus placeholder="Ex: Módulo 08 - Fórum de Discussão" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-800 transition-all placeholder:font-normal placeholder:text-slate-400" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})}/>
                 </div>
 
                 <div>
-                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 block">Observações (Opcional)</label>
-                  <textarea placeholder="Instruções, links ou detalhes adicionais..." rows="3" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-normal text-slate-700 transition-all placeholder:font-normal placeholder:text-gray-400 resize-none" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}/>
+                  <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 block">Enunciado da Tarefa (O que o aluno deve fazer?)</label>
+                  <textarea placeholder="Cole aqui o texto da questão, casos clínicos ou instruções detalhadas..." rows="6" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all placeholder:font-normal placeholder:text-slate-400 resize-none leading-relaxed" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}/>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Início</label>
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Início</label>
                     <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all" value={novaTarefa.dataInicio} onChange={e => setNovaTarefa({...novaTarefa, dataInicio: e.target.value})}/>
                   </div>
                   <div>
-                    <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora</label>
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora</label>
                     <input type="time" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all" value={novaTarefa.horaInicio} onChange={e => setNovaTarefa({...novaTarefa, horaInicio: e.target.value})}/>
                   </div>
                   <div>
-                    <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Prazo Final</label>
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1"><Calendar size={14}/> Prazo Final</label>
                     <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}/>
                   </div>
                   <div>
-                    <label className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora</label>
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1"><Clock size={14}/> Hora</label>
                     <input type="time" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-medium text-slate-700 transition-all" value={novaTarefa.horaFim} onChange={e => setNovaTarefa({...novaTarefa, horaFim: e.target.value})}/>
                   </div>
                 </div>
 
                 {novaTarefa.tipo === 'entrega' && alunosTurma.length > 0 && (
-                  <div className="pt-4 border-t border-gray-100">
-                    <label className="flex items-center gap-3 text-sm font-black text-slate-700 cursor-pointer hover:text-blue-600 transition-colors mb-3">
-                      <input type="checkbox" className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300" checked={atribuicaoEspecifica} onChange={(e) => setAtribuicaoEspecifica(e.target.checked)}/>
+                  <div className="pt-4 border-t border-slate-100">
+                    <label className="flex items-center gap-3 text-sm font-black text-slate-800 cursor-pointer hover:text-blue-600 transition-colors mb-3">
+                      <input type="checkbox" className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-slate-300" checked={atribuicaoEspecifica} onChange={(e) => setAtribuicaoEspecifica(e.target.checked)}/>
                       Atribuir apenas a alunos específicos (Exceção)
                     </label>
                     {atribuicaoEspecifica && (
-                      <div className="bg-white border border-gray-200 rounded-xl max-h-48 overflow-y-auto p-2 space-y-1 shadow-inner animate-in fade-in slide-in-from-top-2">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl max-h-48 overflow-y-auto p-2 space-y-1 shadow-inner animate-in fade-in slide-in-from-top-2">
                         {alunosTurma.map(aluno => (
-                          <label key={aluno.id} className="flex items-center gap-3 p-2.5 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-blue-100">
-                            <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300" checked={alunosSelecionados.includes(aluno.id)} onChange={() => toggleAlunoSelecao(aluno.id)}/>
-                            <span className="text-sm font-bold text-gray-700 truncate">{aluno.nome}</span>
+                          <label key={aluno.id} className="flex items-center gap-3 p-2.5 hover:bg-white hover:shadow-sm rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-200">
+                            <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300" checked={alunosSelecionados.includes(aluno.id)} onChange={() => toggleAlunoSelecao(aluno.id)}/>
+                            <span className="text-sm font-bold text-slate-700 truncate">{aluno.nome}</span>
                           </label>
                         ))}
                       </div>
@@ -562,8 +552,8 @@ export default function Tarefas() {
                 )}
               </div>
 
-              <button disabled={salvando || !turmaAtiva} className={`w-full text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-lg ${sucessoMsg ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20 scale-105' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'}`}>
-                {salvando ? 'Processando...' : sucessoMsg ? <><Check size={24}/> Salvo com Sucesso!</> : 'Salvar no Cronograma'}
+              <button disabled={salvando || !turmaAtiva} className={`w-full text-white font-black py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-xl active:scale-95 ${sucessoMsg ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'}`}>
+                {salvando ? <><RefreshCw className="animate-spin" size={24}/> Criando Tarefa...</> : sucessoMsg ? <><Check size={28}/> Registro Salvo!</> : 'Salvar no Cronograma'}
               </button>
             </form>
           </div>
