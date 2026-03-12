@@ -246,6 +246,27 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
+          
+          {/* BOTÃO PROVISÓRIO DE RAIO-X */}
+          <button 
+            onClick={async () => {
+              try {
+                const { collection, getDocs, query, limit } = await import('firebase/firestore');
+                const snapA = await getDocs(query(collection(db, 'alunos'), limit(1)));
+                const snapT = await getDocs(query(collection(db, 'tarefas'), limit(1))); // ou 'modulos' se for esse o nome na V1
+                const snapAt = await getDocs(query(collection(db, 'atividades'), limit(1)));
+                
+                console.log("=== RAIO-X DO ALUNO ===", snapA.docs[0]?.data());
+                console.log("=== RAIO-X DA TAREFA ===", snapT.docs[0]?.data());
+                console.log("=== RAIO-X DA ATIVIDADE ===", snapAt.docs[0]?.data());
+                alert("Raio-X feito! Abra o console (F12) e copie os resultados.");
+              } catch (e) { console.error(e); alert("Erro ao escanear"); }
+            }}
+            className="bg-red-600 text-white font-bold px-4 py-2 rounded-lg text-sm my-3 shadow-md hover:bg-red-700"
+          >
+            🔎 Escanear Banco V1
+          </button>
+
           <div className="flex items-center gap-2 mt-2">
             <span className="text-sm font-bold text-gray-500">Instituição:</span>
             <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner" 
