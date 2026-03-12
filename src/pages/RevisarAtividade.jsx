@@ -5,7 +5,7 @@ import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, CheckCircle, FileText, User, Copy, 
-  Send, Sparkles, GraduationCap, Search, RefreshCw 
+  Send, Sparkles, GraduationCap, Search, RefreshCw, Info
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -90,7 +90,7 @@ export default function RevisarAtividade() {
 
       const result = await model.generateContent(promptCompleto);
       setFeedbackEditado(result.response.text());
-    } catch (e) { alert("Limite atingido ou erro na IA. Tente novamente em instantes."); }
+    } catch (e) { alert("Limite de cota atingido. Aguarde 60s."); }
     finally { setGerandoIA(false); }
   }
 
@@ -116,7 +116,7 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Avaliação salva!");
+      alert("Feedback Salvo!");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
@@ -145,11 +145,19 @@ export default function RevisarAtividade() {
               <option value="">Buscar Aluno na Lista...</option>
               {alunos.map(a => {
                 const registro = atividadesMap[a.id];
-                let icone = '🔴'; 
+                let icone = '🔴'; // Padrão: Sem entrega
+                
                 if (registro) {
-                  if (registro.status === 'aprovado' || registro.postado) icone = '✅';
-                  else if (registro.resposta && registro.resposta.trim() !== '') icone = '🟡';
+                  // Se já foi aprovado ou postado
+                  if (registro.status === 'aprovado' || registro.postado) {
+                    icone = '✅';
+                  } 
+                  // Se tem texto na resposta, mas não foi aprovado ainda
+                  else if (registro.resposta && registro.resposta.trim() !== '') {
+                    icone = '🟡';
+                  }
                 }
+
                 return (
                   <option key={a.id} value={a.id}>
                     {icone} {a.nome}
@@ -163,9 +171,32 @@ export default function RevisarAtividade() {
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6 md:mt-10">
         {!alunoAtual ? (
-          <div className="bg-white p-20 md:p-32 rounded-[32px] md:rounded-[48px] text-center border-2 border-dashed border-slate-200">
-             <User className="text-slate-100 mx-auto mb-6" size={60} />
-             <h3 className="text-xl font-black text-slate-300 uppercase tracking-widest">Selecione um aluno</h3>
+          /* TELA INICIAL COM LEGENDA DE STATUS */
+          <div className="bg-white p-12 md:p-24 rounded-[32px] md:rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
+             <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-8">
+                <User className="text-blue-200" size={40} />
+             </div>
+             <h3 className="text-2xl font-black text-slate-800 mb-2">Selecione um aluno para começar</h3>
+             <p className="text-slate-500 font-medium mb-12 text-center max-w-md">Escolha um nome na barra de busca superior para abrir a ficha de avaliação e gerar o feedback.</p>
+             
+             {/* LEGENDA VISUAL */}
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col items-center text-center">
+                   <span className="text-3xl mb-3">🔴</span>
+                   <h4 className="font-black text-slate-700 text-sm uppercase tracking-widest mb-1">Não entregue</h4>
+                   <p className="text-[11px] text-slate-500 font-bold leading-tight">O aluno ainda não enviou nenhuma resposta para esta tarefa.</p>
+                </div>
+                <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col items-center text-center">
+                   <span className="text-3xl mb-3">🟡</span>
+                   <h4 className="font-black text-amber-700 text-sm uppercase tracking-widest mb-1">Pendente</h4>
+                   <p className="text-[11px] text-amber-600 font-bold leading-tight">A resposta já foi enviada, mas você ainda não salvou a correção.</p>
+                </div>
+                <div className="bg-green-50 p-6 rounded-3xl border border-green-100 flex flex-col items-center text-center">
+                   <span className="text-3xl mb-3">✅</span>
+                   <h4 className="font-black text-green-700 text-sm uppercase tracking-widest mb-1">Finalizado</h4>
+                   <p className="text-[11px] text-green-600 font-bold leading-tight">Tudo pronto! A atividade já foi revisada e a nota atribuída.</p>
+                </div>
+             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -200,7 +231,6 @@ export default function RevisarAtividade() {
               </div>
             </div>
 
-            {/* PAINEL STICKY AJUSTADO */}
             <div className="lg:col-span-4 lg:sticky lg:top-24">
               <div className="bg-slate-900 rounded-[32px] p-6 md:p-8 text-white shadow-2xl border border-slate-800">
                 
@@ -270,7 +300,7 @@ export default function RevisarAtividade() {
                       onClick={() => { navigator.clipboard.writeText(feedbackEditado); setCopiado(true); setTimeout(()=>setCopiado(false), 2000); }}
                       className="w-full bg-slate-800 text-slate-400 font-bold py-3 rounded-2xl text-[10px] flex justify-center items-center gap-2 hover:bg-slate-700 transition-colors uppercase tracking-widest"
                     >
-                      <Copy size={14}/> {copiado ? 'Copiado!' : 'Copiar Texto'}
+                      <Copy size={14}/> {copiado ? 'Copiado!' : 'Copiar Feedback'}
                     </button>
                   )}
                 </div>
