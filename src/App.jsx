@@ -23,7 +23,8 @@ import Alunos from './pages/Alunos';
 import Configuracoes from './pages/Configuracoes';
 import MapaEntregas from './pages/MapaEntregas';
 import Pendencias from './pages/Pendencias';
-import Lixeira from './pages/Lixeira'; // <-- IMPORTAÇÃO DA LIXEIRA ADICIONADA AQUI
+import Lixeira from './pages/Lixeira'; 
+import Migracao from './pages/Migracao'; // <-- IMPORTAÇÃO DO MOTOR DE MIGRAÇÃO
 
 // ESTEIRA DE PRODUÇÃO (KANBAN)
 import AguardandoRevisao from './pages/AguardandoRevisao';
@@ -82,8 +83,9 @@ function App() {
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
           <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
           
-          {/* ROTA DA LIXEIRA */}
+          {/* ROTAS DE UTILIDADE */}
           <Route path="/lixeira" element={<PrivateRoute><Lixeira /></PrivateRoute>} />
+          <Route path="/migracao" element={<PrivateRoute><Migracao /></PrivateRoute>} /> {/* <-- ROTA OCULTA DA MIGRAÇÃO */}
           
           {/* ROTAS DO KANBAN (Esteira de Produção V3) */}
           <Route path="/aguardandorevisao" element={<PrivateRoute><AguardandoRevisao /></PrivateRoute>} />
