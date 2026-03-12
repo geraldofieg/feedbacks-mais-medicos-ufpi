@@ -24,9 +24,6 @@ export default function Dashboard() {
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
 
   const [gestaoVista, setGestaoVista] = useState({ atual: null, anterior: null });
-  
-  // ESTADO PARA O RAIO-X NA TELA
-  const [raioXVisivel, setRaioXVisivel] = useState('');
 
   useEffect(() => {
     async function fetchInst() {
@@ -234,48 +231,8 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
-        <div className="w-full">
+        <div>
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
-          
-          {/* BOTÃO PROVISÓRIO DE RAIO-X MELHORADO */}
-          <button 
-            onClick={async () => {
-              setRaioXVisivel('Carregando dados do banco...');
-              try {
-                const { collection, getDocs, query, limit } = await import('firebase/firestore');
-                const snapA = await getDocs(query(collection(db, 'alunos'), limit(1)));
-                const snapT = await getDocs(query(collection(db, 'tarefas'), limit(1)));
-                const snapAt = await getDocs(query(collection(db, 'atividades'), limit(1)));
-                
-                const resultadoText = `
-=== RAIO-X DO ALUNO ===
-${JSON.stringify(snapA.docs[0]?.data() || 'Nenhum aluno achado', null, 2)}
-
-=== RAIO-X DA TAREFA ===
-${JSON.stringify(snapT.docs[0]?.data() || 'Nenhuma tarefa achada', null, 2)}
-
-=== RAIO-X DA ATIVIDADE ===
-${JSON.stringify(snapAt.docs[0]?.data() || 'Nenhuma atividade achada', null, 2)}
-                `;
-                setRaioXVisivel(resultadoText);
-              } catch (e) { 
-                console.error(e); 
-                setRaioXVisivel('Erro ao escanear: ' + e.message); 
-              }
-            }}
-            className="bg-red-600 text-white font-bold px-4 py-2 rounded-lg text-sm my-3 shadow-md hover:bg-red-700"
-          >
-            🔎 Escanear Banco V1
-          </button>
-
-          {/* CAIXA PRETA ONDE O RESULTADO VAI APARECER */}
-          {raioXVisivel && (
-            <div className="bg-gray-900 text-green-400 p-4 rounded-xl text-xs overflow-auto max-h-96 w-full mb-4 font-mono shadow-inner">
-              <p className="text-gray-400 mb-2">// Copie o texto abaixo e mande no chat:</p>
-              <pre>{raioXVisivel}</pre>
-            </div>
-          )}
-
           <div className="flex items-center gap-2 mt-2">
             <span className="text-sm font-bold text-gray-500">Instituição:</span>
             <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner" 
