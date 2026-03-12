@@ -2,20 +2,15 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, Rocket } from 'lucide-react';
+import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   
-  // REGRAS DE NEGÓCIO (TIERS E ACESSOS)
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const planoUsuario = userProfile?.plano || 'basico'; 
-  
-  // Apenas a partir do Intermediário o professor tem acesso à Esteira de Correção
   const mostrarRevisao = isAdmin || planoUsuario === 'intermediario' || planoUsuario === 'premium';
-  
-  // Apenas a partir do Premium o professor tem acesso à IA
   const mostrarTermometroIA = isAdmin || planoUsuario === 'premium';
   
   const [instituicoes, setInstituicoes] = useState([]);
@@ -25,46 +20,39 @@ export default function Dashboard() {
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
   const [loading, setLoading] = useState(true);
   
-  // Estados para o Tapete Vermelho (Onboarding)
   const [temAlunos, setTemAlunos] = useState(true); 
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
 
-  // 1. Busca Instituições
+  const [gestaoVista, setGestaoVista] = useState({ atual: null, anterior: null });
+
   useEffect(() => {
     async function fetchInst() {
       if (!currentUser) return;
       const instRef = collection(db, 'instituicoes');
       const q = isAdmin ? instRef : query(instRef, where('professorUid', '==', currentUser.uid));
-      
       const snap = await getDocs(q);
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
       lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-      
       setInstituicoes(lista);
-      
       if (lista.length > 0) {
         const escolaAindaExiste = escolaSelecionada && lista.find(i => i.id === escolaSelecionada.id);
         if (!escolaAindaExiste) setEscolaSelecionada(lista[0]);
-      } else {
-        setEscolaSelecionada(null);
-      }
+      } else { setEscolaSelecionada(null); }
       setLoading(false);
     }
     fetchInst();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isAdmin, setEscolaSelecionada]);
 
-  // 2. Busca Dados para Onboarding e Dashboard
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id) return;
-      
       setKanban({ pendentes: 0, faltaLancar: 0, finalizados: 0 }); 
       setMetricasIA({ total: 0, originais: 0, percentual: 0 });
       setTarefasEmAndamento([]);
+      setGestaoVista({ atual: null, anterior: null });
       
       try {
-        // Verifica Turmas
         const qTurmas = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapT = await getDocs(qTurmas);
         const turmasVivas = snapT.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
@@ -73,47 +61,28 @@ export default function Dashboard() {
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
 
-          // Verifica Alunos
           const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAlunos = await getDocs(qAlunos);
           const alunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira');
           setTemAlunos(alunosVivos.length > 0);
+
+          const alunosMap = {};
+          alunosVivos.forEach(d => { alunosMap[d.id] = d.data().nome; });
           
-          // Verifica Tarefas Gerais e Ponto de Situação
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
           const tarefasVivas = snapTarefas.docs.map(d => ({id: d.id, ...d.data()})).filter(t => t.status !== 'lixeira');
           setTemTarefasGeral(tarefasVivas.length > 0);
 
-          const agora = new Date();
-          const ativas = tarefasVivas
-            .filter(t => tIds.includes(t.turmaId))
-            .map(t => {
-              const dataRaw = t.dataFim || t.data || t.prazo || t.vencimento;
-              if (!dataRaw) return null;
-              let dataF;
-              try { dataF = dataRaw.toDate ? dataRaw.toDate() : new Date(dataRaw); } catch(e) { return null; }
-              if (isNaN(dataF)) return null;
+          const hoje = new Date();
+          const hojeTime = hoje.getTime();
 
-              const diasRestantes = Math.ceil((dataF.getTime() - agora.getTime()) / (1000 * 3600 * 24));
-              return { 
-                ...t, 
-                diasRestantes,
-                nomeTarefa: t.nomeTarefa || t.titulo || t.nome || t.modulo || 'Atividade'
-              };
-            })
-            .filter(t => t && t.diasRestantes >= 0)
-            .sort((a, b) => a.diasRestantes - b.diasRestantes)
-            .slice(0, 3);
-            
-          setTarefasEmAndamento(ativas);
-
-          // Lógica do Kanban
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
           
           let p = 0, f = 0, ok = 0;
           let iaTotal = 0, iaOriginais = 0;
+          const pendenciasPorTarefa = {};
 
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
@@ -127,31 +96,135 @@ export default function Dashboard() {
 
               const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
               const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
-              
               if ((jaAprovado || jaPostado) && fSugerido !== '') {
                 iaTotal++;
                 if (fFinal === fSugerido) iaOriginais++;
+              }
+
+              if (d.status === 'pendente' && alunosMap[d.alunoId]) {
+                if (!pendenciasPorTarefa[d.tarefaId]) pendenciasPorTarefa[d.tarefaId] = [];
+                pendenciasPorTarefa[d.tarefaId].push(alunosMap[d.alunoId]);
               }
             }
           });
           
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
-          const percent = iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0;
-          setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: percent });
+          setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
+
+          // =========================================================================
+          // MOTOR MATEMÁTICO PURO (SEM BUSCAR TEXTO, APENAS DATAS)
+          // =========================================================================
+          let tarefasEntregas = tarefasVivas.filter(t => tIds.includes(t.turmaId) && t.dataFim && t.tipo === 'entrega');
+
+          tarefasEntregas = tarefasEntregas.map(t => {
+            // Conversão robusta de Fim e Início (Fallback para Criação se não tiver Início)
+            const endObj = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
+            const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
+            const startObj = startRaw ? (startRaw.toDate ? startRaw.toDate() : new Date(startRaw)) : new Date();
+
+            return { 
+              ...t, 
+              timeInicio: startObj.getTime(), 
+              timeFim: endObj.getTime(),
+              dataFimStr: endObj.toLocaleDateString('pt-BR')
+            };
+          });
+
+          // 3 Baldes Matemáticos de Cronologia
+          const atuais = tarefasEntregas.filter(t => t.timeInicio <= hojeTime && t.timeFim >= hojeTime);
+          const futuras = tarefasEntregas.filter(t => t.timeInicio > hojeTime).sort((a, b) => a.timeInicio - b.timeInicio);
+          const passadas = tarefasEntregas.filter(t => t.timeFim < hojeTime).sort((a, b) => b.timeFim - a.timeFim);
+
+          const buildGroup = (rawGroup, type) => {
+            if (!rawGroup || rawGroup.length === 0) return null;
+            
+            let label = 'Anterior';
+            let theme = 'gray'; 
+            let blockTitle = `Encerrado em ${rawGroup[0].dataFimStr} (Anterior)`;
+            
+            if (type === 'atual') {
+              label = 'Atual';
+              theme = 'orange';
+              blockTitle = `Prazo até ${rawGroup[0].dataFimStr} (Atual)`;
+            } else if (type === 'futuro') {
+              label = 'Em breve';
+              theme = 'blue';
+              const startStr = new Date(rawGroup[0].timeInicio).toLocaleDateString('pt-BR');
+              blockTitle = `Iniciará em ${startStr} (Em breve)`;
+            }
+
+            let totalPendencias = 0;
+            const tarefasComAlunos = rawGroup.map(t => {
+              const pendentes = pendenciasPorTarefa[t.id] || [];
+              totalPendencias += pendentes.length;
+              return { 
+                ...t, 
+                nomeExibicao: t.nomeTarefa || t.titulo,
+                pendentes: pendentes.sort((a,b) => a.localeCompare(b)) 
+              };
+            });
+
+            return { blockTitle, theme, totalPendencias, tarefas: tarefasComAlunos };
+          };
+
+          // Define o Bloco Destaque agrupando pela mesma Data Exata
+          let blocoDestaque = null;
+          let ativasParaBarraPreta = [];
+          
+          if (atuais.length > 0) {
+            atuais.sort((a, b) => a.timeFim - b.timeFim);
+            const dataFimAlvo = atuais[0].timeFim;
+            // Puxa todas as tarefas (Desafio, Fórum, Prova, etc) que terminam no exato mesmo momento
+            const grupoAtual = atuais.filter(t => t.timeFim === dataFimAlvo);
+            blocoDestaque = buildGroup(grupoAtual, 'atual');
+            ativasParaBarraPreta = grupoAtual;
+          } else if (futuras.length > 0) {
+            const dataInicioAlvo = futuras[0].timeInicio;
+            const grupoFuturo = futuras.filter(t => t.timeInicio === dataInicioAlvo);
+            blocoDestaque = buildGroup(grupoFuturo, 'futuro');
+            ativasParaBarraPreta = grupoFuturo;
+          }
+
+          // Define o Bloco Anterior (Última rodada que passou)
+          let blocoAnterior = null;
+          if (passadas.length > 0) {
+            const dataPassadaAlvo = passadas[0].timeFim;
+            blocoAnterior = buildGroup(passadas.filter(t => t.timeFim === dataPassadaAlvo), 'passado');
+          }
+
+          setGestaoVista({ atual: blocoDestaque, anterior: blocoAnterior });
+
+          // =========================================================================
+          // ATUALIZA BARRA PRETA DE PONTO DE SITUAÇÃO
+          // =========================================================================
+          if (ativasParaBarraPreta.length > 0) {
+            const t = ativasParaBarraPreta[0];
+            const isFutura = t.timeInicio > hoje.getTime();
+            
+            // Calculo dos Dias (Teto matemático da diferença de milissegundos)
+            const alvoTempo = isFutura ? t.timeInicio : t.timeFim;
+            const diasRestantes = Math.ceil((alvoTempo - hoje.getTime()) / (1000 * 3600 * 24));
+            
+            setTarefasEmAndamento([{
+              id: t.id,
+              nomeTarefa: t.nomeTarefa || t.titulo,
+              diasRestantes: diasRestantes,
+              isFutura: isFutura
+            }]);
+          } else {
+            setTarefasEmAndamento([]);
+          }
+
         }
       } catch (e) { console.error("Erro ao carregar dados", e); }
     }
     fetchDados();
   }, [escolaSelecionada]);
 
-  // Se não for admin, o finalizado "engole" as tarefas prontas para focar a visão do professor
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   if (loading) return <div className="p-20 text-center font-bold">Carregando Estação...</div>;
 
-  // =========================================================================
-  // ONBOARDING - PASSO 1: Não tem Instituição
-  // =========================================================================
   if (!escolaSelecionada) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
@@ -169,7 +242,7 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* HEADER E SELETOR DE INSTITUIÇÃO */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
@@ -186,9 +259,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* =========================================================================
-          ONBOARDING - PASSOS 2, 3 E 4
-          ========================================================================= */}
       {minhasTurmas.length === 0 ? (
         <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-8">
           <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
@@ -222,11 +292,8 @@ export default function Dashboard() {
         </div>
       ) : (
 
-      /* =========================================================================
-         DASHBOARD OFICIAL V3
-         ========================================================================= */
         <>
-          {/* BARRA PRETA: PONTO DE SITUAÇÃO */}
+          {/* BARRA PRETA DE PONTO DE SITUAÇÃO */}
           <div className="bg-[#1f2937] text-white rounded-2xl p-5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800">
             <div className="flex gap-4 items-center w-full">
               <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner">
@@ -237,15 +304,17 @@ export default function Dashboard() {
                 <div className="space-y-1 text-sm font-medium text-slate-300">
                   {tarefasEmAndamento.length > 0 ? (
                     <p className="flex items-center gap-2 truncate">
-                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>
-                      <span className="text-gray-400 shrink-0">Assíncrono:</span>
+                      <span className={`w-2 h-2 rounded-full animate-pulse shrink-0 ${tarefasEmAndamento[0].isFutura ? 'bg-blue-500' : 'bg-green-500'}`}></span>
+                      <span className="text-gray-400 shrink-0">Agenda:</span>
                       <strong className="text-white truncate" title={tarefasEmAndamento[0].nomeTarefa}>{tarefasEmAndamento[0].nomeTarefa}</strong>
-                      <span className="text-green-400 text-xs font-bold shrink-0">(Faltam {tarefasEmAndamento[0].diasRestantes} dias)</span>
+                      <span className={`${tarefasEmAndamento[0].isFutura ? 'text-blue-400' : 'text-green-400'} text-xs font-bold shrink-0`}>
+                        ({tarefasEmAndamento[0].isFutura ? `Inicia em ${tarefasEmAndamento[0].diasRestantes} dias` : `Faltam ${tarefasEmAndamento[0].diasRestantes} dias`})
+                      </span>
                     </p>
                   ) : (
                     <p className="flex items-center gap-2 text-gray-400">
                       <span className="w-2 h-2 rounded-full bg-gray-500 shrink-0"></span>
-                      Nenhuma tarefa ativa no cronograma.
+                      Nenhuma tarefa programada no cronograma.
                     </p>
                   )}
                 </div>
@@ -256,7 +325,7 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          {/* TERMÔMETRO DA IA (Tier Premium ou Admin) */}
+          {/* TERMÔMETRO DA IA */}
           {mostrarTermometroIA && metricasIA.total > 0 && (
             <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl p-5 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
@@ -273,10 +342,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* GRID DO KANBAN DINÂMICO BASEADO NO PERFIL */}
+          {/* KANBAN */}
           <div className={`grid grid-cols-1 gap-5 mb-10 ${isAdmin ? 'md:grid-cols-3' : (mostrarRevisao ? 'md:grid-cols-2 max-w-4xl' : 'max-w-md mx-auto')}`}>
-            
-            {/* ESTEIRA DE PRODUÇÃO (Só aparece se o usuário for Tier 2+ ou Admin) */}
             {mostrarRevisao && (
               <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-2">
@@ -287,8 +354,6 @@ export default function Dashboard() {
                 <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
               </div>
             )}
-
-            {/* ÁREA DE ADMIN (Aguardando Postar) */}
             {isAdmin && (
               <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-2">
@@ -299,8 +364,6 @@ export default function Dashboard() {
                 <Link to="/faltapostar" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Copiar p/ Site <ChevronRight size={14}/></Link>
               </div>
             )}
-
-            {/* HISTÓRICO (Aparece para todos, independente do Tier) */}
             <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-2">
                 <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
@@ -309,8 +372,78 @@ export default function Dashboard() {
               <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
               <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
             </div>
-            
           </div>
+
+          {/* =========================================================================
+              MOTOR DE GESTÃO À VISTA POR DATA ESTRITA (Sem Adivinhar Texto)
+              ========================================================================= */}
+          {(gestaoVista.atual || gestaoVista.anterior) && (
+            <div className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <h2 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                <AlertTriangle className="text-orange-500" size={24}/> Gestão à Vista: Foco Atual
+              </h2>
+              
+              <div className="space-y-6">
+                
+                {/* BLOCO ATUAL OU FUTURO */}
+                {gestaoVista.atual && (
+                  <div className={`bg-white border rounded-2xl shadow-sm overflow-hidden ${gestaoVista.atual.theme === 'blue' ? 'border-blue-200' : 'border-orange-200'}`}>
+                    <div className={`p-4 flex justify-between items-center border-b ${gestaoVista.atual.theme === 'blue' ? 'bg-blue-50/50 border-blue-100' : 'bg-orange-50/50 border-orange-100'}`}>
+                      <h3 className={`font-black text-lg truncate pr-4 ${gestaoVista.atual.theme === 'blue' ? 'text-blue-900' : 'text-orange-900'}`}>{gestaoVista.atual.blockTitle}</h3>
+                      <span className={`text-xs font-black px-3 py-1 rounded-full whitespace-nowrap shrink-0 ${gestaoVista.atual.theme === 'blue' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>{gestaoVista.atual.totalPendencias} pendências</span>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      {gestaoVista.atual.tarefas.map(t => (
+                        <div key={t.id} className="border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                          <h4 className="text-sm font-bold text-gray-700 mb-2">{t.nomeExibicao}</h4>
+                          {t.pendentes.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {t.pendentes.map((nome, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-bold text-gray-600 shadow-sm hover:border-orange-300 transition-colors cursor-default">
+                                  <User size={12} className="text-gray-400"/> {nome}
+                               </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCheck size={14}/> 100% Entregue!</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* BLOCO ANTERIOR */}
+                {gestaoVista.anterior && (
+                  <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="bg-gray-50 border-b border-gray-100 p-4 flex justify-between items-center">
+                      <h3 className="font-black text-gray-700 text-lg truncate pr-4" title={gestaoVista.anterior.blockTitle}>{gestaoVista.anterior.blockTitle}</h3>
+                      <span className="bg-gray-200 text-gray-700 text-xs font-black px-3 py-1 rounded-full whitespace-nowrap shrink-0">{gestaoVista.anterior.totalPendencias} pendências</span>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      {gestaoVista.anterior.tarefas.map(t => (
+                        <div key={t.id} className="border-b border-gray-50 pb-4 last:border-0 last:pb-0">
+                          <h4 className="text-sm font-bold text-gray-600 mb-2">{t.nomeExibicao}</h4>
+                          {t.pendentes.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {t.pendentes.map((nome, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-bold text-gray-500 shadow-sm hover:border-gray-300 transition-colors cursor-default">
+                                  <User size={12} className="text-gray-400"/> {nome}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCheck size={14}/> 100% Entregue!</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
