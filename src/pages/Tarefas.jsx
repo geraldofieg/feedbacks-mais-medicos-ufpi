@@ -35,7 +35,6 @@ export default function Tarefas() {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
 
-  // NOVO: Inclusão de dataInicio e horaInicio
   const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataInicio: '', horaInicio: '', dataFim: '', horaFim: '', tipo: 'entrega' });
   const [atribuicaoEspecifica, setAtribuicaoEspecifica] = useState(false); 
   const [alunosSelecionados, setAlunosSelecionados] = useState([]); 
@@ -137,7 +136,6 @@ export default function Tarefas() {
   const criarDataSegura = (dataStr, horaStr, isFim = false) => {
     if (!dataStr) return null;
     const [ano, mes, dia] = dataStr.split('-');
-    // Injeção cravada: 00:00 pro início, 23:59 pro fim se o usuário deixar em branco
     const horaPadrao = isFim ? '23:59' : '00:00';
     const [hora, min] = (horaStr || horaPadrao).split(':');
     return new Date(ano, mes - 1, dia, hora, min);
@@ -275,9 +273,9 @@ export default function Tarefas() {
 
   const getIconeTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
-    if (t === 'compromisso') return <Calendar size={22} className="text-purple-500" />;
-    if (t === 'lembrete') return <StickyNote size={22} className="text-yellow-500" />;
-    return <FileText size={22} className="text-orange-500" />;
+    if (t === 'compromisso') return <Calendar size={20} className="text-purple-500" />;
+    if (t === 'lembrete') return <StickyNote size={20} className="text-yellow-500" />;
+    return <FileText size={20} className="text-orange-500" />;
   };
 
   const getCorTipo = (tipo) => {
@@ -403,24 +401,33 @@ export default function Tarefas() {
                 ) : (
                   <div className="flex flex-col h-full justify-between">
                     <div>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-100 shrink-0">{getIconeTipo(tarefa.tipo)}</div>
-                        <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => iniciarEdicao(tarefa)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Editar"><Pencil size={16}/></button>
-                          <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Remover"><Trash2 size={16}/></button>
+                      {/* NOVO LAYOUT: Ícone e Título lado a lado */}
+                      <div className="flex justify-between items-start gap-3 mb-3">
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <div className="p-2 bg-white rounded-lg shadow-sm border border-gray-100 shrink-0 mt-0.5">
+                            {getIconeTipo(tarefa.tipo)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            {(tarefa.tipo === 'entrega' || !tarefa.tipo) ? (
+                              <Link to={`/revisar/${tarefa.id}`} className="block font-black text-gray-800 text-base md:text-lg leading-tight hover:text-blue-600 transition-colors group/link truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
+                                {tarefa.nomeTarefa || tarefa.titulo}
+                              </Link>
+                            ) : (
+                              <h3 className="font-black text-gray-800 text-base md:text-lg leading-tight truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
+                                {tarefa.nomeTarefa || tarefa.titulo}
+                              </h3>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
+                          <button onClick={() => iniciarEdicao(tarefa)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Editar"><Pencil size={16}/></button>
+                          <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Remover"><Trash2 size={16}/></button>
                         </div>
                       </div>
-                      
-                      {(tarefa.tipo === 'entrega' || !tarefa.tipo) ? (
-                        <Link to={`/revisar/${tarefa.id}`} className="block font-black text-gray-800 text-lg leading-tight mb-3 hover:text-blue-600 transition-colors group/link" title={tarefa.nomeTarefa || tarefa.titulo}>
-                          {tarefa.nomeTarefa || tarefa.titulo} <ArrowRight size={14} className="inline-block opacity-0 group-hover/link:opacity-100 transition-all -translate-x-2 group-hover/link:translate-x-0"/>
-                        </Link>
-                      ) : (
-                        <h3 className="font-black text-gray-800 text-lg leading-tight mb-3" title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</h3>
-                      )}
 
+                      {/* TEXTO COM MAIS ESPAÇO E QUEBRA DE LINHA */}
                       {tarefa.enunciado && (
-                        <p className="text-sm text-gray-600 font-normal line-clamp-2 mb-4 bg-white/50 p-2 rounded-lg">{tarefa.enunciado}</p>
+                        <p className="text-sm text-gray-600 font-normal line-clamp-4 mb-4 bg-white/50 p-3 rounded-lg whitespace-pre-wrap">{tarefa.enunciado}</p>
                       )}
                     </div>
                     
