@@ -1,170 +1,140 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, updateDoc, doc, query, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Database, ArrowRight, CheckCircle2, AlertTriangle, RefreshCw, CalendarDays } from 'lucide-react';
+import { Zap, RefreshCw, CalendarDays, Trash2 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
-// DATAS CHUMBADAS DA V1 (Para injeção no Banco)
-const cronogramaAssincrono = [
-  { id: 1, modulo: "Módulo 1 - Políticas públicas", inicio: "2025-09-28", fim: "2025-10-11" },
-  { id: 2, modulo: "Módulo 2 - Atenção Primária e ESF", inicio: "2025-10-13", fim: "2025-10-26" },
-  { id: 3, modulo: "Módulo 3 - Princípios da MFC", inicio: "2025-10-27", fim: "2025-11-09" },
-  { id: 4, modulo: "Módulo 4 - Abordagem clínica", inicio: "2025-11-10", fim: "2025-12-07" },
-  { id: 5, modulo: "Módulo 5 - Gestão da clínica", inicio: "2025-12-08", fim: "2026-01-04" },
-  { id: 6, modulo: "Módulo 6 - Abordagem familiar", inicio: "2026-01-05", fim: "2026-02-01" },
-  { id: 7, modulo: "Módulo 7 - Abordagem comunitária", inicio: "2026-02-02", fim: "2026-03-01" },
-  { id: 8, modulo: "Módulo 8 - Criança e adolescente", inicio: "2026-03-02", fim: "2026-03-29" },
-  { id: 9, modulo: "Semana de retenção e correção", inicio: "2026-03-30", fim: "2026-04-12" },
-  { id: 10, modulo: "Módulo 9 - Saúde da mulher", inicio: "2026-03-30", fim: "2026-04-26" },
-  { id: 11, modulo: "Módulo 10 - Saúde do homem", inicio: "2026-04-27", fim: "2026-05-10" },
-  { id: 12, modulo: "Módulo 11 - Saúde do idoso", inicio: "2026-05-11", fim: "2026-05-24" }
+// LISTA FILTRADA: APENAS MÓDULO 09 EM DIANTE (Extraído do PDF Oficial)
+const cronogramaFuturo = [
+  { num: "09", inicio: "2026-03-30", fim: "2026-04-26" },
+  { num: "10", inicio: "2026-04-27", fim: "2026-05-10" },
+  { num: "11", inicio: "2026-05-11", fim: "2026-05-24" },
+  { num: "34", inicio: "2026-05-25", fim: "2026-07-05" },
+  { num: "12", inicio: "2026-07-06", fim: "2026-08-02" },
+  { num: "13", inicio: "2026-08-03", fim: "2026-08-30" },
+  { num: "14", inicio: "2026-08-31", fim: "2026-09-27" },
+  { num: "15", inicio: "2026-09-28", fim: "2026-10-11" },
+  { num: "16", inicio: "2026-10-12", fim: "2026-11-08" },
+  { num: "17", inicio: "2026-11-09", fim: "2026-12-06" },
+  { num: "18", inicio: "2026-12-07", fim: "2026-12-20" },
+  { num: "19", inicio: "2026-12-21", fim: "2027-01-03" },
+  { num: "20", inicio: "2027-01-04", fim: "2027-01-31" },
+  { num: "21", inicio: "2027-02-01", fim: "2027-02-14" },
+  { num: "22", inicio: "2027-02-15", fim: "2027-03-14" },
+  { num: "23", inicio: "2027-03-15", fim: "2027-04-11" },
+  { num: "24", inicio: "2027-04-12", fim: "2027-04-25" },
+  { num: "25", inicio: "2027-04-26", fim: "2027-05-09" },
+  { num: "26", inicio: "2027-05-10", fim: "2027-05-23" },
+  { num: "27", inicio: "2027-05-24", fim: "2027-06-06" },
+  { num: "28", inicio: "2027-06-07", fim: "2027-06-20" },
+  { num: "29", inicio: "2027-06-21", fim: "2027-07-18" },
+  { num: "30", inicio: "2027-07-19", fim: "2027-08-15" },
+  { num: "31", inicio: "2027-08-16", fim: "2027-08-29" },
+  { num: "32", inicio: "2027-08-30", fim: "2027-09-12" }
 ];
 
 export default function Migracao() {
-  const { currentUser, userProfile, escolaSelecionada } = useAuth();
+  const { currentUser, escolaSelecionada } = useAuth();
   const [turmas, setTurmas] = useState([]);
   const [turmaAlvo, setTurmaAlvo] = useState('');
-  
-  const [analise, setAnalise] = useState(null);
-  const [status, setStatus] = useState('ocioso'); // ocioso, analisando, migrando, injeçãoDatas, concluido
+  const [status, setStatus] = useState('ocioso');
   const [logs, setLogs] = useState([]);
-
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   useEffect(() => {
     async function fetchTurmas() {
       if (!escolaSelecionada?.id) return;
-      const q = isAdmin 
-        ? query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id))
-        : query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+      const q = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id));
       const snap = await getDocs(q);
       setTurmas(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira'));
     }
     fetchTurmas();
-  }, [escolaSelecionada, isAdmin, currentUser]);
+  }, [escolaSelecionada]);
 
-  const addLog = (msg) => setLogs(prev => [...prev, msg]);
-
-  // FUNÇÃO AUXILIAR PARA CRIAR DATAS SEGURAS (Início 00:00 / Fim 23:59)
-  const criarTimestampSeguro = (dataStr, isFim = false) => {
-    if (!dataStr) return null;
+  const criarTimestamp = (dataStr, isFim = false) => {
     const [ano, mes, dia] = dataStr.split('-');
-    // Mês em JavaScript começa no 0 (Janeiro = 0)
     const d = new Date(ano, mes - 1, dia, isFim ? 23 : 0, isFim ? 59 : 0, isFim ? 59 : 0);
     return Timestamp.fromDate(d);
   };
 
-  const injetarDatasFaltantes = async () => {
-    if (!escolaSelecionada || !turmaAlvo) {
-      alert("Selecione uma Instituição e uma Turma primeiro!");
-      return;
-    }
-    setStatus('injeçãoDatas');
-    addLog('--- INICIANDO CRUZAMENTO INTELIGENTE DE DATAS ---');
+  const gerarNovasTarefas = async () => {
+    if (!turmaAlvo) return alert("Selecione a turma!");
+    if (!window.confirm("Isto criará as tarefas do Módulo 09 em diante com o campo 'ano'. Confirma?")) return;
+
+    setStatus('processando');
+    setLogs(['A iniciar criação em lote (Módulo 09 ao 32)...']);
 
     try {
-      const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAlvo));
-      const snapTarefas = await getDocs(qTarefas);
-      const tarefasBanco = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }));
+      for (const modulo of cronogramaFuturo) {
+        const tipos = ['Desafio', 'Fórum'];
+        const anoRef = parseInt(modulo.fim.split('-')[0]);
 
-      addLog(`Avaliando ${tarefasBanco.length} tarefas encontradas nesta turma...`);
-
-      let atualizadas = 0;
-
-      for (let tarefa of tarefasBanco) {
-        const nomeReal = tarefa.nomeTarefa || tarefa.titulo || tarefa.nome || 'Sem Nome';
-        const nomeBusca = nomeReal.trim().toLowerCase();
-        
-        // INTELIGÊNCIA: Tenta achar "Módulo 8", "M08", "M-08", etc.
-        const cronogramaMatch = cronogramaAssincrono.find(c => {
-          const matchNum = c.modulo.match(/\d+/);
-          if (!matchNum) return false;
-          const num = matchNum[0]; // ex: "8"
-          const numPad = num.padStart(2, '0'); // ex: "08"
-
-          const variacoes = [
-            `módulo ${num}`, `modulo ${num}`,
-            `m${numPad}`, `m-${numPad}`, `m ${numPad}`,
-            `m${num}`, `m-${num}`
-          ];
-
-          return variacoes.some(v => nomeBusca.includes(v));
-        });
-
-        if (cronogramaMatch) {
-          const startTs = criarTimestampSeguro(cronogramaMatch.inicio, false);
-          const endTs = criarTimestampSeguro(cronogramaMatch.fim, true);
-
-          await updateDoc(doc(db, 'tarefas', tarefa.id), {
-            dataInicio: startTs,
-            dataFim: endTs
+        for (const tipo of tipos) {
+          const nomeFinal = `Módulo ${modulo.num} - ${tipo}`;
+          
+          await addDoc(collection(db, 'tarefas'), {
+            nomeTarefa: nomeFinal,
+            titulo: nomeFinal,
+            instituicaoId: escolaSelecionada.id,
+            turmaId: turmaAlvo,
+            professorUid: currentUser.uid,
+            status: 'ativa',
+            tipo: 'entrega',
+            ano: anoRef, // INDEXADOR PARA DISTINGUIR DAS TAREFAS SEM ANO
+            dataInicio: criarTimestamp(modulo.inicio, false),
+            dataFim: criarTimestamp(modulo.fim, true),
+            dataCriacao: Timestamp.now(),
+            enunciado: "" 
           });
           
-          atualizadas++;
-          addLog(`✅ INJETADO: [${nomeReal}] linkou com [${cronogramaMatch.modulo}]`);
-        } else {
-          addLog(`⚠️ IGNORADO: Não achei módulo compatível para [${nomeReal}]`);
+          setLogs(prev => [...prev, `✅ Criado: ${nomeFinal} (Ano: ${anoRef})`]);
         }
       }
-
-      addLog(`🎯 FIM! ${atualizadas} tarefas receberam prazos (00:00 até 23:59).`);
       setStatus('concluido');
-      alert("Datas aplicadas com sucesso! Volte para o Início.");
-    } catch (error) {
-      console.error(error);
-      addLog('❌ ERRO NA INJEÇÃO: ' + error.message);
+      alert("Sucesso! Módulos 09+ gerados. Podes agora remover as duplicatas sem campo 'ano'.");
+    } catch (e) {
+      setLogs(prev => [...prev, '❌ Erro: ' + e.message]);
       setStatus('erro');
     }
   };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <Breadcrumb items={[{ label: 'Ferramentas de Manutenção' }]} />
-      
+      <Breadcrumb items={[{ label: 'Automação Académica (Módulo 09+)' }]} />
       <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden mt-6">
-        <div className="bg-gray-900 p-8 text-white">
-          <h1 className="text-3xl font-black flex items-center gap-3 mb-2"><Database className="text-blue-400"/> Ferramentas de Manutenção</h1>
-          <p className="text-gray-400 font-medium">Use este painel para injetar dados faltantes da V1 na V3.</p>
+        <div className="bg-slate-900 p-8 text-white">
+          <h1 className="text-3xl font-black flex items-center gap-3 mb-2"><Zap className="text-yellow-400"/> Gerador de Estrutura V3</h1>
+          <p className="text-slate-400 font-medium">Criação de Fóruns e Desafios (M09-M32) com indexação de Ano.</p>
         </div>
 
         <div className="p-8 space-y-6">
-          <div className="bg-blue-50 border border-blue-200 p-5 rounded-2xl">
-            <h3 className="font-bold text-blue-900 mb-3">Onde aplicar as correções?</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-black text-gray-500 uppercase">1. Instituição Atual</label>
-                <div className="font-bold text-gray-800 bg-white p-3 rounded-lg border mt-1 cursor-not-allowed">
-                  {escolaSelecionada?.nome || 'Nenhuma selecionada'}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-black text-gray-500 uppercase">2. Turma Alvo</label>
-                <select className="w-full bg-white font-bold text-gray-800 p-3 rounded-lg border mt-1 cursor-pointer outline-blue-500" value={turmaAlvo} onChange={e => setTurmaAlvo(e.target.value)}>
-                  <option value="" disabled>Selecione a turma...</option>
-                  {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
-              </div>
-            </div>
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 items-start">
+            <Trash2 className="text-amber-600 shrink-0" size={20}/>
+            <p className="text-xs text-amber-800 font-medium">
+              <strong>Atenção:</strong> Os módulos 1 a 8 serão mantidos. A partir do 9, apaga manualmente as tarefas antigas que <strong>não possuem</strong> o campo "ano" no banco.
+            </p>
           </div>
 
-          <div className="space-y-4">
-            <div className="bg-gray-900 text-green-400 p-4 rounded-xl text-xs font-mono max-h-64 overflow-y-auto">
-              {logs.length === 0 ? '> Aguardando comando...' : logs.map((log, i) => <div key={i}>{">"} {log}</div>)}
-            </div>
-
-            {status !== 'injeçãoDatas' && (
-              <button onClick={injetarDatasFaltantes} className="w-full py-4 rounded-xl font-black text-lg bg-orange-600 text-white hover:bg-orange-700 transition-all flex justify-center items-center gap-2 shadow-lg shadow-orange-600/30">
-                <CalendarDays /> Injetar Datas (Corrige Barra Preta)
-              </button>
-            )}
-
-            {status === 'injeçãoDatas' && (
-              <div className="w-full py-4 rounded-xl font-black text-lg bg-yellow-500 text-white flex justify-center items-center gap-2 shadow-lg">
-                <RefreshCw className="animate-spin"/> Cruzando nomes e atualizando banco...
-              </div>
-            )}
+          <div className="bg-blue-50 border border-blue-100 p-5 rounded-2xl">
+            <label className="text-xs font-black text-blue-500 uppercase tracking-widest">Turma de Destino</label>
+            <select className="w-full bg-white font-bold text-gray-800 p-3 rounded-lg border mt-2 outline-blue-500" value={turmaAlvo} onChange={e => setTurmaAlvo(e.target.value)}>
+              <option value="">Escolher turma...</option>
+              {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
           </div>
+
+          <div className="bg-black text-green-400 p-4 rounded-xl text-[10px] font-mono max-h-64 overflow-y-auto shadow-inner border border-slate-800">
+            {logs.length === 0 ? '> Sistema pronto para injeção de tarefas...' : logs.map((log, i) => <div key={i}>{log}</div>)}
+          </div>
+
+          <button 
+            onClick={gerarNovasTarefas}
+            disabled={status === 'processando'}
+            className="w-full py-4 rounded-xl font-black text-lg bg-blue-600 text-white hover:bg-blue-700 transition-all flex justify-center items-center gap-2 shadow-lg disabled:opacity-50"
+          >
+            {status === 'processando' ? <RefreshCw className="animate-spin"/> : <Zap />}
+            Gerar Ciclo Completo (Módulos 09 ao 32)
+          </button>
         </div>
       </div>
     </div>
