@@ -45,7 +45,8 @@ export default function RevisarAtividade() {
 
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', snapTarefa.data().turmaId));
         const snapAlunos = await getDocs(qAlunos);
-        setAlunos(snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome)));
+        const listaAlunos = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome));
+        setAlunos(listaAlunos);
 
         const qAtividades = query(collection(db, 'atividades'), where('tarefaId', '==', id));
         const snapAtividades = await getDocs(qAtividades);
@@ -80,11 +81,10 @@ export default function RevisarAtividade() {
       const promptCompleto = `Aja como preceptor médico. Estilo: ${userProfile?.promptPersonalizado || 'Direto.'} Contexto: ${tarefa?.enunciado}. Resposta: "${novaResposta}". Gere feedback direto.`;
       const result = await model.generateContent(promptCompleto);
       setFeedbackEditado(result.response.text());
-    } catch (e) { alert("Limite de cota atingido. Tente em 60s."); }
+    } catch (e) { alert("Limite de cota atingido ou erro na IA."); }
     finally { setGerandoIA(false); }
   }
 
-  // PASSO 1: SALVAR INTERNAMENTE NA NOSSA PLATAFORMA
   async function handleAprovar() {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
@@ -105,18 +105,17 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Avaliação salva internamente! Agora você pode copiar e lançar no sistema oficial.");
+      alert("Avaliação salva internamente!");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
-  // PASSO 2: MARCAR COMO LANÇADO (LINHA DE CHEGADA)
   async function handleMarcarPostado() {
     if (marcandoPostado || !atividadeAtual) return;
     setMarcandoPostado(true);
     try {
       await updateDoc(doc(db, 'atividades', atividadeAtual.id), { postado: true, dataPostagem: serverTimestamp() });
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], postado: true } }));
-      alert("Sucesso! Este aluno agora está com status FINALIZADO.");
+      alert("Status atualizado para FINALIZADO.");
     } catch (error) { console.error(error); } finally { setMarcandoPostado(false); }
   }
 
@@ -147,8 +146,8 @@ export default function RevisarAtividade() {
                 const registro = atividadesMap[a.id];
                 let icone = '🔴'; 
                 if (registro) {
-                  if (registro.postado) icone = '✅'; // Só fica verde se foi lançado oficialmente
-                  else icone = '🟡'; // Se existe registro mas não postou, é amarelo
+                  if (registro.postado) icone = '✅'; 
+                  else icone = '🟡';
                 }
                 return <option key={a.id} value={a.id}>{icone} {a.nome}</option>;
               })}
@@ -167,15 +166,19 @@ export default function RevisarAtividade() {
                    <h4 className="font-black text-slate-700 text-sm uppercase mb-1">Aguardando</h4>
                    <p className="text-[11px] text-slate-500 font-bold leading-tight">Você ainda não trouxe a resposta do aluno para esta plataforma.</p>
                 </div>
-                <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col items-center text-center">
+                <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col items-center text-center shadow-sm">
                    <span className="text-3xl mb-3">🟡</span>
                    <h4 className="font-black text-amber-700 text-sm uppercase mb-1">Em Revisão</h4>
-                   <p className="text-[11px] text-amber-600 font-bold leading-tight">A resposta já está aqui, mas o feedback ainda não foi lançado no sistema oficial.</p>
+                   <p className="text-[11px] text-amber-600 font-bold leading-tight">
+                     A resposta já está aqui, mas ainda não foi aprovado o feedback sugerido pela IA e a atividade não foi marcada como lançada no sistema oficial.
+                   </p>
                 </div>
-                <div className="bg-green-50 p-6 rounded-3xl border border-green-100 flex flex-col items-center text-center">
+                <div className="bg-green-50 p-6 rounded-3xl border border-green-100 flex flex-col items-center text-center shadow-sm">
                    <span className="text-3xl mb-3">✅</span>
                    <h4 className="font-black text-green-700 text-sm uppercase mb-1">Lançado</h4>
-                   <p className="text-[11px] text-green-600 font-bold leading-tight">Trabalho concluído! O feedback e a nota já foram enviados para o portal da sua instituição.</p>
+                   <p className="text-[11px] text-green-600 font-bold leading-tight">
+                     Trabalho concluído! O feedback e/ou a nota já foi (foram) lançada(os) para o portal da sua instituição.
+                   </p>
                 </div>
              </div>
           </div>
@@ -212,15 +215,13 @@ export default function RevisarAtividade() {
                     <GraduationCap className="text-blue-400" size={20}/><div className="flex-1"><label className="block text-[9px] font-black text-slate-500 uppercase mb-0.5">Nota</label><input type="text" placeholder="Ex: 10.0" className="bg-transparent border-none outline-none font-black text-white w-full text-base" value={notaAluno} onChange={e => setNotaAluno(e.target.value)}/></div>
                   </div>
 
-                  {/* BOTÃO SALVAR INTERNO */}
                   <button onClick={handleAprovar} disabled={salvando || !feedbackEditado} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-3xl shadow-xl transition-all flex justify-center items-center gap-3 text-lg">
                     {salvando ? <RefreshCw className="animate-spin" size={20}/> : <CheckCircle size={20}/>}
                     Salvar Revisão
                   </button>
 
-                  {/* AÇÕES DE LANÇAMENTO (ESTILO V1) */}
                   {atividadeAtual?.status === 'aprovado' && (
-                    <div className="pt-4 border-t border-slate-800 space-y-4 animate-in fade-in zoom-in duration-300">
+                    <div className="pt-4 border-t border-slate-800 space-y-4">
                       <button onClick={() => { navigator.clipboard.writeText(feedbackEditado); setCopiado(true); setTimeout(()=>setCopiado(false), 2000); }} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors">
                         <Copy size={18}/> {copiado ? 'Copiado para o seu Sistema!' : '1. Copiar Feedback'}
                       </button>
@@ -230,7 +231,7 @@ export default function RevisarAtividade() {
                             <CheckCheck size={18}/> LANÇADO OFICIALMENTE
                          </div>
                       ) : (
-                        <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl animate-pulse">
+                        <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl">
                           <Send size={18}/> 2. Confirmar Lançamento Oficial
                         </button>
                       )}
