@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User } from 'lucide-react';
+// NOVO: Adicionei o ícone PlayCircle para o botão de ação rápida
+import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, PlayCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -210,6 +211,21 @@ export default function Dashboard() {
 
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
+  // --- LÓGICA DE EXIBIÇÃO DO GRID E DO CARD DE AÇÃO RÁPIDA ---
+  const tarefaAtualValida = tarefasEmAndamento.length > 0 && !tarefasEmAndamento[0].isFutura ? tarefasEmAndamento[0] : null;
+
+  // Calculando quantas colunas o Kanban precisa ter para não quebrar o layout
+  let numCards = 1; // Histórico sempre aparece
+  if (tarefaAtualValida) numCards++;
+  if (mostrarRevisao) numCards++;
+  if (isAdmin) numCards++;
+
+  let gridClass = "grid grid-cols-1 gap-5 mb-10 ";
+  if (numCards === 4) gridClass += "md:grid-cols-2 lg:grid-cols-4";
+  else if (numCards === 3) gridClass += "md:grid-cols-3";
+  else if (numCards === 2) gridClass += "md:grid-cols-2 max-w-3xl";
+  else gridClass += "max-w-md mx-auto";
+
   if (loading) return <div className="p-20 text-center font-bold">Carregando Estação...</div>;
 
   if (!escolaSelecionada) {
@@ -329,8 +345,27 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* KANBAN */}
-          <div className={`grid grid-cols-1 gap-5 mb-10 ${isAdmin ? 'md:grid-cols-3' : (mostrarRevisao ? 'md:grid-cols-2 max-w-4xl' : 'max-w-md mx-auto')}`}>
+          {/* KANBAN E ATALHOS */}
+          <div className={gridClass}>
+            
+            {/* NOVO: CARD DE TELETRANSPORTE (SÓ APARECE SE TIVER TAREFA ROLANDO HOJE) */}
+            {tarefaAtualValida && (
+              <div className="bg-white border border-indigo-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full -z-0"></div>
+                <div className="flex justify-between items-start mb-2 relative z-10">
+                  <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest mt-1">Tarefa Atual</h3>
+                  <div className="text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"><PlayCircle size={20}/></div>
+                </div>
+                <span className="text-2xl font-black text-gray-800 relative z-10 leading-tight line-clamp-2" title={tarefaAtualValida.nomeTarefa}>
+                  {tarefaAtualValida.nomeTarefa}
+                </span>
+                <Link to={`/revisar/${tarefaAtualValida.id}`} className="mt-4 text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline w-fit relative z-10">
+                  Iniciar correções <ChevronRight size={14}/>
+                </Link>
+              </div>
+            )}
+
+            {/* KANBAN TRADICIONAL */}
             {mostrarRevisao && (
               <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-2">
@@ -341,6 +376,7 @@ export default function Dashboard() {
                 <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
               </div>
             )}
+            
             {isAdmin && (
               <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-2">
@@ -351,6 +387,7 @@ export default function Dashboard() {
                 <Link to="/faltapostar" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Copiar p/ Site <ChevronRight size={14}/></Link>
               </div>
             )}
+            
             <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-2">
                 <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
