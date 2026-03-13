@@ -13,27 +13,42 @@ export default function Pendencias() {
       setLoading(true);
 
       try {
-        // 1. Busca os Alunos
+        // 1. Busca os Alunos e cria o dicionário de tradução V3 -> V1
         const alunosSnap = await getDocs(collection(db, 'alunos'));
-        const alunosAtivos = alunosSnap.docs.map(doc => doc.data().nome);
+        const alunosMap = {};
+        const alunosAtivos = [];
+        
+        alunosSnap.docs.forEach(doc => {
+          const data = doc.data();
+          // CORREÇÃO 1: Ignora os "Alunos Fantasmas" que estão na lixeira da V3
+          if (data.status !== 'lixeira') {
+            alunosAtivos.push(data.nome);
+            alunosMap[doc.id] = data.nome; // Guarda o ID para traduzir a V3
+          }
+        });
 
         if (alunosAtivos.length === 0) {
           setLoading(false);
           return;
         }
 
-        // 2. Busca a Nova Estrutura de Unidades (Módulos)
+        // 2. Busca Tarefas (V3) para o dicionário de tradução de Nomes
+        const tarefasSnap = await getDocs(collection(db, 'tarefas'));
+        const tarefasMap = {};
+        tarefasSnap.docs.forEach(doc => {
+          tarefasMap[doc.id] = doc.data().nomeTarefa;
+        });
+
+        // 3. Busca a Estrutura de Unidades (Módulos da V1)
         const modulosSnap = await getDocs(collection(db, 'modulos'));
         const modulosDB = modulosSnap.docs.map(doc => doc.data());
 
-        // 3. Filtra apenas os "ATIVOS" e ordena pelas Datas Oficiais
         const modulosAtivos = modulosDB
           .filter(mod => mod.status !== 'arquivado')
           .sort((a, b) => {
-            // Usa a dataFim como prioridade; se não tiver, usa a dataCriacao
             const timeA = a.dataFim?.toMillis ? a.dataFim.toMillis() : (a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0);
             const timeB = b.dataFim?.toMillis ? b.dataFim.toMillis() : (b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0);
-            return timeB - timeA; // Do mais recente para o mais antigo
+            return timeB - timeA; 
           });
 
         if (modulosAtivos.length === 0) {
@@ -48,10 +63,27 @@ export default function Pendencias() {
         const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
         
         const atividadesSnap = await getDocs(qAtividades);
-        const atividadesBrutas = atividadesSnap.docs.map(doc => doc.data());
+        const entregas = new Set();
+        
+        // CORREÇÃO 2: Unifica o Padrão V1 e V3 no mesmo Set
+        atividadesSnap.docs.forEach(doc => {
+          const a = doc.data();
+          let nomeAluno = a.aluno; // Se foi feito na V1
+          let nomeTarefa = a.tarefa; // Se foi feito na V1
 
-        // Cria a "lista de presença" das entregas
-        const entregas = new Set(atividadesBrutas.map(a => `${a.aluno}-${a.modulo}-${a.tarefa}`));
+          // Se foi feito na V3, traduz o ID para Nome
+          if (a.alunoId && alunosMap[a.alunoId]) {
+            nomeAluno = alunosMap[a.alunoId];
+          }
+          if (a.tarefaId && tarefasMap[a.tarefaId]) {
+            nomeTarefa = tarefasMap[a.tarefaId];
+          }
+
+          if (nomeAluno && nomeTarefa) {
+            // Guarda a assinatura "NomeDoAluno-NomeDaTarefa"
+            entregas.add(`${nomeAluno}-${nomeTarefa}`);
+          }
+        });
 
         // 5. Cruza os alunos com as tarefas oficiais
         const resultado = [];
@@ -60,13 +92,14 @@ export default function Pendencias() {
           const tarefasDoModulo = mod.tarefas || [];
           
           tarefasDoModulo.forEach(tar => {
-            const devedores = alunosAtivos.filter(al => !entregas.has(`${al}-${mod.nome}-${tar}`));
+            // Verifica se o aluno entregou aquela tarefa específica (ignora o nome do módulo agora)
+            const devedores = alunosAtivos.filter(al => !entregas.has(`${al}-${tar}`));
             if (devedores.length > 0) {
               resultado.push({ 
                 modulo: mod.nome, 
                 tarefa: tar, 
-                devedores: devedores.sort((a, b) => a.localeCompare(b)), // Ordem Alfabética!
-                dataFim: mod.dataFim // Passa a data para a interface desenhar o selo
+                devedores: devedores.sort((a, b) => a.localeCompare(b)),
+                dataFim: mod.dataFim 
               });
             }
           });
@@ -83,7 +116,6 @@ export default function Pendencias() {
     fetchPendencias();
   }, []); 
 
-  // Função inteligente para calcular e formatar o status do prazo
   const getStatusPrazo = (timestampFim) => {
     if (!timestampFim || !timestampFim.toDate) return null;
     const hoje = new Date();
@@ -133,7 +165,6 @@ export default function Pendencias() {
                       </div>
                     </div>
                     
-                    {/* SELO DE PRAZO INTELIGENTE */}
                     <div className="shrink-0">
                       {status ? (
                         <div className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 ${status.vencido ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}`}>
