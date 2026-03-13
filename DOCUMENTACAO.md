@@ -28,7 +28,7 @@ O sistema opera em uma hierarquia plana de 3 níveis protegida por Tenant ID:
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de dados. Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
 * **`instituicoes`:** `id`, `nome`, `professorUid`, `status`, `dataCriacao`.
-* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` ('professor' ou 'admin'), `plano` ('basico', 'intermediario', 'premium'), `promptPersonalizado` (String para moldar a IA), `status` ('ativo' ou 'bloqueado'), `dataCadastro`.
+* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` ('professor' ou 'admin'), `plano` ('trial', 'basico', 'intermediario', 'premium'), `promptPersonalizado` (String para moldar a IA), `status` ('ativo' ou 'bloqueado'), `dataCadastro`, `dataExpiracao` (Timestamp da validade do plano), `isVitalicio` (Booleano).
 * **`turmas`:** `id`, `instituicaoId`, `nome`, `professorUid`, `status`, **`isModelo`** (Booleano - define se é um template clonável), `dataCriacao`.
 * **`alunos`:** `id`, `nome`, `whatsapp` (opcional), `email` (opcional), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCadastro`.
 * **`tarefas`:** `id`, `nomeTarefa` (Obrigatório), `enunciado` (Antigo 'Observações' - Opcional, alimenta a IA), `urlEnunciado` (Opcional), `dataInicio`, `dataFim`, **`ano`** (Inteiro - indexador de ciclo escolar), `tipo` ('entrega', 'compromisso', 'lembrete'), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCriacao`.
@@ -51,6 +51,8 @@ A plataforma diferencia quem opera de quem administra o SaaS através do campo `
 * **Painel SaaS (`/admin`):** Tela gerencial exclusiva. Permite alterar o `role` de usuários (promover a Admin / rebaixar a Professor), definir `plano` (Tier 1, 2, 3) e excluir contas (Hard Delete).
 
 ## 8. Modelos de Operação (Tiers/Planos de Assinatura)
+* **Trial Automático (A Barreira do SaaS):** Ao criar uma nova conta, o sistema injeta automaticamente o `plano: 'trial'` e define a `dataExpiracao` para 30 dias após o cadastro.
+* **Bloqueio de Inadimplência:** O arquivo `App.jsx` atua como catraca (`PrivateRoute`). Se `dataExpiracao` for menor que a data de hoje, o usuário é redirecionado compulsoriamente para `/assinatura-vencida`, bloqueando o acesso ao painel, mas preservando seus dados no banco. O e-mail do fundador e usuários com `isVitalicio: true` ignoram essa trava.
 * **Tier 1: Básico (Gestão Visual):** Focado no controle de recebimento e agenda. (Restrito ao funil de Histórico).
 * **Tier 2: Intermediário (Modelo Gestão):** Esteira de produção completa para feedbacks gerados externamente. (Acesso à fila de Revisão).
 * **Tier 3: Premium (IA Integrada):** Automação via API. 
