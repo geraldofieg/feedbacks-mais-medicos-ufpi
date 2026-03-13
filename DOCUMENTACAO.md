@@ -28,7 +28,7 @@ O sistema opera em uma hierarquia plana de 3 níveis protegida por Tenant ID:
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de dados. Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
 * **`instituicoes`:** `id`, `nome`, `professorUid`, `status`, `dataCriacao`.
-* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` ('professor' ou 'admin'), `plano` ('trial', 'basico', 'intermediario', 'premium'), `promptPersonalizado` (String para moldar a IA), `status` ('ativo' ou 'bloqueado'), `dataCadastro`, `dataExpiracao` (Timestamp da validade do plano), `isVitalicio` (Booleano).
+* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` ('professor' ou 'admin'), `plano` ('trial', 'basico', 'intermediario', 'premium'), `promptPersonalizado` (String para moldar a IA), `status` ('ativo' ou 'bloqueado'), `dataCadastro`, `dataExpiracao` (Timestamp da validade do plano), `isVitalicio` (Booleano), **`historicoAssinatura`** (Array de objetos registrando a trilha de auditoria financeira).
 * **`turmas`:** `id`, `instituicaoId`, `nome`, `professorUid`, `status`, **`isModelo`** (Booleano - define se é um template clonável), `dataCriacao`.
 * **`alunos`:** `id`, `nome`, `whatsapp` (opcional), `email` (opcional), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCadastro`.
 * **`tarefas`:** `id`, `nomeTarefa` (Obrigatório), `enunciado` (Antigo 'Observações' - Opcional, alimenta a IA), `urlEnunciado` (Opcional), `dataInicio`, `dataFim`, **`ano`** (Inteiro - indexador de ciclo escolar), `tipo` ('entrega', 'compromisso', 'lembrete'), `turmaId`, `instituicaoId`, `professorUid`, `status`, `dataCriacao`.
@@ -37,6 +37,7 @@ Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de 
 ## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
 * **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada na sessão, o Dashboard exibe a interface de criação (Empty State de Nível 1).
 * **Troca de Contexto Inteligente:** O Dashboard possui um *Dropdown* nativo no cabeçalho para alternar entre Instituições.
+* **Atalho VIP de Ação Rápida (Teletransporte):** Foco em redução de *Time to Value*. O Dashboard avalia dinamicamente se existe uma tarefa em andamento (data de hoje contida no prazo). Caso positivo, exibe um card roxo de destaque que teletransporta o professor diretamente para a tela de Estação de Correção (`/revisar/:id`) com um clique.
 * **A Esteira de Produção (Kanban Numérico Inteligente):** O Dashboard apresenta o funil de trabalho com links diretos para páginas físicas independentes. Sua exibição se adapta ao Perfil (Role):
     * **Visão Gestor (Admin):** 3 Caixas (Aguardando Revisão `/aguardandorevisao` ➔ Pronto p/ Lançar `/faltapostar` ➔ Histórico Finalizado `/historico`).
     * **Visão Professor Básico (Tier 1):** 1 Caixa (Resumo do Histórico Finalizado).
@@ -48,7 +49,8 @@ Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de 
 A plataforma diferencia quem opera de quem administra o SaaS através do campo `role`:
 * **Perfil Professor:** Visão restrita. Só enxerga dados onde seu `uid` conste como criador (`professorUid`).
 * **Perfil Gestor (Admin):** Possui a **"Chave Mestra"** nas consultas do banco (`userProfile.role === 'admin'`), ignorando a trava de `professorUid` nas páginas de Turmas, Alunos, Comunicação, Pendências e Mapa de Entregas para auditar a operação completa da Instituição. Também possui exclusividade na criação de Turmas Modelo (Selos Master).
-* **Painel SaaS (`/admin`):** Tela gerencial exclusiva. Permite alterar o `role` de usuários (promover a Admin / rebaixar a Professor), definir `plano` (Tier 1, 2, 3) e excluir contas (Hard Delete).
+* **Painel SaaS (`/admin`):** Tela gerencial exclusiva. Permite alterar o `role` de usuários, definir `plano` (Tier 1, 2, 3) e excluir contas (Hard Delete). 
+    * **Gestão de Assinaturas e Auditoria:** O Super Admin pode renovar planos inteligentemente (+30 dias, +1 Ano, Vitalício) preservando saldos futuros. Possui recurso de edição manual de datas e registro inviolável de Log de Auditoria (`arrayUnion`), que mapeia quando a ação ocorreu, qual foi a modificação financeira e qual e-mail executou a ação.
 
 ## 8. Modelos de Operação (Tiers/Planos de Assinatura)
 * **Trial Automático (A Barreira do SaaS):** Ao criar uma nova conta, o sistema injeta automaticamente o `plano: 'trial'` e define a `dataExpiracao` para 30 dias após o cadastro.
@@ -122,9 +124,9 @@ A página `/cronograma` foi reestruturada com um layout de Abas Duplas para isol
 4. **CRUD Dinâmico e Soft Delete:** Oculta dados da tela sem deletar do banco, preservando o histórico acadêmico. Para resgate, há o utilitário de `/lixeira`.
 5. **Proteção de Rota Invisível:** Ocultação de elementos que exigem contexto caso nenhuma instituição esteja selecionada.
 6. **Memória de Navegação (Auto-Foco):** Pré-seleção automática da última Turma ativa ou Tarefa mais recente nos Dropdowns.
-7. **Redução do Caminho do Clique (Teletransporte):** Cartões de "Entrega" no Dashboard ou Cronograma redirecionam o professor diretamente para a Estação de Correção (`/revisar/id`).
-8. **Espião de Rotas:** Rastreia `location.state` para forçar a atualização instantânea de dropdowns e modais (Ex: Clicar em Novo Registro no FAB abre o Modal automaticamente) ao trocar de página.
-9. **Global Utility Menu (Menu Pessoal):** Alocado no canto superior direito para configurações privadas (`/configuracoes`), resgate de dados excluídos (`/lixeira`) e logout, desobstruindo o cabeçalho de gestão (Navbar).
+7. **Espião de Rotas:** Rastreia `location.state` para forçar a atualização instantânea de dropdowns e modais (Ex: Clicar em Novo Registro no FAB abre o Modal automaticamente) ao trocar de página.
+8. **Global Utility Menu (Menu Pessoal):** Alocado no canto superior direito para configurações privadas (`/configuracoes`), resgate de dados excluídos (`/lixeira`) e logout, desobstruindo o cabeçalho de gestão (Navbar).
 
 ## 17. Acelerador de Fluxo: Botão Global (FAB)
 * **Atalho Flutuante:** Botão "+" no canto inferior direito para acesso rápido à criação de Turmas, Tarefas (Registro Universal) e Alunos. Condicionado à seleção de uma Instituição.
+* **O "Espião" Inteligente (Omnipresente):** O botão avalia a base de dados em busca da Tarefa Atual em andamento. Para economizar requisições do Firebase (Read Quota), a consulta (`getDocs`) é executada sob demanda e de forma enxuta, disparando uma única vez por troca de Instituição. Caso encontre a tarefa, ele injeta dinamicamente o sub-botão VIP **"Corrigir tarefa atual"** acima dos demais.
