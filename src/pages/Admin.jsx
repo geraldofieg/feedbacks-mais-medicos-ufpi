@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
-// NOVO: Adicionei o getDoc para a lógica de renovação inteligente
-import { collection, query, getDocs, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+// NOVO: Importamos arrayUnion para gravar o histórico sem apagar o que já existe
+import { collection, query, getDocs, doc, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-// NOVO: Adicionei CalendarPlus e Infinity para os botões de cobrança
-import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, RefreshCw, Mail, Zap, CalendarPlus, Infinity } from 'lucide-react';
+// NOVO: Ícones Edit3 (Lápis) e History (Relógio) adicionados
+import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Admin() {
@@ -12,7 +12,6 @@ export default function Admin() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Proteção de Acesso: Só Admins entram aqui
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   useEffect(() => {
@@ -23,7 +22,6 @@ export default function Admin() {
         const snap = await getDocs(q);
         
         const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // Ordenação: Admins primeiro, depois ordem alfabética
         lista.sort((a, b) => {
           if (a.role === 'admin' && b.role !== 'admin') return -1;
           if (a.role !== 'admin' && b.role === 'admin') return 1;
@@ -37,18 +35,15 @@ export default function Admin() {
     fetchUsuarios();
   }, [isAdmin]);
 
-  // FUNÇÃO: MUDAR CARGO (Professor <-> Admin)
   async function handleMudarCargo(id, cargoAtual) {
     const novoCargo = cargoAtual === 'admin' ? 'professor' : 'admin';
     if (!window.confirm(`Deseja alterar o acesso deste usuário para ${novoCargo.toUpperCase()}?`)) return;
-
     try {
       await updateDoc(doc(db, 'usuarios', id), { role: novoCargo });
       setUsuarios(usuarios.map(u => u.id === id ? { ...u, role: novoCargo } : u));
     } catch (e) { alert("Erro ao mudar cargo."); }
   }
 
-  // FUNÇÃO: MUDAR PLANO SAAS (Tiers)
   async function handleMudarPlano(id, novoPlano) {
     try {
       await updateDoc(doc(db, 'usuarios', id), { plano: novoPlano });
@@ -57,18 +52,24 @@ export default function Admin() {
   }
 
   // =========================================================================
-  // NOVAS FUNÇÕES: GESTÃO DE ASSINATURA E TEMPO DE ACESSO
+  // GESTÃO DE ASSINATURA E HISTÓRICO DE AUDITORIA
   // =========================================================================
 
-  // FUNÇÃO: ESTENDER ASSINATURA (Inteligente: a partir de hoje ou do fim do plano atual)
+  // Helper para gerar o log
+  const criarLog = (acaoDetalhe) => ({
+    dataOperacao: new Date().toISOString(),
+    acao: acaoDetalhe,
+    responsavel: currentUser.email
+  });
+
   async function estenderAssinatura(id, diasAdicionais) {
     try {
       const userData = usuarios.find(u => u.id === id);
-      let dataBase = new Date(); // Começa assumindo que vai renovar a partir de hoje
+      let dataBase = new Date(); 
 
       if (userData && userData.dataExpiracao) {
-        const currentExp = userData.dataExpiracao.toDate ? userData.dataExpiracao.toDate() : new Date(userData.dataExpiracao.seconds * 1000);
-        // Se a assinatura ainda está no futuro, soma os dias na data futura (não rouba dias do cliente)
+        // CORREÇÃO DO BUG "INVALID DATE": Garantindo a extração certa da data
+        const currentExp = userData.dataExpiracao.toDate ? userData.dataExpiracao.toDate() : new Date(userData.dataExpiracao.seconds ? userData.dataExpiracao.seconds * 1000 : userData.dataExpiracao);
         if (currentExp > dataBase) {
           dataBase = currentExp;
         }
@@ -77,33 +78,104 @@ export default function Admin() {
       const novaData = new Date(dataBase);
       novaData.setDate(novaData.getDate() + diasAdicionais);
 
+      const logAuditoria = criarLog(`Adicionado +${diasAdicionais} dias`);
+
       await updateDoc(doc(db, 'usuarios', id), {
         dataExpiracao: novaData,
-        isVitalicio: false // Tira o vitalício se ele tiver voltado a pagar mensal/anual
+        isVitalicio: false,
+        historicoAssinatura: arrayUnion(logAuditoria)
       });
 
-      setUsuarios(usuarios.map(u => u.id === id ? { ...u, dataExpiracao: novaData, isVitalicio: false } : u));
-      alert(`Assinatura estendida por ${diasAdicionais} dias com sucesso!`);
+      setUsuarios(usuarios.map(u => u.id === id ? { 
+        ...u, 
+        dataExpiracao: novaData, 
+        isVitalicio: false,
+        historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
+      } : u));
+      
+      alert(`Assinatura estendida por ${diasAdicionais} dias!`);
     } catch (error) {
       alert("Erro ao estender assinatura.");
       console.error(error);
     }
   }
 
-  // FUNÇÃO: DAR ACESSO VITALÍCIO
-  async function tornarVitalicio(id) {
-    if (!window.confirm("Deseja conceder acesso permanente e vitalício a este cliente?")) return;
+  // NOVO: Edição Manual da Data de Vencimento
+  async function editarDataManual(id, dataAtualStr) {
+    const input = window.prompt("Digite a nova data exata de vencimento (Formato: DD/MM/AAAA):", dataAtualStr);
+    if (!input) return; // Cancelou
+
+    const [dia, mes, ano] = input.split('/');
+    if (!dia || !mes || !ano || ano.length !== 4) {
+      return alert("Formato inválido. Por favor, use DD/MM/AAAA.");
+    }
+
+    // Criando a data (O mês no JS começa em 0, por isso mes - 1)
+    const novaData = new Date(ano, mes - 1, dia, 23, 59, 59);
+    
+    if (isNaN(novaData.getTime())) {
+      return alert("Data inválida. Tente novamente.");
+    }
+
     try {
-      await updateDoc(doc(db, 'usuarios', id), { isVitalicio: true });
-      setUsuarios(usuarios.map(u => u.id === id ? { ...u, isVitalicio: true } : u));
-      alert("Acesso Vitalício concedido com sucesso!");
-    } catch (error) {
-      alert("Erro ao conceder acesso vitalício.");
-      console.error(error);
+      const logAuditoria = criarLog(`Data alterada manualmente para ${input}`);
+
+      await updateDoc(doc(db, 'usuarios', id), {
+        dataExpiracao: novaData,
+        isVitalicio: false,
+        historicoAssinatura: arrayUnion(logAuditoria)
+      });
+
+      setUsuarios(usuarios.map(u => u.id === id ? { 
+        ...u, 
+        dataExpiracao: novaData, 
+        isVitalicio: false,
+        historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
+      } : u));
+
+      alert("Data de vencimento ajustada com sucesso!");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao editar data.");
     }
   }
 
-  // FUNÇÃO: EXCLUIR USUÁRIO (Hard Delete)
+  async function tornarVitalicio(id) {
+    if (!window.confirm("Deseja conceder acesso permanente e vitalício a este cliente?")) return;
+    try {
+      const logAuditoria = criarLog(`Acesso Vitalício concedido`);
+
+      await updateDoc(doc(db, 'usuarios', id), { 
+        isVitalicio: true,
+        historicoAssinatura: arrayUnion(logAuditoria)
+      });
+
+      setUsuarios(usuarios.map(u => u.id === id ? { 
+        ...u, 
+        isVitalicio: true,
+        historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
+      } : u));
+      alert("Acesso Vitalício concedido com sucesso!");
+    } catch (error) {
+      alert("Erro ao conceder acesso vitalício.");
+    }
+  }
+
+  // NOVO: Visualizar Histórico
+  function exibirHistorico(user) {
+    if (!user.historicoAssinatura || user.historicoAssinatura.length === 0) {
+      return alert("Nenhum histórico financeiro encontrado para este cliente.");
+    }
+    
+    // Formata o array de logs para um texto legível
+    const textoHistorico = user.historicoAssinatura.map((log, index) => {
+      const dataLog = new Date(log.dataOperacao).toLocaleString('pt-BR');
+      return `${index + 1}. [${dataLog}]\nAção: ${log.acao}\nPor: ${log.responsavel}\n`;
+    }).join('\n');
+
+    alert(`HISTÓRICO DE ASSINATURA: ${user.nome || user.email}\n\n${textoHistorico}`);
+  }
+
   async function handleExcluirUsuario(id, nome) {
     if (!window.confirm(`PERIGO: Excluir permanentemente a conta de "${nome}"? Esta ação não pode ser desfeita.`)) return;
     try {
@@ -117,7 +189,6 @@ export default function Admin() {
       <div className="max-w-4xl mx-auto px-4 py-20 text-center">
         <AlertTriangle className="mx-auto text-red-500 mb-6" size={64}/>
         <h1 className="text-3xl font-black text-slate-800">Acesso Restrito</h1>
-        <p className="text-slate-500 text-lg mt-2">Você não possui permissão para acessar o painel de gestão do SaaS.</p>
       </div>
     );
   }
@@ -146,7 +217,6 @@ export default function Admin() {
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Professor / Usuário</th>
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Nível de Acesso</th>
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Plano de Assinatura</th>
-                {/* NOVO: Coluna de Vencimento e Botões Financeiros */}
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Assinatura (SaaS)</th>
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest text-right">Gestão</th>
               </tr>
@@ -154,20 +224,24 @@ export default function Admin() {
             <tbody className="divide-y divide-slate-50">
               {usuarios.map(user => {
                 
-                // NOVO: Lógica Visual do Vencimento
                 let statusVisual = "Ativo";
                 let corStatus = "text-green-700 bg-green-100";
                 let textoValidade = "";
+                let dataApenasString = ""; 
 
                 if (user.isVitalicio) {
                   statusVisual = "Vitalício";
                   corStatus = "text-purple-700 bg-purple-100";
                   textoValidade = "Sem data de expiração";
                 } else if (user.dataExpiracao) {
-                  const dataVencimento = user.dataExpiracao.toDate ? user.dataExpiracao.toDate() : new Date(user.dataExpiracao.seconds * 1000);
-                  const hoje = new Date();
+                  // CORREÇÃO DO BUG AQUI PARA RENDERIZAÇÃO
+                  const dataVencimento = user.dataExpiracao.toDate 
+                    ? user.dataExpiracao.toDate() 
+                    : new Date(user.dataExpiracao.seconds ? user.dataExpiracao.seconds * 1000 : user.dataExpiracao);
                   
-                  textoValidade = `Vence em: ${dataVencimento.toLocaleDateString('pt-BR')}`;
+                  const hoje = new Date();
+                  dataApenasString = dataVencimento.toLocaleDateString('pt-BR');
+                  textoValidade = `Vence em: ${dataApenasString}`;
                   
                   if (hoje > dataVencimento) {
                     statusVisual = "Vencido";
@@ -185,7 +259,6 @@ export default function Admin() {
                 return (
                   <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
                     
-                    {/* IDENTIFICAÇÃO */}
                     <td className="p-6">
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${user.role === 'admin' ? 'bg-yellow-100 text-yellow-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -198,7 +271,6 @@ export default function Admin() {
                       </div>
                     </td>
 
-                    {/* CARGO (ADMIN/PROFESSOR) */}
                     <td className="p-6">
                       <button 
                         onClick={() => handleMudarCargo(user.id, user.role)}
@@ -212,7 +284,6 @@ export default function Admin() {
                       </button>
                     </td>
 
-                    {/* PLANO SAAS */}
                     <td className="p-6">
                       <div className="relative inline-block">
                         <Zap className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${user.plano === 'premium' ? 'text-yellow-500' : 'text-slate-300'}`} size={16} />
@@ -229,48 +300,44 @@ export default function Admin() {
                       </div>
                     </td>
 
-                    {/* NOVO: STATUS DA ASSINATURA & RENOVAÇÃO */}
                     <td className="p-6">
                       <div className="flex flex-col items-start gap-2">
-                        <div>
-                          <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-wider mb-1 ${corStatus}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-wider ${corStatus}`}>
                             {statusVisual}
                           </span>
-                          <p className="text-xs text-slate-500 font-medium">{textoValidade}</p>
+                          {/* BOTÃO DE HISTÓRICO */}
+                          <button onClick={() => exibirHistorico(user)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Ver Histórico de Assinatura">
+                            <History size={16} />
+                          </button>
                         </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-slate-500 font-medium">{textoValidade}</p>
+                          {/* BOTÃO DE EDIÇÃO MANUAL (LÁPIS) */}
+                          {!user.isVitalicio && (
+                            <button onClick={() => editarDataManual(user.id, dataApenasString)} className="text-slate-300 hover:text-blue-600 transition-colors" title="Editar Data Manualmente">
+                              <Edit3 size={14} />
+                            </button>
+                          )}
+                        </div>
+
                         <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                          <button 
-                            onClick={() => estenderAssinatura(user.id, 30)}
-                            className="flex items-center gap-1 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors"
-                            title="Adicionar 1 Mês"
-                          >
+                          <button onClick={() => estenderAssinatura(user.id, 30)} className="flex items-center gap-1 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors" title="Adicionar 1 Mês">
                             <CalendarPlus size={14} /> +30d
                           </button>
-                          <button 
-                            onClick={() => estenderAssinatura(user.id, 365)}
-                            className="flex items-center gap-1 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors"
-                            title="Adicionar 1 Ano"
-                          >
+                          <button onClick={() => estenderAssinatura(user.id, 365)} className="flex items-center gap-1 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors" title="Adicionar 1 Ano">
                             <CalendarPlus size={14} /> +1a
                           </button>
-                          <button 
-                            onClick={() => tornarVitalicio(user.id)}
-                            className="flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors"
-                            title="Tornar Vitalício"
-                          >
+                          <button onClick={() => tornarVitalicio(user.id)} className="flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors" title="Tornar Vitalício">
                             <Infinity size={14} /> Vitalício
                           </button>
                         </div>
                       </div>
                     </td>
 
-                    {/* AÇÕES (EXCLUIR) */}
                     <td className="p-6 text-right">
-                      <button 
-                        onClick={() => handleExcluirUsuario(user.id, user.nome)}
-                        className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all opacity-20 group-hover:opacity-100"
-                        title="Excluir Definitivamente"
-                      >
+                      <button onClick={() => handleExcluirUsuario(user.id, user.nome)} className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all opacity-20 group-hover:opacity-100" title="Excluir Definitivamente">
                         <Trash2 size={20} />
                       </button>
                     </td>
