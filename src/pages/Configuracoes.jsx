@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Phone, Sparkles, Save, ShieldCheck, Mail, CheckCircle2, Target, Zap, RefreshCw, AlertCircle } from 'lucide-react';
+import { 
+  User, Phone, Sparkles, Save, ShieldCheck, Mail, 
+  CheckCircle2, Target, Zap, RefreshCw, AlertCircle,
+  MessageSquareHeart, Stethoscope
+} from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Configuracoes() {
@@ -22,6 +26,35 @@ export default function Configuracoes() {
 
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
   const [loadingMetricas, setLoadingMetricas] = useState(true);
+
+  // --- TEMPLATES DE PROMPT ---
+  const templates = [
+    {
+      label: 'Empático',
+      icon: <MessageSquareHeart size={16} />,
+      texto: 'Aja como um preceptor médico acolhedor. Comece sempre validando o esforço do aluno e destacando um ponto positivo. Em seguida, aponte as melhorias técnicas de forma construtiva e encerre com uma frase motivadora para a prática clínica.'
+    },
+    {
+      label: 'Técnico/Acadêmico',
+      icon: <Stethoscope size={16} />,
+      texto: 'Aja como um preceptor médico rigoroso e técnico. Foque na precisão dos protocolos da APS, terminologias corretas e evidências científicas. Avalie a resposta com base estritamente nos critérios do enunciado, sendo direto e formal.'
+    },
+    {
+      label: 'Direto/Prático',
+      icon: <Zap size={16} />,
+      texto: 'Seja direto e objetivo. Use bullet points para listar o que está correto e o que precisa ser ajustado. Evite introduções longas. Foque na resolutividade do problema apresentado pelo aluno.'
+    }
+  ];
+
+  // Função para aplicar template com confirmação de segurança
+  const aplicarTemplate = (textoTemplate) => {
+    // Se a caixa não estiver vazia e for diferente do template, pede confirmação
+    if (promptIA.trim() !== "" && promptIA.trim() !== textoTemplate.trim()) {
+      const confirmacao = window.confirm("Isso substituirá suas instruções atuais por este modelo. Deseja continuar?");
+      if (!confirmacao) return;
+    }
+    setPromptIA(textoTemplate);
+  };
 
   useEffect(() => {
     async function fetchPerfil() {
@@ -81,7 +114,7 @@ export default function Configuracoes() {
         const percentual = iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0;
         setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual });
       } catch (error) { console.error(error); } 
-      finally { setLoading(false); }
+      finally { setLoadingMetricas(false); }
     }
     fetchMetricasIA();
   }, [currentUser, escolaSelecionada, mostrarIA]);
@@ -97,8 +130,6 @@ export default function Configuracoes() {
         promptPersonalizado: promptIA.trim()
       });
       setMensagem({ tipo: 'sucesso', texto: 'Configurações salvas com sucesso!' });
-      // Remove o timer automático para o usuário ter tempo de ver a mensagem se quiser
-      // setTimeout(() => setMensagem(null), 5000); 
     } catch (error) {
       setMensagem({ tipo: 'erro', texto: 'Erro ao conectar com o banco de dados.' });
     } finally { setSalvando(false); }
@@ -120,7 +151,6 @@ export default function Configuracoes() {
         </div>
       </div>
 
-      {/* MENSAGEM NO TOPO (OPCIONAL AGORA) */}
       {mensagem && (
         <div className={`mb-8 p-5 rounded-3xl font-black flex items-center gap-3 animate-in fade-in slide-in-from-top-4 border-2 ${mensagem.tipo === 'sucesso' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
           {mensagem.tipo === 'sucesso' ? <CheckCircle2 size={24}/> : <AlertCircle size={24}/>}
@@ -191,6 +221,21 @@ export default function Configuracoes() {
                   <label className="block text-sm font-black text-indigo-300 uppercase tracking-widest mb-3 ml-1">
                     Instruções de Personalidade (Prompt)
                   </label>
+                  
+                  {/* SEÇÃO DE TEMPLATES COM SEGURANÇA */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {templates.map((temp, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => aplicarTemplate(temp.texto)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-tighter transition-all"
+                      >
+                        {temp.icon} {temp.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <p className="text-sm text-slate-400 mb-5 leading-relaxed font-medium">
                     Explique como a IA deve corrigir seus alunos. Ela seguirá esse estilo em todos os feedbacks automáticos.
                   </p>
@@ -208,7 +253,7 @@ export default function Configuracoes() {
                   {loadingMetricas ? (
                     <div className="h-16 flex items-center"><RefreshCw className="animate-spin text-yellow-400" size={24}/></div>
                   ) : metricasIA.total === 0 ? (
-                    <p className="text-slate-500 font-bold text-sm italic">Inicie as correções para ver os dados</p>
+                    <p className="text-slate-500 font-bold text-sm italic leading-tight">Inicie as correções para ver os dados de assertividade</p>
                   ) : (
                     <>
                       <span className="text-6xl font-black text-white tracking-tighter mb-2">{metricasIA.percentual}%</span>
@@ -231,22 +276,14 @@ export default function Configuracoes() {
           </div>
         )}
 
-        {/* --- ÁREA DO BOTÃO COM FEEDBACK VISÍVEL --- */}
+        {/* BOTÃO FINAL */}
         <div className="pt-6 space-y-4">
-          
-          {/* MENSAGEM LOGO ACIMA DO BOTÃO */}
-          {mensagem && (
-            <div className={`p-4 rounded-2xl font-black text-center animate-bounce border-2 ${mensagem.tipo === 'sucesso' ? 'bg-green-500 text-white border-green-400 shadow-lg shadow-green-200' : 'bg-red-500 text-white border-red-400'}`}>
-              {mensagem.texto}
-            </div>
-          )}
-
           <button 
             type="submit" disabled={salvando} 
             className={`w-full text-white font-black px-10 py-5 rounded-3xl transition-all shadow-xl flex items-center justify-center gap-3 text-xl active:scale-95 ${salvando ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
             {salvando ? (
-              <><RefreshCw className="animate-spin" size={24}/> Gravando no Banco...</>
+              <><RefreshCw className="animate-spin" size={24}/> Gravando...</>
             ) : (
               <><Save size={24}/> Salvar Alterações Agora</>
             )}
@@ -256,4 +293,4 @@ export default function Configuracoes() {
       </form>
     </div>
   );
-}
+                        }
