@@ -1,12 +1,13 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { auth, db } from '../services/firebase'; // Adicionado o 'db'
+import { auth, db } from '../services/firebase'; 
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged 
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore'; // Adicionado para ler o banco de dados
+// Importamos setDoc e serverTimestamp para criar novos usuários
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'; 
 
 const AuthContext = createContext();
 
@@ -16,10 +17,10 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null); // NOVO: Guarda o Plano e a Role do Firestore
+  const [userProfile, setUserProfile] = useState(null); 
   const [loading, setLoading] = useState(true);
 
-  // A MÁGICA: Agora o sistema guarda um Objeto { id: '...', nome: '...' }
+  // Guarda o Objeto { id: '...', nome: '...' } da Instituição
   const [escolaSelecionada, setEscolaSelecionadaState] = useState(() => {
     const stored = localStorage.getItem('@SaaS_EscolaSelecionada');
     if (stored) {
@@ -42,7 +43,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // FUNÇÕES DE AUTENTICAÇÃO RESTAURADAS
   function signup(email, password) {
     return createUserWithEmailAndPassword(auth, email, password);
   }
@@ -52,8 +52,8 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
-    setEscolaSelecionada(null); // Limpa a instituição ao sair
-    setUserProfile(null); // Limpa o perfil ao sair
+    setEscolaSelecionada(null); 
+    setUserProfile(null); 
     return signOut(auth);
   }
 
@@ -61,15 +61,33 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       
-      // Quando loga, busca o Perfil SaaS no Firestore (Plano, Role, etc)
       if (user) {
         try {
           const docRef = doc(db, 'usuarios', user.uid);
           const docSnap = await getDoc(docRef);
+          
           if (docSnap.exists()) {
+            // Usuário já existe, apenas carrega o perfil
             setUserProfile(docSnap.data());
           } else {
-            setUserProfile(null);
+            // NOVO USUÁRIO: Criando o perfil com 30 dias de Trial
+            const dataExpiracao = new Date();
+            dataExpiracao.setDate(dataExpiracao.getDate() + 30); // Soma 30 dias
+
+            const novoPerfil = {
+              email: user.email,
+              role: 'professor', // Papel padrão
+              plano: 'trial',
+              dataCriacao: serverTimestamp(),
+              dataExpiracao: dataExpiracao, // Salva o limite de acesso
+              isVitalicio: false
+            };
+
+            await setDoc(docRef, novoPerfil);
+            
+            // Busca novamente para garantir que o formato de data (Timestamp) venha certinho do Firebase
+            const novoSnap = await getDoc(docRef);
+            setUserProfile(novoSnap.data());
           }
         } catch (error) {
           console.error("Erro ao buscar perfil SaaS do usuário:", error);
@@ -85,14 +103,35 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
+  // --- AVALIAÇÃO DE BLOQUEIO DO SAAS ---
+  let isAcessoExpirado = false;
+
+  // Se é o Super Admin, o acesso NUNCA expira
+  const isSuperAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+
+  if (!isSuperAdmin && userProfile) {
+    if (userProfile.isVitalicio === true) {
+      isAcessoExpirado = false; // Tem passe livre comprado
+    } else if (userProfile.dataExpiracao) {
+      // Verifica se a data de hoje é maior que a data de expiração
+      const dataVencimento = userProfile.dataExpiracao.toDate ? userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao);
+      const hoje = new Date();
+      if (hoje > dataVencimento) {
+        isAcessoExpirado = true; // Venceu!
+      }
+    }
+  }
+
   const value = {
     currentUser,
-    userProfile, // NOVO: Exportamos o perfil para usar no Dashboard!
+    userProfile, 
     login,
     signup,
     logout,
     escolaSelecionada,
     setEscolaSelecionada,
+    isAcessoExpirado, // NOVO: Exportando a trava para o App.jsx usar
+    isSuperAdmin // NOVO: Facilita identificar o dono em qualquer tela
   };
 
   return (
