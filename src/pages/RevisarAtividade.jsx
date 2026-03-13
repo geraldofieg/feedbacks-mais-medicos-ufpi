@@ -75,9 +75,9 @@ export default function RevisarAtividade() {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
       
-      // Usando o modelo de produção oficial livre
+      // Usando o modelo de produção mais estável do Google para evitar o limite zero
       const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.0-flash", 
+        model: "gemini-1.5-flash", 
       });
 
       const promptCompleto = `
