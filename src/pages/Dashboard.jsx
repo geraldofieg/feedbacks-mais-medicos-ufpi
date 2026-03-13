@@ -10,6 +10,7 @@ import {
 
 import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestantes } from '../data/cronogramaData';
 
+// Regra de Validação (Seção 6 da Documentação)
 export const isModuloValido = (nome) => {
   if (!nome) return false;
   const lower = nome.toLowerCase();
@@ -19,7 +20,7 @@ export const isModuloValido = (nome) => {
   return true;
 };
 
-// Extrai o número do módulo com segurança
+// Extrator Numérico (Seção 6 da Documentação)
 const extractNum = (nome) => {
   if (!nome) return 0;
   const match = nome.match(/\d+/);
@@ -37,56 +38,48 @@ export default function Dashboard() {
   const [pendenciasGerais, setPendenciasGerais] = useState([]);
   const [numReferenciaAtual, setNumReferenciaAtual] = useState(0); 
 
+  // RBAC Hardcoded (Seção 7 da Documentação)
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
-  // Puxa o status do Cronograma Oficial
   const moduloAtualIndex = cronogramaAssincrono.findIndex(m => getStatusData(m.inicio, m.fim) === 'atual');
   const moduloAtual = moduloAtualIndex !== -1 ? cronogramaAssincrono[moduloAtualIndex] : null;
   const semanaAtual = cronogramaSincrono.find(s => getStatusData(s.inicio, s.fim) === 'atual');
 
   useEffect(() => {
     async function fetchData() {
-      
-      // 1. Alunos (CORREÇÃO: Dicionário V3 -> V1 e Filtro Lixeira)
+      // 1. Alunos (Filtro Lixeira - Seção 12)
       const alunosSnap = await getDocs(collection(db, 'alunos'));
       const alunosMap = {};
       const alunosAtuais = [];
       
       alunosSnap.docs.forEach(doc => {
         const data = doc.data();
-        if (data.status !== 'lixeira') { // Fuga dos fantasmas
+        if (data.status !== 'lixeira') {
           alunosAtuais.push(data.nome);
-          alunosMap[doc.id] = data.nome; // Dicionário
+          alunosMap[doc.id] = data.nome;
         }
       });
       setAlunosAtivos(alunosAtuais);
 
-      // 1.5. Tarefas (V3) Dicionário
+      // 1.5. Dicionário de Tarefas da V3 para compatibilidade
       const tarefasSnap = await getDocs(collection(db, 'tarefas'));
       const tarefasMap = {};
       tarefasSnap.docs.forEach(doc => {
         tarefasMap[doc.id] = doc.data().nomeTarefa;
       });
 
-      // 2. Atividades (90 dias)
+      // 2. Atividades (Últimos 90 dias - Seção 4.2)
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() - 90);
       const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
       const atividadesSnap = await getDocs(qAtividades);
       const docs = atividadesSnap.docs.map(doc => doc.data());
 
-      let enunciadosDocs = [];
-      try {
-        const enunciadosSnap = await getDocs(collection(db, 'enunciados'));
-        enunciadosDocs = enunciadosSnap.docs.map(doc => doc.data());
-      } catch (e) { console.log('Coleção de enunciados não encontrada.'); }
-      
       let contRevisao = 0; let contPostar = 0; let contFinalizado = 0;
       const atividadesProcessadas = []; 
       let maxNumDB = 0; 
 
       docs.forEach(d => {
-        // CORREÇÃO: Tentar descobrir o número do módulo, mesmo que venha da V3 (tarefaId)
         let nomeModuloParaRegex = d.modulo;
         if (!nomeModuloParaRegex && d.tarefaId && tarefasMap[d.tarefaId]) {
            nomeModuloParaRegex = tarefasMap[d.tarefaId];
@@ -97,92 +90,62 @@ export default function Dashboard() {
           if (num > maxNumDB) maxNumDB = num;
         }
 
+        // Fluxo de Revisão (Seção 8 da Documentação)
         const isFinalizado = !!d.dataPostagem || d.postado === true || d.status === 'postado';
         const isAprovado = !!d.dataAprovacao || d.status === 'aprovado';
 
-        if (isFinalizado) { contFinalizado++; atividadesProcessadas.push(d); } 
-        else if (isAprovado) { contPostar++; atividadesProcessadas.push(d); } 
-        else { contRevisao++; }
-      });
-
-      enunciadosDocs.forEach(e => {
-        if (isModuloValido(e.modulo)) {
-          const num = extractNum(e.modulo);
-          if (num > maxNumDB) maxNumDB = num;
+        if (isFinalizado) { 
+          contFinalizado++; 
+          atividadesProcessadas.push(d); 
+        } else if (isAprovado) { 
+          contPostar++; 
+          atividadesProcessadas.push(d); 
+        } else { 
+          contRevisao++; 
         }
       });
 
       setStats({ revisao: contRevisao, postar: contPostar, finalizados: contFinalizado });
 
+      // Termômetro da IA (Seção 4.3 da Documentação)
       const originais = atividadesProcessadas.filter(d => d.feedbackFinal?.trim() === d.feedbackSugerido?.trim()).length;
       const taxa = atividadesProcessadas.length > 0 ? Math.round((originais / atividadesProcessadas.length) * 100) : 0;
       setIaStats({ total: atividadesProcessadas.length, originais, taxa });
 
-      // 3. A NOVA REGRA (CALENDÁRIO PRIMEIRO, BANCO DEPOIS)
-      let numeroAlvoPrincipal = 0;
-      
-      if (moduloAtual) {
-        numeroAlvoPrincipal = extractNum(moduloAtual.modulo);
-      } else {
-        numeroAlvoPrincipal = maxNumDB;
-      }
-
+      // 3. Lógica de Alvo (Seção 4.1 da Documentação)
+      let numeroAlvoPrincipal = moduloAtual ? extractNum(moduloAtual.modulo) : maxNumDB;
       setNumReferenciaAtual(numeroAlvoPrincipal);
       
       const numsAlvo = [numeroAlvoPrincipal, numeroAlvoPrincipal - 1].filter(n => n >= 7);
 
       if (alunosAtuais.length > 0 && numsAlvo.length > 0) {
         const entregas = new Set();
-        
-        // CORREÇÃO: Povoar o Set cruzando V1 e V3
         docs.forEach(a => {
-          let nomeAluno = a.aluno;
-          let nomeDaTarefaReal = a.tarefa || a.modulo; // A V1 costumava misturar modulo/tarefa
+          let nomeAluno = a.aluno || alunosMap[a.alunoId];
+          let nomeDaTarefaReal = a.tarefa || a.modulo || tarefasMap[a.tarefaId];
 
-          if (a.alunoId && alunosMap[a.alunoId]) {
-            nomeAluno = alunosMap[a.alunoId];
-          }
-          if (a.tarefaId && tarefasMap[a.tarefaId]) {
-            nomeDaTarefaReal = tarefasMap[a.tarefaId];
-          }
-
-          if (nomeDaTarefaReal && isModuloValido(nomeDaTarefaReal) && nomeAluno && nomeAluno.toLowerCase() !== 'enunciado') {
+          if (nomeDaTarefaReal && isModuloValido(nomeDaTarefaReal) && nomeAluno) {
             const num = extractNum(nomeDaTarefaReal);
-            
-            // Aqui é a mágica: Como a V3 cria nomes livres, precisamos tentar "pescar" se é Fórum ou Desafio pela string
             let tipoTarefaParaSelo = "Desconhecida";
             if (nomeDaTarefaReal.toLowerCase().includes('desafio')) tipoTarefaParaSelo = `M${num < 10 ? '0'+num : num}-Desafio`;
             if (nomeDaTarefaReal.toLowerCase().includes('fórum') || nomeDaTarefaReal.toLowerCase().includes('forum')) tipoTarefaParaSelo = `M${num < 10 ? '0'+num : num}-Fórum`;
-
             entregas.add(`${nomeAluno}-${num}-${tipoTarefaParaSelo}`);
-            // Backup pro caso de nomes antigos da V1
-            if (a.tarefa) entregas.add(`${nomeAluno}-${num}-${a.tarefa}`);
           }
         });
 
         const resultado = [];
-
         numsAlvo.forEach(numAlvo => {
           const cronoMod = cronogramaAssincrono.find(m => extractNum(m.modulo) === numAlvo);
           const tarefasDoModulo = cronoMod?.tarefas || [`M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Desafio`, `M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Fórum`]; 
           const nomeModuloLabel = cronoMod ? cronoMod.modulo : `Módulo ${numAlvo}`;
-
           tarefasDoModulo.forEach(tar => {
             const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${numAlvo}-${tar}`));
             if (devedores.length > 0) {
-              resultado.push({ 
-                modulo: nomeModuloLabel, 
-                numeroModulo: numAlvo,
-                tarefa: tar, 
-                devedores: devedores.sort((a,b) => a.localeCompare(b)) // Ordem Alfabética!
-              });
+              resultado.push({ modulo: nomeModuloLabel, numeroModulo: numAlvo, tarefa: tar, devedores: devedores.sort((a,b) => a.localeCompare(b)) });
             }
           });
         });
-
         setPendenciasGerais(resultado);
-      } else {
-        setPendenciasGerais([]);
       }
 
       // 4. Última Sincronização
@@ -193,7 +156,6 @@ export default function Dashboard() {
         if (data) setUltimaData(data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
       }
     }
-
     fetchData();
   }, [moduloAtual]);
 
@@ -201,6 +163,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* HEADER */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
           <h1 className="text-xl font-bold text-gray-800">
@@ -215,7 +178,7 @@ export default function Dashboard() {
       </div>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        
+        {/* PONTO DE SITUAÇÃO */}
         <div className="mb-6 bg-slate-800 rounded-2xl p-5 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-slate-700">
           <div className="flex items-center gap-4">
             <div className="bg-slate-700 p-3 rounded-xl"><CalendarRange size={28} className="text-blue-400" /></div>
@@ -230,15 +193,6 @@ export default function Dashboard() {
                 ) : (
                   <p className="text-sm font-medium flex items-center gap-2 text-slate-400"><span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Nenhum módulo assíncrono em andamento.</p>
                 )}
-                
-                {semanaAtual ? (
-                  <p className="text-sm font-medium flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span> 
-                    <span className="text-gray-300">Síncrono:</span> Semana {semanaAtual.semana} <span className="text-purple-400 font-bold ml-1">(Faltam {getDiasRestantes(semanaAtual.fim)} dias)</span>
-                  </p>
-                ) : (
-                  <p className="text-sm font-medium flex items-center gap-2 text-slate-400"><span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Nenhuma semana síncrona em andamento.</p>
-                )}
               </div>
             </div>
           </div>
@@ -247,6 +201,7 @@ export default function Dashboard() {
           </Link>
         </div>
 
+        {/* TERMÔMETRO IA */}
         <div className="mb-6 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-5 text-white shadow-md flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-white/20 p-3 rounded-xl"><Sparkles size={28} /></div>
@@ -261,37 +216,39 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* CARDS DE ESTATÍSTICAS - RESTAURADOS COMO LINKS */}
         <div className={`grid grid-cols-1 gap-4 mb-8 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+          <Link to="/pendencias" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:bg-gray-50 active:scale-95 transition-all">
             <div>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Revisão</p>
               <h3 className="text-4xl font-black text-yellow-500">{stats.revisao}</h3>
               <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Funil de Avaliação</div>
             </div>
             <div className="bg-yellow-50 p-4 rounded-2xl text-yellow-600 border border-yellow-100"><Clock size={32} /></div>
-          </div>
+          </Link>
 
           {isAdmin && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+            <Link to="/pendencias" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:bg-gray-50 active:scale-95 transition-all">
               <div>
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Postar</p>
                 <h3 className="text-4xl font-black text-blue-600">{stats.postar}</h3>
                 <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Funil de Avaliação</div>
               </div>
               <div className="bg-blue-50 p-4 rounded-2xl text-blue-600 border border-blue-100"><Send size={32} /></div>
-            </div>
+            </Link>
           )}
           
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+          <Link to="/mapa" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:bg-gray-50 active:scale-95 transition-all">
             <div>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Histórico Finalizado</p>
               <h3 className="text-4xl font-black text-green-600">{stats.finalizados}</h3>
               <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Histórico Acadêmico</div>
             </div>
             <div className="bg-green-50 p-4 rounded-2xl text-green-600 border border-green-100"><CheckCheck size={32} /></div>
-          </div>
+          </Link>
         </div>
 
+        {/* ATALHOS RÁPIDOS */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
           {isAdmin && (
             <>
@@ -300,16 +257,14 @@ export default function Dashboard() {
               <Link to="/configuracoes" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><Settings size={28} className="text-gray-500" /><span className="font-bold text-sm">Config</span></Link>
             </>
           )}
-
           <Link to="/cronograma" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><CalendarRange size={28} className="text-blue-500" /><span className="font-bold text-sm">Cronograma</span></Link>
-          
           <Link to="/comunicacao" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><Megaphone size={28} className="text-green-500" /><span className="font-bold text-sm">Comunicação</span></Link>
-
           <Link to="/pendencias" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><AlertTriangle size={28} className="text-orange-500" /><span className="font-bold text-sm">Pendências</span></Link>
           <Link to="/mapa" className="bg-white text-gray-700 p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><ClipboardList size={28} className="text-blue-600" /><span className="font-bold text-sm">Mapa</span></Link>
           <button onClick={handleLogout} className="bg-red-50 text-red-600 p-5 rounded-2xl border border-red-100 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><LogOut size={28} /><span className="font-bold text-sm">Sair</span></button>
         </div>
 
+        {/* GESTÃO À VISTA (Seção 4.2) */}
         {pendenciasGerais.length > 0 && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
             <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-3">
@@ -318,7 +273,6 @@ export default function Dashboard() {
             <div className="space-y-4">
               {pendenciasGerais.map((item, idx) => {
                 const isAtual = item.numeroModulo === numReferenciaAtual;
-                
                 return (
                   <div key={idx} className={`p-4 rounded-xl border ${isAtual ? 'bg-orange-50/80 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
                     <div className="flex items-center justify-between mb-2">
@@ -343,7 +297,6 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-
       </main>
     </div>
   );
