@@ -5,11 +5,9 @@ async function handleGerarIA() {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
       
-      // MUDANÇA 1: Usando o modelo de produção oficial do Google
+      // 1. Usando o modelo de produção oficial (muito rápido e com cota de 1.500/dia livre)
       const model = genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash", 
-        // MUDANÇA 2: Comentei a ferramenta de busca temporariamente para testarmos
-        // tools: [{ googleSearch: {} }] 
       });
 
       const promptCompleto = `
@@ -23,7 +21,7 @@ async function handleGerarIA() {
       setFeedbackEditado(result.response.text());
     } catch (e) { 
       console.error("ERRO COMPLETO DA API:", e);
-      // MUDANÇA 3: Mostrando a mensagem real de erro do Google na tela
+      // 2. Agora o erro real do Google vai aparecer na tela para você ler
       alert("A API recusou o pedido. Erro: " + e.message); 
     }
     finally { setGerandoIA(false); }
