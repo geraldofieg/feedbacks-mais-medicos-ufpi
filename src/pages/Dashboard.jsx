@@ -46,10 +46,27 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function fetchData() {
-      // 1. Alunos
+      
+      // 1. Alunos (CORREÇÃO: Dicionário V3 -> V1 e Filtro Lixeira)
       const alunosSnap = await getDocs(collection(db, 'alunos'));
-      const alunosAtuais = alunosSnap.docs.map(d => d.data().nome);
+      const alunosMap = {};
+      const alunosAtuais = [];
+      
+      alunosSnap.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.status !== 'lixeira') { // Fuga dos fantasmas
+          alunosAtuais.push(data.nome);
+          alunosMap[doc.id] = data.nome; // Dicionário
+        }
+      });
       setAlunosAtivos(alunosAtuais);
+
+      // 1.5. Tarefas (V3) Dicionário
+      const tarefasSnap = await getDocs(collection(db, 'tarefas'));
+      const tarefasMap = {};
+      tarefasSnap.docs.forEach(doc => {
+        tarefasMap[doc.id] = doc.data().nomeTarefa;
+      });
 
       // 2. Atividades (90 dias)
       const dataLimite = new Date();
@@ -66,11 +83,17 @@ export default function Dashboard() {
       
       let contRevisao = 0; let contPostar = 0; let contFinalizado = 0;
       const atividadesProcessadas = []; 
-      let maxNumDB = 0; // Maior número encontrado no BD
+      let maxNumDB = 0; 
 
       docs.forEach(d => {
-        if (isModuloValido(d.modulo)) {
-          const num = extractNum(d.modulo);
+        // CORREÇÃO: Tentar descobrir o número do módulo, mesmo que venha da V3 (tarefaId)
+        let nomeModuloParaRegex = d.modulo;
+        if (!nomeModuloParaRegex && d.tarefaId && tarefasMap[d.tarefaId]) {
+           nomeModuloParaRegex = tarefasMap[d.tarefaId];
+        }
+
+        if (isModuloValido(nomeModuloParaRegex)) {
+          const num = extractNum(nomeModuloParaRegex);
           if (num > maxNumDB) maxNumDB = num;
         }
 
@@ -99,24 +122,41 @@ export default function Dashboard() {
       let numeroAlvoPrincipal = 0;
       
       if (moduloAtual) {
-        // Se o calendário diz que tem módulo rolando hoje, a palavra dele é a lei!
         numeroAlvoPrincipal = extractNum(moduloAtual.modulo);
       } else {
-        // Se o calendário está num buraco, o alvo é o maior módulo do banco de dados
         numeroAlvoPrincipal = maxNumDB;
       }
 
       setNumReferenciaAtual(numeroAlvoPrincipal);
       
-      // Monta os alvos: o Atual e o Imediatamente Anterior (Limitando do Módulo 7 pra cima)
       const numsAlvo = [numeroAlvoPrincipal, numeroAlvoPrincipal - 1].filter(n => n >= 7);
 
       if (alunosAtuais.length > 0 && numsAlvo.length > 0) {
         const entregas = new Set();
+        
+        // CORREÇÃO: Povoar o Set cruzando V1 e V3
         docs.forEach(a => {
-          if (isModuloValido(a.modulo) && a.aluno && a.aluno.toLowerCase() !== 'enunciado') {
-            const num = extractNum(a.modulo);
-            entregas.add(`${a.aluno}-${num}-${a.tarefa}`);
+          let nomeAluno = a.aluno;
+          let nomeDaTarefaReal = a.tarefa || a.modulo; // A V1 costumava misturar modulo/tarefa
+
+          if (a.alunoId && alunosMap[a.alunoId]) {
+            nomeAluno = alunosMap[a.alunoId];
+          }
+          if (a.tarefaId && tarefasMap[a.tarefaId]) {
+            nomeDaTarefaReal = tarefasMap[a.tarefaId];
+          }
+
+          if (nomeDaTarefaReal && isModuloValido(nomeDaTarefaReal) && nomeAluno && nomeAluno.toLowerCase() !== 'enunciado') {
+            const num = extractNum(nomeDaTarefaReal);
+            
+            // Aqui é a mágica: Como a V3 cria nomes livres, precisamos tentar "pescar" se é Fórum ou Desafio pela string
+            let tipoTarefaParaSelo = "Desconhecida";
+            if (nomeDaTarefaReal.toLowerCase().includes('desafio')) tipoTarefaParaSelo = `M${num < 10 ? '0'+num : num}-Desafio`;
+            if (nomeDaTarefaReal.toLowerCase().includes('fórum') || nomeDaTarefaReal.toLowerCase().includes('forum')) tipoTarefaParaSelo = `M${num < 10 ? '0'+num : num}-Fórum`;
+
+            entregas.add(`${nomeAluno}-${num}-${tipoTarefaParaSelo}`);
+            // Backup pro caso de nomes antigos da V1
+            if (a.tarefa) entregas.add(`${nomeAluno}-${num}-${a.tarefa}`);
           }
         });
 
@@ -134,7 +174,7 @@ export default function Dashboard() {
                 modulo: nomeModuloLabel, 
                 numeroModulo: numAlvo,
                 tarefa: tar, 
-                devedores 
+                devedores: devedores.sort((a,b) => a.localeCompare(b)) // Ordem Alfabética!
               });
             }
           });
@@ -222,34 +262,34 @@ export default function Dashboard() {
         </div>
 
         <div className={`grid grid-cols-1 gap-4 mb-8 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-          <Link to="/lista/pendente" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
             <div>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Revisão</p>
               <h3 className="text-4xl font-black text-yellow-500">{stats.revisao}</h3>
-              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Ver lista <ChevronRight size={16} /></div>
+              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Funil de Avaliação</div>
             </div>
             <div className="bg-yellow-50 p-4 rounded-2xl text-yellow-600 border border-yellow-100"><Clock size={32} /></div>
-          </Link>
+          </div>
 
           {isAdmin && (
-            <Link to="/lista/falta-postar" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
               <div>
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Postar</p>
                 <h3 className="text-4xl font-black text-blue-600">{stats.postar}</h3>
-                <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Copiar p/ Site <ChevronRight size={16} /></div>
+                <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Funil de Avaliação</div>
               </div>
               <div className="bg-blue-50 p-4 rounded-2xl text-blue-600 border border-blue-100"><Send size={32} /></div>
-            </Link>
+            </div>
           )}
           
-          <Link to="/lista/finalizados" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between active:bg-gray-50 active:scale-95 transition-all">
             <div>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Histórico Finalizado</p>
               <h3 className="text-4xl font-black text-green-600">{stats.finalizados}</h3>
-              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Ver histórico <ChevronRight size={16} /></div>
+              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Histórico Acadêmico</div>
             </div>
             <div className="bg-green-50 p-4 rounded-2xl text-green-600 border border-green-100"><CheckCheck size={32} /></div>
-          </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
