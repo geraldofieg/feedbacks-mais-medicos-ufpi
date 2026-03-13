@@ -10,7 +10,7 @@ import {
 
 import { cronogramaAssincrono, cronogramaSincrono, getStatusData, getDiasRestantes } from '../data/cronogramaData';
 
-// Regra de Validação (Seção 6 da Documentação)
+// Regras de Validação (Conforme Documentação Seção 6)
 export const isModuloValido = (nome) => {
   if (!nome) return false;
   const lower = nome.toLowerCase();
@@ -20,7 +20,6 @@ export const isModuloValido = (nome) => {
   return true;
 };
 
-// Extrator Numérico (Seção 6 da Documentação)
 const extractNum = (nome) => {
   if (!nome) return 0;
   const match = nome.match(/\d+/);
@@ -38,7 +37,6 @@ export default function Dashboard() {
   const [pendenciasGerais, setPendenciasGerais] = useState([]);
   const [numReferenciaAtual, setNumReferenciaAtual] = useState(0); 
 
-  // RBAC Hardcoded (Seção 7 da Documentação)
   const isAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
 
   const moduloAtualIndex = cronogramaAssincrono.findIndex(m => getStatusData(m.inicio, m.fim) === 'atual');
@@ -47,11 +45,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function fetchData() {
-      // 1. Alunos (Filtro Lixeira - Seção 12)
+      // 1. Alunos e Dicionário V3
       const alunosSnap = await getDocs(collection(db, 'alunos'));
       const alunosMap = {};
       const alunosAtuais = [];
-      
       alunosSnap.docs.forEach(doc => {
         const data = doc.data();
         if (data.status !== 'lixeira') {
@@ -61,14 +58,13 @@ export default function Dashboard() {
       });
       setAlunosAtivos(alunosAtuais);
 
-      // 1.5. Dicionário de Tarefas da V3 para compatibilidade
       const tarefasSnap = await getDocs(collection(db, 'tarefas'));
       const tarefasMap = {};
       tarefasSnap.docs.forEach(doc => {
         tarefasMap[doc.id] = doc.data().nomeTarefa;
       });
 
-      // 2. Atividades (Últimos 90 dias - Seção 4.2)
+      // 2. Atividades (90 dias)
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() - 90);
       const qAtividades = query(collection(db, 'atividades'), where('dataCriacao', '>=', dataLimite));
@@ -80,39 +76,27 @@ export default function Dashboard() {
       let maxNumDB = 0; 
 
       docs.forEach(d => {
-        let nomeModuloParaRegex = d.modulo;
-        if (!nomeModuloParaRegex && d.tarefaId && tarefasMap[d.tarefaId]) {
-           nomeModuloParaRegex = tarefasMap[d.tarefaId];
-        }
-
+        let nomeModuloParaRegex = d.modulo || tarefasMap[d.tarefaId];
         if (isModuloValido(nomeModuloParaRegex)) {
           const num = extractNum(nomeModuloParaRegex);
           if (num > maxNumDB) maxNumDB = num;
         }
 
-        // Fluxo de Revisão (Seção 8 da Documentação)
+        // Lógica de Funis (Seção 8 da Doc)
         const isFinalizado = !!d.dataPostagem || d.postado === true || d.status === 'postado';
         const isAprovado = !!d.dataAprovacao || d.status === 'aprovado';
 
-        if (isFinalizado) { 
-          contFinalizado++; 
-          atividadesProcessadas.push(d); 
-        } else if (isAprovado) { 
-          contPostar++; 
-          atividadesProcessadas.push(d); 
-        } else { 
-          contRevisao++; 
-        }
+        if (isFinalizado) { contFinalizado++; atividadesProcessadas.push(d); } 
+        else if (isAprovado) { contPostar++; atividadesProcessadas.push(d); } 
+        else { contRevisao++; }
       });
 
       setStats({ revisao: contRevisao, postar: contPostar, finalizados: contFinalizado });
 
-      // Termômetro da IA (Seção 4.3 da Documentação)
       const originais = atividadesProcessadas.filter(d => d.feedbackFinal?.trim() === d.feedbackSugerido?.trim()).length;
       const taxa = atividadesProcessadas.length > 0 ? Math.round((originais / atividadesProcessadas.length) * 100) : 0;
       setIaStats({ total: atividadesProcessadas.length, originais, taxa });
 
-      // 3. Lógica de Alvo (Seção 4.1 da Documentação)
       let numeroAlvoPrincipal = moduloAtual ? extractNum(moduloAtual.modulo) : maxNumDB;
       setNumReferenciaAtual(numeroAlvoPrincipal);
       
@@ -123,12 +107,9 @@ export default function Dashboard() {
         docs.forEach(a => {
           let nomeAluno = a.aluno || alunosMap[a.alunoId];
           let nomeDaTarefaReal = a.tarefa || a.modulo || tarefasMap[a.tarefaId];
-
           if (nomeDaTarefaReal && isModuloValido(nomeDaTarefaReal) && nomeAluno) {
             const num = extractNum(nomeDaTarefaReal);
-            let tipoTarefaParaSelo = "Desconhecida";
-            if (nomeDaTarefaReal.toLowerCase().includes('desafio')) tipoTarefaParaSelo = `M${num < 10 ? '0'+num : num}-Desafio`;
-            if (nomeDaTarefaReal.toLowerCase().includes('fórum') || nomeDaTarefaReal.toLowerCase().includes('forum')) tipoTarefaParaSelo = `M${num < 10 ? '0'+num : num}-Fórum`;
+            let tipoTarefaParaSelo = nomeDaTarefaReal.toLowerCase().includes('desafio') ? `M${num < 10 ? '0'+num : num}-Desafio` : `M${num < 10 ? '0'+num : num}-Fórum`;
             entregas.add(`${nomeAluno}-${num}-${tipoTarefaParaSelo}`);
           }
         });
@@ -137,18 +118,16 @@ export default function Dashboard() {
         numsAlvo.forEach(numAlvo => {
           const cronoMod = cronogramaAssincrono.find(m => extractNum(m.modulo) === numAlvo);
           const tarefasDoModulo = cronoMod?.tarefas || [`M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Desafio`, `M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Fórum`]; 
-          const nomeModuloLabel = cronoMod ? cronoMod.modulo : `Módulo ${numAlvo}`;
           tarefasDoModulo.forEach(tar => {
             const devedores = alunosAtuais.filter(al => !entregas.has(`${al}-${numAlvo}-${tar}`));
             if (devedores.length > 0) {
-              resultado.push({ modulo: nomeModuloLabel, numeroModulo: numAlvo, tarefa: tar, devedores: devedores.sort((a,b) => a.localeCompare(b)) });
+              resultado.push({ modulo: cronoMod?.modulo || `Módulo ${numAlvo}`, numeroModulo: numAlvo, tarefa: tar, devedores: devedores.sort((a,b) => a.localeCompare(b)) });
             }
           });
         });
         setPendenciasGerais(resultado);
       }
 
-      // 4. Última Sincronização
       const qUltima = query(collection(db, 'atividades'), orderBy('dataCriacao', 'desc'), limit(1));
       const ultimaSnap = await getDocs(qUltima);
       if (!ultimaSnap.empty) {
@@ -163,7 +142,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* HEADER */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
           <h1 className="text-xl font-bold text-gray-800">
@@ -216,36 +194,42 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* CARDS DE ESTATÍSTICAS - RESTAURADOS COMO LINKS */}
+        {/* CARDS DE ESTATÍSTICAS COM "VER LISTA" (RESTAURADOS) */}
         <div className={`grid grid-cols-1 gap-4 mb-8 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-          <Link to="/pendencias" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:bg-gray-50 active:scale-95 transition-all">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Revisão</p>
               <h3 className="text-4xl font-black text-yellow-500">{stats.revisao}</h3>
-              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Funil de Avaliação</div>
+              <Link to="/lista/pendente" className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2 hover:underline">
+                Ver lista <ChevronRight size={14} />
+              </Link>
             </div>
             <div className="bg-yellow-50 p-4 rounded-2xl text-yellow-600 border border-yellow-100"><Clock size={32} /></div>
-          </Link>
+          </div>
 
           {isAdmin && (
-            <Link to="/pendencias" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:bg-gray-50 active:scale-95 transition-all">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Aguardando Postar</p>
                 <h3 className="text-4xl font-black text-blue-600">{stats.postar}</h3>
-                <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Funil de Avaliação</div>
+                <Link to="/lista/aprovado" className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2 hover:underline">
+                  Ver lista <ChevronRight size={14} />
+                </Link>
               </div>
               <div className="bg-blue-50 p-4 rounded-2xl text-blue-600 border border-blue-100"><Send size={32} /></div>
-            </Link>
+            </div>
           )}
           
-          <Link to="/mapa" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:bg-gray-50 active:scale-95 transition-all">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Histórico Finalizado</p>
               <h3 className="text-4xl font-black text-green-600">{stats.finalizados}</h3>
-              <div className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2">Histórico Acadêmico</div>
+              <Link to="/lista/finalizado" className="flex items-center gap-1 text-blue-600 text-sm font-bold mt-2 hover:underline">
+                Ver lista <ChevronRight size={14} />
+              </Link>
             </div>
             <div className="bg-green-50 p-4 rounded-2xl text-green-600 border border-green-100"><CheckCheck size={32} /></div>
-          </Link>
+          </div>
         </div>
 
         {/* ATALHOS RÁPIDOS */}
@@ -264,7 +248,7 @@ export default function Dashboard() {
           <button onClick={handleLogout} className="bg-red-50 text-red-600 p-5 rounded-2xl border border-red-100 flex flex-col items-center gap-2 text-center active:scale-95 transition-transform"><LogOut size={28} /><span className="font-bold text-sm">Sair</span></button>
         </div>
 
-        {/* GESTÃO À VISTA (Seção 4.2) */}
+        {/* GESTÃO À VISTA */}
         {pendenciasGerais.length > 0 && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-orange-200">
             <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 border-b border-gray-100 pb-3">
