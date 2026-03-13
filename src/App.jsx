@@ -31,16 +31,32 @@ import AguardandoRevisao from './pages/AguardandoRevisao';
 import FaltaPostar from './pages/FaltaPostar'; 
 import Historico from './pages/Historico';
 
-// PAINEL DE GESTÃO DO CEO - AGORA APONTANDO PARA O ARQUIVO CORRETO
+// PAINEL DE GESTÃO DO CEO
 import Admin from './pages/Admin'; 
 
-function PrivateRoute({ children }) {
-  const { currentUser, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
-  return currentUser ? children : <Navigate to="/login" />;
-}
+// PÁGINA DE BLOQUEIO DO SAAS
+import AssinaturaVencida from './pages/AssinaturaVencida';
 
 const VERSAO_LOCAL_APP = 1;
+
+// O NOSSO "SEGURANÇA DA PORTA" ATUALIZADO PARA O SAAS
+function PrivateRoute({ children, permiteVencido = false }) {
+  const { currentUser, loading, isAcessoExpirado, isSuperAdmin } = useAuth();
+  
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-500">Carregando...</div>;
+  
+  // 1. Não tem login? Vai pro Login.
+  if (!currentUser) return <Navigate to="/login" />;
+
+  // 2. Tá logado, mas a assinatura venceu? Vai pra página de cobrança!
+  // (O Super Admin e a própria tela de aviso estão isentos dessa regra)
+  if (isAcessoExpirado && !isSuperAdmin && !permiteVencido) {
+    return <Navigate to="/assinatura-vencida" />;
+  }
+
+  // 3. Tá tudo certo? Pode entrar.
+  return children;
+}
 
 function App() {
   useEffect(() => {
@@ -69,9 +85,14 @@ function App() {
         <Navbar /> 
         
         <Routes>
+          {/* ROTAS PÚBLICAS */}
           <Route path="/login" element={<Login />} />
           <Route path="/cadastro" element={<Signup />} />
           
+          {/* ROTA DE BLOQUEIO (Única rota privada que permite usuário vencido) */}
+          <Route path="/assinatura-vencida" element={<PrivateRoute permiteVencido={true}><AssinaturaVencida /></PrivateRoute>} />
+          
+          {/* ROTAS PRIVADAS DO SISTEMA */}
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/turmas" element={<PrivateRoute><Turmas /></PrivateRoute>} />
           <Route path="/tarefas" element={<PrivateRoute><Tarefas /></PrivateRoute>} />
@@ -92,7 +113,7 @@ function App() {
           <Route path="/faltapostar" element={<PrivateRoute><FaltaPostar /></PrivateRoute>} />
           <Route path="/historico" element={<PrivateRoute><Historico /></PrivateRoute>} />
           
-          {/* Rota do Painel SaaS - ATUALIZADA PARA USAR O COMPONENTE ADMIN */}
+          {/* Rota do Painel SaaS */}
           <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
           
           {/* Rota de fallback */}
