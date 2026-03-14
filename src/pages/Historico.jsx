@@ -2,25 +2,24 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, CheckCheck, ChevronRight, CalendarDays, ArchiveRestore } from 'lucide-react';
+import { ArrowLeft, Clock, ChevronRight, CalendarDays, CheckCircle2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
-export default function Historico() {
+export default function AguardandoRevisao() {
   const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
-  const [listaHistorico, setListaHistorico] = useState([]);
-
-  // Identifica o perfil para aplicar a regra de acesso às turmas
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  const [listaPendencias, setListaPendencias] = useState([]);
 
   useEffect(() => {
-    async function fetchHistorico() {
+    async function fetchAguardandoRevisao() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoading(true);
       try {
-        // 1. Busca as turmas permitidas
+        // 1. Regra de Acesso: Busca as turmas que este usuário pode ver
+        const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+        
         const turmasRef = collection(db, 'turmas');
         const qTurmas = isAdmin
           ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
@@ -30,12 +29,12 @@ export default function Historico() {
         const turmasIds = snapTurmas.docs.map(t => t.id);
 
         if (turmasIds.length === 0) {
-          setListaHistorico([]);
+          setListaPendencias([]);
           setLoading(false);
           return;
         }
 
-        // 2. Dicionários de Nomes
+        // 2. Busca Tarefas e Alunos para cruzar os nomes (Dicionários)
         const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapTarefas = await getDocs(qTarefas);
         const mapaTarefas = {};
@@ -46,127 +45,120 @@ export default function Historico() {
         const mapaAlunos = {};
         snapAlunos.docs.forEach(d => { mapaAlunos[d.id] = d.data().nome; });
 
-        // 3. Busca Atividades e aplica o Filtro Inteligente (Matemática do Dashboard)
+        // 3. Busca as Atividades "Aguardando Revisão" com a Nova Matemática (V3)
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
         
-        const historico = [];
+        const pendencias = [];
         
         snapAtividades.docs.forEach(doc => {
           const ativ = doc.data();
           
           if (turmasIds.includes(ativ.turmaId)) {
-            // REGRA ESTRITA: Só entra no histórico se já foi oficialmente postado/finalizado.
+            // LÓGICA ESPELHADA DO DASHBOARD
             const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
+            const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+            const temResposta = ativ.resposta && String(ativ.resposta).trim() !== '';
 
-            if (jaPostado) {
-              // Decide qual data usar para ordenação e exibição (Preferência para a data final)
-              const dataExibicao = ativ.dataPostagem || ativ.dataAprovacao || ativ.dataCriacao;
-
-              historico.push({
+            // Só entra na lista de Revisão se tiver resposta colada E não tiver sido aprovado nem postado
+            if (!jaPostado && !jaAprovado && temResposta) {
+              pendencias.push({
                 id: doc.id,
                 tarefaId: ativ.tarefaId,
-                alunoId: ativ.alunoId, // NOVO: Guardamos a ID do aluno para o teletransporte
-                nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
-                nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
-                dataConclusao: dataExibicao,
-                isPostado: jaPostado
+                alunoId: ativ.alunoId, // Guardamos a ID do aluno para o teletransporte!
+                // AJUSTE: Fallback triplo para garantir que o nome apareça (Fim do bug do ".")
+                nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || 'Aluno Removido',
+                nomeTarefa: mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || 'Tarefa Removida',
+                dataCriacao: ativ.dataCriacao
               });
             }
           }
         });
 
-        // Ordena da mais recente para a mais antiga
-        historico.sort((a, b) => {
-          const tempoA = a.dataConclusao?.toMillis ? a.dataConclusao.toMillis() : 0;
-          const tempoB = b.dataConclusao?.toMillis ? b.dataConclusao.toMillis() : 0;
-          return tempoB - tempoA; // Ordem decrescente
+        // AJUSTE: Ordena da mais NOVA para a mais ANTIGA (O que foi salvo por último, aparece primeiro no topo)
+        pendencias.sort((a, b) => {
+          const tempoA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
+          const tempoB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
+          return tempoB - tempoA; // tempoB - tempoA garante ordem decrescente (mais recente no topo)
         });
 
-        setListaHistorico(historico);
+        setListaPendencias(pendencias);
       } catch (error) {
-        console.error("Erro ao buscar histórico:", error);
+        console.error("Erro ao buscar pendências:", error);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchHistorico();
-  }, [currentUser, userProfile, escolaSelecionada, isAdmin]);
+    fetchAguardandoRevisao();
+  }, [currentUser, userProfile, escolaSelecionada]);
 
   const formatarData = (ts) => {
     if (!ts) return "";
     try {
       let d = ts.toDate ? ts.toDate() : new Date(ts);
       if (isNaN(d.getTime())) return "";
-      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
     } catch (e) { return ""; }
   };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Cabeçalho */}
-      <div className="flex items-center gap-4 mb-8 border-b border-gray-200 pb-6">
-        <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-green-600 transition-colors p-2 -ml-2 bg-white rounded-xl shadow-sm border border-gray-200">
-          <ArrowLeft size={24} />
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-yellow-600 transition-colors p-2 -ml-2">
+          <ArrowLeft size={28} />
         </button>
         <div>
-          <h1 className="text-2xl font-black text-gray-800 tracking-tight flex items-center gap-2">
-            <ArchiveRestore className="text-green-600" /> Histórico Finalizado
-          </h1>
-          <p className="text-sm font-medium text-gray-500 mt-1">Registro permanente de todas as atividades lançadas no portal oficial.</p>
+          <h1 className="text-2xl font-black text-gray-800 tracking-tight">Aguardando Revisão</h1>
+          <p className="text-sm font-medium text-gray-500 mt-1">Trabalhos com resposta colada aguardando a sua revisão e aprovação.</p>
         </div>
       </div>
 
       {loading ? (
         <div className="text-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-500 font-bold">A carregar o histórico...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-yellow-500 mx-auto mb-4"></div>
+          <p className="text-gray-500 font-bold">Buscando pendências...</p>
         </div>
-      ) : listaHistorico.length === 0 ? (
-        <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center">
-          <div className="bg-white text-gray-400 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-gray-100">
-            <CheckCheck size={40} />
+      ) : listaPendencias.length === 0 ? (
+        <div className="bg-green-50 border-2 border-dashed border-green-200 rounded-3xl p-12 text-center shadow-sm">
+          <div className="bg-green-100 text-green-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+            <CheckCircle2 size={40} />
           </div>
-          <h2 className="text-2xl font-black text-gray-700 mb-2">Gaveta Vazia</h2>
-          <p className="text-gray-500 font-medium">Nenhuma atividade concluída registrada nesta instituição até o momento.</p>
-          <Link to="/" className="inline-block mt-6 bg-white text-gray-700 font-bold px-6 py-3 rounded-xl border border-gray-300 hover:bg-gray-100 transition-all shadow-sm">
+          <h2 className="text-2xl font-black text-green-800 mb-2">Caixa Vazia!</h2>
+          <p className="text-green-700 font-medium">Você não tem nenhum rascunho ou revisão pendente no momento.</p>
+          <Link to="/" className="inline-block mt-6 bg-white text-green-700 font-bold px-6 py-3 rounded-xl border border-green-200 hover:bg-green-100 transition-all shadow-sm">
             Voltar ao Dashboard
           </Link>
         </div>
       ) : (
-        <div className="space-y-3">
-          {listaHistorico.map((item) => (
+        <div className="space-y-4">
+          {listaPendencias.map((item) => (
             <Link 
               key={item.id} 
               to={`/revisar/${item.tarefaId}`} 
-              state={{ alunoId: item.alunoId }} // NOVO: Mandando o ID para a Estação de Correção!
-              className="flex items-center gap-4 p-4 md:p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-green-400 transition-all group"
+              state={{ alunoId: item.alunoId }} // "Jogando" o ID do aluno para a Estação de Trabalho!
+              className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-yellow-400 transition-all group"
             >
-              <div className="bg-green-50 text-green-600 p-3.5 rounded-xl group-hover:bg-green-600 group-hover:text-white transition-colors shrink-0">
-                <CheckCheck size={24} />
+              {/* Ícone de Relógio (Espera) */}
+              <div className="bg-yellow-50 text-yellow-600 p-4 rounded-xl group-hover:bg-yellow-500 group-hover:text-white transition-colors shrink-0">
+                <Clock size={24} />
               </div>
               
               <div className="flex-1 min-w-0">
-                <h3 className="font-black text-gray-800 text-base uppercase tracking-wide truncate group-hover:text-green-700 transition-colors">
+                <h3 className="font-black text-gray-800 text-base md:text-lg uppercase tracking-wide truncate group-hover:text-yellow-700 transition-colors">
                   {item.nomeAluno}
                 </h3>
                 <p className="text-sm font-bold text-gray-500 truncate mt-0.5">
                   {item.nomeTarefa}
                 </p>
-                
-                <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
-                    <CalendarDays size={12} />
-                    {formatarData(item.dataConclusao)}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-green-700 bg-green-100 px-2 py-1 rounded-md uppercase tracking-widest">
-                    Lançado Oficialmente
-                  </span>
+                <div className="flex items-center gap-1.5 mt-2 text-xs font-bold text-yellow-700 bg-yellow-50 inline-flex px-2 py-1 rounded-lg border border-yellow-100">
+                  <CalendarDays size={14} />
+                  <span>Gerado em: {formatarData(item.dataCriacao)}</span>
                 </div>
               </div>
 
-              <div className="text-gray-300 group-hover:text-green-600 transition-colors shrink-0">
+              <div className="text-gray-300 group-hover:text-yellow-500 transition-colors shrink-0">
                 <ChevronRight size={24} />
               </div>
             </Link>
