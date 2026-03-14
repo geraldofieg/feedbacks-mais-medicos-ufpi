@@ -66,6 +66,7 @@ export default function Historico() {
               historico.push({
                 id: doc.id,
                 tarefaId: ativ.tarefaId,
+                alunoId: ativ.alunoId, // NOVO: Guardamos a ID do aluno para o teletransporte
                 nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
                 nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
                 dataConclusao: dataExibicao,
@@ -139,6 +140,7 @@ export default function Historico() {
             <Link 
               key={item.id} 
               to={`/revisar/${item.tarefaId}`} 
+              state={{ alunoId: item.alunoId }} // NOVO: Mandando o ID para a Estação de Correção!
               className="flex items-center gap-4 p-4 md:p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-green-400 transition-all group"
             >
               <div className="bg-green-50 text-green-600 p-3.5 rounded-xl group-hover:bg-green-600 group-hover:text-white transition-colors shrink-0">
