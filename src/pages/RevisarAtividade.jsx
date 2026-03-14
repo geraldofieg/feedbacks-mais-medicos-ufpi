@@ -5,7 +5,8 @@ import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, CheckCircle, User, Copy, 
-  Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck, Eraser
+  Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck, Eraser,
+  Lock, Settings 
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -30,8 +31,11 @@ export default function RevisarAtividade() {
   const [gerandoIA, setGerandoIA] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com'; 
+  // Leitura de Crachá (Camaleão)
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const isPremium = userProfile?.plano === 'premium' || isAdmin;
+  const isTier2 = userProfile?.plano === 'intermediario';
+  const isTier1 = !isPremium && !isTier2;
 
   const respostaEstaVazia = novaResposta.trim().length === 0;
 
@@ -45,7 +49,9 @@ export default function RevisarAtividade() {
 
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', snapTarefa.data().turmaId));
         const snapAlunos = await getDocs(qAlunos);
-        const listaAlunos = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome));
+        const listaAlunos = snapAlunos.docs.map(d => ({ 
+          id: d.id, ...d.data() 
+        })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome));
         setAlunos(listaAlunos);
 
         const qAtividades = query(collection(db, 'atividades'), where('tarefaId', '==', id));
@@ -68,13 +74,26 @@ export default function RevisarAtividade() {
     setNotaAluno(atividadeAtual?.nota || '');
   }, [alunoSelecionadoId, atividadeAtual]);
 
+  // Gatilho da IA com Trava de Novato e Vitrine Tier 1
   async function handleGerarIA() {
+    if (isTier1) {
+      alert("🔒 Ganhe tempo! Deixe nossa IA integrada ler a resposta do aluno e redigir o feedback por você. Conheça o Plano Premium.");
+      return;
+    }
+    
+    if (!userProfile?.promptPersonalizado) {
+      if (window.confirm("Opa! Antes de gerar a mágica, você precisa dizer para a IA como você gosta de avaliar. Vamos lá configurar em 'Configurações'?")) {
+        navigate('/configuracoes');
+      }
+      return;
+    }
+
     if (respostaEstaVazia) return;
     setGerandoIA(true);
+
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
-      
       const model = genAI.getGenerativeModel({ 
         model: "gemini-3.1-flash-lite-preview",
         tools: [{ googleSearch: {} }] 
@@ -96,18 +115,20 @@ export default function RevisarAtividade() {
     finally { setGerandoIA(false); }
   }
 
-  async function handleAprovar() {
+  // Função para salvar e pausar (Fica na Revisão)
+  async function handleSalvarRascunho() {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
     try {
       const payload = { 
         resposta: novaResposta.trim(),
         feedbackFinal: feedbackEditado.trim(), 
-        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium ? feedbackEditado.trim() : ''),
+        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
         nota: notaAluno.trim() || null, 
-        status: 'aprovado', 
+        status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente_revisao', 
         dataAprovacao: serverTimestamp() 
       };
+
       if (atividadeAtual) {
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
@@ -116,7 +137,46 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Avaliação salva internamente!");
+      alert("Rascunho salvo! A atividade continua aguardando revisão.");
+    } catch (error) { console.error(error); } finally { setSalvando(false); }
+  }
+
+  // Função para Aprovar (Manda para a UFPI ou pro Admin)
+  async function handleAprovar(copiarAoAprovar = false) {
+    if (salvando || !alunoAtual) return;
+    setSalvando(true);
+    try {
+      const payload = { 
+        resposta: novaResposta.trim(),
+        feedbackFinal: feedbackEditado.trim(), 
+        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
+        nota: notaAluno.trim() || null, 
+        status: 'aprovado', 
+        dataAprovacao: serverTimestamp() 
+      };
+
+      if (atividadeAtual) {
+        await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
+        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
+      } else {
+        const novaAtiv = { alunoId: alunoAtual.id, turmaId: tarefa.turmaId, instituicaoId: tarefa.instituicaoId, tarefaId: tarefa.id, dataCriacao: serverTimestamp(), postado: false, ...payload };
+        const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
+        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
+      }
+      
+      if (copiarAoAprovar) {
+        navigator.clipboard.writeText(feedbackEditado.trim());
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 2000);
+      }
+
+      if (isTier2) {
+        alert("Feedback aprovado! O administrador já foi notificado para postar no sistema oficial.");
+        setAlunoSelecionadoId(''); // Tira da tela e vai pro próximo
+      } else if (!copiarAoAprovar) {
+        alert("Feedback aprovado e pronto para lançamento!");
+      }
+      
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
@@ -129,8 +189,7 @@ export default function RevisarAtividade() {
       alert("Status atualizado para FINALIZADO.");
     } catch (error) { console.error(error); } finally { setMarcandoPostado(false); }
   }
-
-  if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse text-xl">Iniciando estação...</div>;
+    if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse text-xl">Iniciando estação...</div>;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans">
@@ -157,7 +216,7 @@ export default function RevisarAtividade() {
                 const registro = atividadesMap[a.id];
                 let icone = '🔴'; 
                 if (registro) {
-                  if (registro.postado) icone = '✅'; 
+                  if (registro.postado) icone = '✅';
                   else icone = '🟡';
                 }
                 return <option key={a.id} value={a.id}>{icone} {a.nome}</option>;
@@ -196,6 +255,38 @@ export default function RevisarAtividade() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div className="lg:col-span-8 space-y-6">
+              
+              {/* NOVO: BARRA DE PROGRESSO VISUAL (E-commerce) */}
+              <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 mb-6">
+                <div className="flex items-center justify-between relative px-4 md:px-12">
+                   {/* Linha Fundo */}
+                   <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
+                   
+                   {/* Linha de Progresso Dinâmica */}
+                   <div className={`absolute left-10 top-1/2 -translate-y-1/2 h-1 bg-blue-500 -z-10 rounded-full transition-all duration-500 ${
+                     atividadeAtual?.postado ? 'w-[calc(100%-5rem)] bg-green-500' : (atividadeAtual?.status === 'aprovado' ? 'w-1/2 bg-amber-400' : 'w-0')
+                   }`}></div>
+
+                   {/* Passo 1 */}
+                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${novaResposta ? 'text-blue-600' : 'text-slate-400'}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${novaResposta ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>1</div>
+                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Trazer<br/>Resposta</span>
+                   </div>
+
+                   {/* Passo 2 */}
+                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${atividadeAtual?.status === 'aprovado' ? (atividadeAtual?.postado ? 'text-green-600' : 'text-amber-500') : 'text-slate-400'}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${atividadeAtual?.status === 'aprovado' ? (atividadeAtual?.postado ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-amber-400 text-white shadow-lg shadow-amber-400/30') : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>2</div>
+                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Revisar<br/>Feedback</span>
+                   </div>
+
+                   {/* Passo 3 */}
+                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${atividadeAtual?.postado ? 'text-green-600' : 'text-slate-400'}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${atividadeAtual?.postado ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>3</div>
+                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Lançar<br/>Oficial</span>
+                   </div>
+                </div>
+              </div>
+
               <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-6 md:p-10 space-y-12">
                   <section>
                     <div className="flex items-center gap-3 mb-4">
@@ -212,7 +303,6 @@ export default function RevisarAtividade() {
                       <div className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black">2</div>
                       <h4 className="text-xs font-black text-slate-900 uppercase flex-1">Resposta do Aluno</h4>
                       
-                      {/* BOTÃO LIMPAR - RESPOSTA ALUNO */}
                       {novaResposta && (
                          <button 
                            onClick={() => setNovaResposta('')} 
@@ -240,21 +330,32 @@ export default function RevisarAtividade() {
                   <h3 className="text-lg md:text-xl font-black flex items-center gap-3 mb-6">
                     <CheckCircle className="text-green-400" size={24}/>Avaliação
                   </h3>
-                  {isPremium && (
+                 
+                  {/* NOVO: BOTÃO IA CAMALEÃO */}
+                  <div className="flex flex-col items-center">
                     <button 
                       onClick={handleGerarIA} 
                       disabled={gerandoIA || respostaEstaVazia} 
-                      className={`w-full py-4 rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 mb-6 ${gerandoIA ? 'bg-slate-800 text-indigo-300' : respostaEstaVazia ? 'bg-slate-800 text-slate-600 border border-slate-800 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 shadow-indigo-500/20'}`}
+                      className={`w-full py-4 rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 mb-3 ${
+                        isTier1 
+                          ? 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 cursor-pointer' 
+                          : (gerandoIA ? 'bg-slate-800 text-indigo-300' : respostaEstaVazia ? 'bg-slate-800 text-slate-600 border border-slate-800 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 shadow-indigo-500/20')
+                      }`}
                     >
-                      {gerandoIA ? <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>}
-                      {gerandoIA ? 'Escrevendo...' : 'Gerar Feedback IA'}
+                      {isTier1 ? <Lock size={18}/> : (gerandoIA ? <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>)}
+                      {isTier1 ? 'Gerar Feedback IA' : (gerandoIA ? 'Escrevendo...' : 'Gerar Feedback IA')}
                     </button>
-                  )}
+                    
+                    {(isPremium || isTier2) && (
+                      <Link to="/configuracoes" className="inline-flex items-center gap-1.5 text-[9px] font-bold text-slate-400 hover:text-blue-400 transition-colors uppercase tracking-widest mt-1">
+                        <Settings size={12}/> Editar instruções para feedback
+                      </Link>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-6">
                   
-                  {/* CAIXA DO FEEDBACK COM BOTÃO LIMPAR */}
                   <div>
                     <div className="flex justify-between items-end mb-2 px-2">
                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Texto do Feedback</label>
@@ -290,39 +391,66 @@ export default function RevisarAtividade() {
                     </div>
                   </div>
 
-                  <button 
-                    onClick={handleAprovar} 
-                    disabled={salvando || !feedbackEditado} 
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-3xl shadow-xl transition-all flex justify-center items-center gap-3 text-lg"
-                  >
-                    {salvando ? <RefreshCw className="animate-spin" size={20}/> : <CheckCircle size={20}/>}
-                    Salvar Revisão
-                  </button>
+                  {/* NOVO: RODAPÉ CAMALEÃO E FLUXO EXPRESSO */}
+                  {atividadeAtual?.postado ? (
+                     <div className="w-full bg-green-500/20 border border-green-500/30 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
+                        <CheckCheck size={18}/> LANÇADO OFICIALMENTE
+                     </div>
+                  ) : atividadeAtual?.status === 'aprovado' ? (
+                     
+                     isTier2 ? (
+                        <div className="w-full bg-amber-500/20 border border-amber-500/30 text-amber-500 py-4 rounded-2xl text-[10px] font-black flex justify-center items-center gap-2 text-center px-4 leading-tight">
+                          <CheckCheck size={16}/> APROVADO POR VOCÊ.<br/>AGUARDANDO POSTAGEM DO ADMIN.
+                        </div>
+                     ) : (
+                        <div className="pt-2 border-t border-slate-800 space-y-3">
+                          <button 
+                            onClick={() => handleAprovar(true)} 
+                            className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"
+                          >
+                            <Copy size={18}/> {copiado ? 'Copiado para o seu Sistema!' : '1. Copiar Feedback'}
+                          </button>
 
-                  {atividadeAtual?.status === 'aprovado' && (
-                    <div className="pt-4 border-t border-slate-800 space-y-4">
-                      <button 
-                        onClick={() => { navigator.clipboard.writeText(feedbackEditado); setCopiado(true); setTimeout(()=>setCopiado(false), 2000); }} 
-                        className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"
-                      >
-                        <Copy size={18}/> {copiado ? 'Copiado para o seu Sistema!' : '1. Copiar Feedback'}
-                      </button>
+                          <button 
+                            onClick={handleMarcarPostado} 
+                            disabled={marcandoPostado} 
+                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl"
+                          >
+                            <Send size={18}/> 2. Confirmar Lançamento Oficial
+                          </button>
+                        </div>
+                     )
 
-                      {atividadeAtual.postado ? (
-                         <div className="w-full bg-green-500/20 border border-green-500/30 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
-                            <CheckCheck size={18}/> LANÇADO OFICIALMENTE
-                         </div>
-                      ) : (
+                  ) : (
+                     isTier2 ? (
                         <button 
-                          onClick={handleMarcarPostado} 
-                          disabled={marcandoPostado} 
-                          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl"
+                          onClick={() => handleAprovar(false)} 
+                          disabled={salvando || !feedbackEditado} 
+                          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-3xl shadow-xl transition-all flex justify-center items-center gap-3 text-lg"
                         >
-                          <Send size={18}/> 2. Confirmar Lançamento Oficial
+                          {salvando ? <RefreshCw className="animate-spin" size={20}/> : <CheckCircle size={20}/>}
+                          Aprovar Feedback
                         </button>
-                      )}
-                    </div>
+                     ) : (
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                          <button 
+                            onClick={handleSalvarRascunho} 
+                            disabled={salvando || !feedbackEditado} 
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-black py-3.5 rounded-2xl transition-all flex justify-center items-center gap-2 text-xs border border-slate-700"
+                          >
+                            {salvando ? <RefreshCw className="animate-spin" size={16}/> : '💾 Salvar Rascunho'}
+                          </button>
+                          <button 
+                            onClick={() => handleAprovar(true)} 
+                            disabled={salvando || !feedbackEditado} 
+                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 rounded-2xl shadow-xl transition-all flex justify-center items-center gap-2 text-xs"
+                          >
+                            {salvando ? <RefreshCw className="animate-spin" size={16}/> : '🚀 Aprovar e Copiar'}
+                          </button>
+                        </div>
+                     )
                   )}
+
                 </div>
               </div>
             </div>
@@ -332,4 +460,3 @@ export default function RevisarAtividade() {
     </div>
   );
 }
- 
