@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, CheckCircle, User, Copy, 
   Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck, Eraser,
-  Lock, Settings, CalendarDays, RotateCcw, Trash2
+  Lock, Settings, CalendarDays, RotateCcw, Trash2, mousePointerClick, MousePointer2 
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -14,7 +14,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export default function RevisarAtividade() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation(); // Lendo o "pacote" de teletransporte
+  const location = useLocation(); 
   const { currentUser, userProfile } = useAuth();
   
   const [loading, setLoading] = useState(true);
@@ -22,7 +22,6 @@ export default function RevisarAtividade() {
   const [alunos, setAlunos] = useState([]);
   const [atividadesMap, setAtividadesMap] = useState({});
   
-  // Já inicia com o aluno que foi clicado na lista (se houver)
   const [alunoSelecionadoId, setAlunoSelecionadoId] = useState(location.state?.alunoId || '');
   
   const [novaResposta, setNovaResposta] = useState('');
@@ -34,7 +33,6 @@ export default function RevisarAtividade() {
   const [gerandoIA, setGerandoIA] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
-  // Leitura de Crachá
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const isPremium = userProfile?.plano === 'premium' || isAdmin;
   const isTier2 = userProfile?.plano === 'intermediario';
@@ -42,7 +40,6 @@ export default function RevisarAtividade() {
 
   const respostaEstaVazia = novaResposta.trim().length === 0;
 
-  // Fica escutando caso o professor clique em outro link enquanto já está na página
   useEffect(() => {
     if (location.state?.alunoId) {
       setAlunoSelecionadoId(location.state.alunoId);
@@ -84,7 +81,6 @@ export default function RevisarAtividade() {
     setNotaAluno(atividadeAtual?.nota || '');
   }, [alunoSelecionadoId, atividadeAtual]);
 
-  // FUNÇÃO AUXILIAR PARA O HORÁRIO
   const formatarData = (ts) => {
     if (!ts) return "";
     try {
@@ -147,7 +143,6 @@ export default function RevisarAtividade() {
         nota: notaAluno.trim() || null, 
         status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente_revisao', 
         dataAprovacao: serverTimestamp(),
-        // Auditoria:
         nomeAluno: alunoAtual.nome, 
         nomeTarefa: tarefa.nomeTarefa,
         revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
@@ -176,7 +171,6 @@ export default function RevisarAtividade() {
         nota: notaAluno.trim() || null, 
         status: 'aprovado', 
         dataAprovacao: serverTimestamp(),
-        // Auditoria:
         nomeAluno: alunoAtual.nome, 
         nomeTarefa: tarefa.nomeTarefa,
         revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
@@ -199,7 +193,7 @@ export default function RevisarAtividade() {
 
       if (isTier2) {
         alert("Feedback aprovado! O administrador já foi notificado para postar no sistema oficial.");
-        setAlunoSelecionadoId(''); // Tira da tela e vai pro próximo
+        setAlunoSelecionadoId(''); 
       } else if (!copiarAoAprovar) {
         alert("Feedback aprovado e pronto para lançamento!");
       }
@@ -217,7 +211,6 @@ export default function RevisarAtividade() {
     } catch (error) { console.error(error); } finally { setMarcandoPostado(false); }
   }
 
-  // GERENCIAMENTO GESTOR (DEVOLVER PARA REVISÃO)
   async function handleDevolverRevisao() {
     if (!window.confirm("Deseja devolver esta atividade para a fase de revisão (Bolinha Amarela)?")) return;
     setSalvando(true);
@@ -235,7 +228,6 @@ export default function RevisarAtividade() {
     finally { setSalvando(false); }
   }
 
-  // GERENCIAMENTO GESTOR (EXCLUIR ATIVIDADE INTEIRA)
   async function handleExcluirAtividade() {
     if (!window.confirm("ATENÇÃO: Você está prestes a EXCLUIR COMPLETAMENTE a resposta deste aluno. Ele voltará para a estaca zero (Bolinha Vermelha). Deseja continuar?")) return;
     setSalvando(true);
@@ -294,7 +286,17 @@ export default function RevisarAtividade() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6 md:mt-10">
         {!alunoAtual ? (
           <div className="bg-white p-12 md:p-24 rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
-             <h3 className="text-2xl font-black text-slate-800 mb-8">Status das Atividades</h3>
+             
+             {/* NOVO: TEXTO DE ORIENTAÇÃO EM DESTAQUE */}
+             <div className="flex flex-col items-center mb-10 text-center animate-in fade-in slide-in-from-top-4 duration-700">
+                <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-xl shadow-blue-600/20 mb-4">
+                  <MousePointer2 size={32} />
+                </div>
+                <h3 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Primeiro Passo</h3>
+                <p className="text-slate-500 font-medium text-lg mt-2 max-w-sm">Para iniciar uma correção, selecione um aluno no menu de busca acima.</p>
+             </div>
+
+             <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8">Legenda de Status</h4>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
                 <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col items-center text-center">
                    <span className="text-3xl mb-3">🔴</span>
@@ -321,7 +323,6 @@ export default function RevisarAtividade() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div className="lg:col-span-8 space-y-6">
               
-              {/* BARRA DE PROGRESSO VISUAL */}
               <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 mb-6">
                 <div className="flex items-center justify-between relative px-4 md:px-12">
                    <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
@@ -391,7 +392,6 @@ export default function RevisarAtividade() {
                     <CheckCircle className="text-green-400" size={24}/>Avaliação
                   </h3>
                  
-                  {/* BOTÃO IA CAMALEÃO */}
                   <div className="flex flex-col items-center">
                     <button 
                       onClick={handleGerarIA} 
@@ -451,7 +451,6 @@ export default function RevisarAtividade() {
                     </div>
                   </div>
 
-                  {/* RODAPÉ CAMALEÃO E FLUXO EXPRESSO */}
                   {atividadeAtual?.postado ? (
                      <div className="w-full bg-green-500/20 border border-green-500/30 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
                         <CheckCheck size={18}/> LANÇADO OFICIALMENTE
@@ -511,7 +510,6 @@ export default function RevisarAtividade() {
                      )
                   )}
 
-                  {/* ASSINATURA DE HORÁRIO E REVISOR */}
                   {atividadeAtual?.dataAprovacao && (
                     <div className="mt-4 text-[10px] font-bold text-slate-400 bg-slate-800/50 p-3 rounded-xl flex items-center gap-2">
                         <CalendarDays size={14} className="text-slate-500" />
@@ -519,7 +517,6 @@ export default function RevisarAtividade() {
                     </div>
                   )}
 
-                  {/* GERENCIAMENTO GESTOR (OPÇÕES DE EMERGÊNCIA) */}
                   {atividadeAtual && (
                     <div className="mt-8 border border-slate-800 rounded-[24px] p-5 bg-slate-900/40">
                         <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-4 text-center">Gerenciamento Gestor</p>
