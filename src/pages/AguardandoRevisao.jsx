@@ -45,7 +45,7 @@ export default function AguardandoRevisao() {
         const mapaAlunos = {};
         snapAlunos.docs.forEach(d => { mapaAlunos[d.id] = d.data().nome; });
 
-        // 3. Busca as Atividades "Aguardando Revisão" (Status: pendente)
+        // 3. Busca as Atividades "Aguardando Revisão" com a Nova Matemática (V3)
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
         
@@ -53,15 +53,23 @@ export default function AguardandoRevisao() {
         
         snapAtividades.docs.forEach(doc => {
           const ativ = doc.data();
-          // Filtra: Só turmas ativas + Status Pendente
-          if (turmasIds.includes(ativ.turmaId) && ativ.status === 'pendente') {
-            pendencias.push({
-              id: doc.id,
-              tarefaId: ativ.tarefaId,
-              nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
-              nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
-              dataCriacao: ativ.dataCriacao
-            });
+          
+          if (turmasIds.includes(ativ.turmaId)) {
+            // LÓGICA ESPELHADA DO DASHBOARD
+            const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
+            const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+            const temResposta = ativ.resposta && String(ativ.resposta).trim() !== '';
+
+            // Só entra na lista de Revisão se tiver resposta colada E não tiver sido aprovado nem postado
+            if (!jaPostado && !jaAprovado && temResposta) {
+              pendencias.push({
+                id: doc.id,
+                tarefaId: ativ.tarefaId,
+                nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
+                nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
+                dataCriacao: ativ.dataCriacao
+              });
+            }
           }
         });
 
@@ -101,7 +109,7 @@ export default function AguardandoRevisao() {
         </button>
         <div>
           <h1 className="text-2xl font-black text-gray-800 tracking-tight">Aguardando Revisão</h1>
-          <p className="text-sm font-medium text-gray-500 mt-1">Trabalhos dos alunos pendentes de correção e nota.</p>
+          <p className="text-sm font-medium text-gray-500 mt-1">Trabalhos com resposta colada aguardando a sua revisão e aprovação.</p>
         </div>
       </div>
 
@@ -115,8 +123,8 @@ export default function AguardandoRevisao() {
           <div className="bg-green-100 text-green-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
             <CheckCircle2 size={40} />
           </div>
-          <h2 className="text-2xl font-black text-green-800 mb-2">Tudo em dia!</h2>
-          <p className="text-green-700 font-medium">Nenhuma atividade pendente de avaliação no momento.</p>
+          <h2 className="text-2xl font-black text-green-800 mb-2">Caixa Vazia!</h2>
+          <p className="text-green-700 font-medium">Você não tem nenhum rascunho ou revisão pendente no momento.</p>
           <Link to="/" className="inline-block mt-6 bg-white text-green-700 font-bold px-6 py-3 rounded-xl border border-green-200 hover:bg-green-100 transition-all shadow-sm">
             Voltar ao Dashboard
           </Link>
