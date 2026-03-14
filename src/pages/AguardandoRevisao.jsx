@@ -65,20 +65,21 @@ export default function AguardandoRevisao() {
               pendencias.push({
                 id: doc.id,
                 tarefaId: ativ.tarefaId,
-                alunoId: ativ.alunoId, // NOVO: Guardamos a ID do aluno para o teletransporte!
-                nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
-                nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
+                alunoId: ativ.alunoId, // Guardamos a ID do aluno para o teletransporte!
+                // AJUSTE: Fallback triplo para garantir que o nome apareça (Fim do bug do ".")
+                nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || 'Aluno Removido',
+                nomeTarefa: mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || 'Tarefa Removida',
                 dataCriacao: ativ.dataCriacao
               });
             }
           }
         });
 
-        // Ordena (O que foi criado primeiro/está esperando há mais tempo, aparece no topo)
+        // AJUSTE: Ordena da mais NOVA para a mais ANTIGA (O que foi salvo por último, aparece primeiro no topo)
         pendencias.sort((a, b) => {
           const tempoA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
           const tempoB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
-          return tempoA - tempoB;
+          return tempoB - tempoA; // tempoB - tempoA garante ordem decrescente
         });
 
         setListaPendencias(pendencias);
@@ -136,7 +137,7 @@ export default function AguardandoRevisao() {
             <Link 
               key={item.id} 
               to={`/revisar/${item.tarefaId}`} 
-              state={{ alunoId: item.alunoId }} // NOVO: "Jogando" o ID do aluno para a Estação de Trabalho!
+              state={{ alunoId: item.alunoId }} // "Jogando" o ID do aluno para a Estação de Trabalho!
               className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-yellow-400 transition-all group"
             >
               {/* Ícone de Relógio (Espera) */}
