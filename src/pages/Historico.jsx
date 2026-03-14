@@ -12,10 +12,8 @@ export default function Historico() {
   const [loading, setLoading] = useState(true);
   const [listaHistorico, setListaHistorico] = useState([]);
 
-  // Identifica o perfil para aplicar a regra de exibição
+  // Identifica o perfil para aplicar a regra de acesso às turmas
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
-  const planoUsuario = userProfile?.plano || 'basico';
-  const tituloPagina = isAdmin || planoUsuario === 'intermediario' || planoUsuario === 'premium' ? 'Histórico Finalizado' : 'Entregas Concluídas';
 
   useEffect(() => {
     async function fetchHistorico() {
@@ -48,7 +46,7 @@ export default function Historico() {
         const mapaAlunos = {};
         snapAlunos.docs.forEach(d => { mapaAlunos[d.id] = d.data().nome; });
 
-        // 3. Busca Atividades e aplica o Filtro Inteligente
+        // 3. Busca Atividades e aplica o Filtro Inteligente (Matemática do Dashboard)
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
         
@@ -58,15 +56,12 @@ export default function Historico() {
           const ativ = doc.data();
           
           if (turmasIds.includes(ativ.turmaId)) {
-            const isPostado = ativ.postado === true;
-            const isAprovado = ativ.status === 'aprovado';
+            // REGRA ESTRITA: Só entra no histórico se já foi oficialmente postado/finalizado.
+            const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
 
-            // REGRA: Se for Admin, só vê o que já foi postado. Se for professor, vê o que aprovou (postado ou não).
-            const deveMostrar = isAdmin ? isPostado : (isPostado || isAprovado);
-
-            if (deveMostrar) {
-              // Decide qual data usar para ordenação e exibição
-              const dataExibicao = isPostado && ativ.dataPostagem ? ativ.dataPostagem : ativ.dataAprovacao;
+            if (jaPostado) {
+              // Decide qual data usar para ordenação e exibição (Preferência para a data final)
+              const dataExibicao = ativ.dataPostagem || ativ.dataAprovacao || ativ.dataCriacao;
 
               historico.push({
                 id: doc.id,
@@ -74,7 +69,7 @@ export default function Historico() {
                 nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
                 nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
                 dataConclusao: dataExibicao,
-                isPostado: isPostado
+                isPostado: jaPostado
               });
             }
           }
@@ -116,9 +111,9 @@ export default function Historico() {
         </button>
         <div>
           <h1 className="text-2xl font-black text-gray-800 tracking-tight flex items-center gap-2">
-            <ArchiveRestore className="text-green-600" /> {tituloPagina}
+            <ArchiveRestore className="text-green-600" /> Histórico Finalizado
           </h1>
-          <p className="text-sm font-medium text-gray-500 mt-1">Registo permanente de todas as atividades finalizadas.</p>
+          <p className="text-sm font-medium text-gray-500 mt-1">Registro permanente de todas as atividades lançadas no portal oficial.</p>
         </div>
       </div>
 
@@ -133,7 +128,7 @@ export default function Historico() {
             <CheckCheck size={40} />
           </div>
           <h2 className="text-2xl font-black text-gray-700 mb-2">Gaveta Vazia</h2>
-          <p className="text-gray-500 font-medium">Nenhuma atividade concluída registada nesta instituição até o momento.</p>
+          <p className="text-gray-500 font-medium">Nenhuma atividade concluída registrada nesta instituição até o momento.</p>
           <Link to="/" className="inline-block mt-6 bg-white text-gray-700 font-bold px-6 py-3 rounded-xl border border-gray-300 hover:bg-gray-100 transition-all shadow-sm">
             Voltar ao Dashboard
           </Link>
@@ -163,11 +158,9 @@ export default function Historico() {
                     <CalendarDays size={12} />
                     {formatarData(item.dataConclusao)}
                   </span>
-                  {isAdmin && item.isPostado && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-green-700 bg-green-100 px-2 py-1 rounded-md uppercase tracking-widest">
-                      Lançado Oficialmente
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-green-700 bg-green-100 px-2 py-1 rounded-md uppercase tracking-widest">
+                    Lançado Oficialmente
+                  </span>
                 </div>
               </div>
 
