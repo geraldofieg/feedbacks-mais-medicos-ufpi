@@ -2,25 +2,32 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-// NOVO: Adicionei o ícone PlayCircle para o botão de ação rápida
 import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, PlayCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   
+  // LEITURA DE CRACHÁ (RBAC)
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
-  const planoUsuario = userProfile?.plano || 'basico'; 
-  const mostrarRevisao = isAdmin || planoUsuario === 'intermediario' || planoUsuario === 'premium';
-  const mostrarTermometroIA = isAdmin || planoUsuario === 'premium';
-  
+  const planoUsuario = userProfile?.plano || 'basico';
+  const isTier1 = planoUsuario === 'basico';
+  const isTier2 = planoUsuario === 'intermediario';
+  const isTier3 = planoUsuario === 'premium';
+
+  // VISIBILIDADE DAS CAIXAS
+  const mostrarRevisao = true; // Todos veem a caixa de Revisão
+  const mostrarFaltaPostar = isAdmin || isTier1 || isTier3; // Tier 2 (Patrícia) não precisa ver a caixa de postar
+  const mostrarTermometroIA = isAdmin || isTier3;
+
   const [instituicoes, setInstituicoes] = useState([]);
   const [minhasTurmas, setMinhasTurmas] = useState([]);
   const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]);
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
-  const [loading, setLoading] = useState(true);
+  const [progressoTarefas, setProgressoTarefas] = useState({}); // Memória para saber se a tarefa já começou
   
+  const [loading, setLoading] = useState(true);
   const [temAlunos, setTemAlunos] = useState(true); 
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
 
@@ -51,6 +58,7 @@ export default function Dashboard() {
       setKanban({ pendentes: 0, faltaLancar: 0, finalizados: 0 }); 
       setMetricasIA({ total: 0, originais: 0, percentual: 0 });
       setTarefasEmAndamento([]);
+      setProgressoTarefas({});
       setGestaoVista({ atual: null, anterior: null });
       
       try {
@@ -83,18 +91,29 @@ export default function Dashboard() {
           
           let p = 0, f = 0, ok = 0;
           let iaTotal = 0, iaOriginais = 0;
+          let progressoLocal = {};
           const pendenciasPorTarefa = {};
 
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
             if (tIds.includes(d.turmaId)) {
+              // MATEMÁTICA PURA DAS CAIXAS
               const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
-              const jaAprovado = d.status === 'aprovado' || d.status === 'revisado' || (d.feedbackFinal && String(d.feedbackFinal).trim() !== '');
+              const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
+              const temResposta = d.resposta && String(d.resposta).trim() !== '';
 
-              if (jaPostado) ok++; 
-              else if (jaAprovado) f++;  
-              else p++;  
+              if (jaPostado) {
+                ok++; // CAIXA 3: Histórico Finalizado
+                progressoLocal[d.tarefaId] = true;
+              } else if (jaAprovado) {
+                f++;  // CAIXA 2: Falta Postar
+                progressoLocal[d.tarefaId] = true;
+              } else if (temResposta) {
+                p++;  // CAIXA 1: Aguardando Revisão (Só entra se já tiver colado a resposta!)
+                progressoLocal[d.tarefaId] = true;
+              }
 
+              // TERMÔMETRO IA
               const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
               const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
               if ((jaAprovado || jaPostado) && fSugerido !== '') {
@@ -102,18 +121,20 @@ export default function Dashboard() {
                 if (fFinal === fSugerido) iaOriginais++;
               }
 
-              if (d.status === 'pendente' && alunosMap[d.alunoId]) {
+              // GESTÃO À VISTA (Quem está devendo / Falta trazer resposta)
+              const faltaAteTrazerResposta = !jaPostado && !jaAprovado && !temResposta;
+              if (faltaAteTrazerResposta && alunosMap[d.alunoId]) {
                 if (!pendenciasPorTarefa[d.tarefaId]) pendenciasPorTarefa[d.tarefaId] = [];
                 pendenciasPorTarefa[d.tarefaId].push(alunosMap[d.alunoId]);
               }
             }
           });
-          
+
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
+          setProgressoTarefas(progressoLocal);
 
           let tarefasEntregas = tarefasVivas.filter(t => tIds.includes(t.turmaId) && t.dataFim && t.tipo === 'entrega');
-
           tarefasEntregas = tarefasEntregas.map(t => {
             const endObj = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
             const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
@@ -133,11 +154,10 @@ export default function Dashboard() {
 
           const buildGroup = (rawGroup, type) => {
             if (!rawGroup || rawGroup.length === 0) return null;
-            
             let label = 'Anterior';
             let theme = 'gray'; 
             let blockTitle = `Encerrado em ${rawGroup[0].dataFimStr} (Anterior)`;
-            
+
             if (type === 'atual') {
               label = 'Atual';
               theme = 'orange';
@@ -165,7 +185,7 @@ export default function Dashboard() {
 
           let blocoDestaque = null;
           let ativasParaBarraPreta = [];
-          
+
           if (atuais.length > 0) {
             atuais.sort((a, b) => a.timeFim - b.timeFim);
             const dataFimAlvo = atuais[0].timeFim;
@@ -192,7 +212,7 @@ export default function Dashboard() {
             const isFutura = t.timeInicio > hoje.getTime();
             const alvoTempo = isFutura ? t.timeInicio : t.timeFim;
             const diasRestantes = Math.ceil((alvoTempo - hoje.getTime()) / (1000 * 3600 * 24));
-            
+
             setTarefasEmAndamento([{
               id: t.id,
               nomeTarefa: t.nomeTarefa || t.titulo,
@@ -209,16 +229,20 @@ export default function Dashboard() {
     fetchDados();
   }, [escolaSelecionada]);
 
-  const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
-
   // --- LÓGICA DE EXIBIÇÃO DO GRID E DO CARD DE AÇÃO RÁPIDA ---
   const tarefaAtualValida = tarefasEmAndamento.length > 0 && !tarefasEmAndamento[0].isFutura ? tarefasEmAndamento[0] : null;
+  
+  // INTELIGÊNCIA DO BOTÃO TELETRANSPORTE
+  let textoBotaoTeletransporte = "Iniciar correções";
+  if (tarefaAtualValida && progressoTarefas[tarefaAtualValida.id]) {
+    textoBotaoTeletransporte = "Continuar correções";
+  }
 
   // Calculando quantas colunas o Kanban precisa ter para não quebrar o layout
   let numCards = 1; // Histórico sempre aparece
   if (tarefaAtualValida) numCards++;
   if (mostrarRevisao) numCards++;
-  if (isAdmin) numCards++;
+  if (mostrarFaltaPostar) numCards++;
 
   let gridClass = "grid grid-cols-1 gap-5 mb-10 ";
   if (numCards === 4) gridClass += "md:grid-cols-2 lg:grid-cols-4";
@@ -241,9 +265,8 @@ export default function Dashboard() {
         </Link>
       </div>
     );
-  }
-
-  return (
+      }
+    return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
@@ -348,7 +371,7 @@ export default function Dashboard() {
           {/* KANBAN E ATALHOS */}
           <div className={gridClass}>
             
-            {/* NOVO: CARD DE TELETRANSPORTE (SÓ APARECE SE TIVER TAREFA ROLANDO HOJE) */}
+            {/* CARD DE TELETRANSPORTE (SÓ APARECE SE TIVER TAREFA ROLANDO HOJE) */}
             {tarefaAtualValida && (
               <div className="bg-white border border-indigo-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full -z-0"></div>
@@ -360,7 +383,7 @@ export default function Dashboard() {
                   {tarefaAtualValida.nomeTarefa}
                 </span>
                 <Link to={`/revisar/${tarefaAtualValida.id}`} className="mt-4 text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline w-fit relative z-10">
-                  Iniciar correções <ChevronRight size={14}/>
+                  {textoBotaoTeletransporte} <ChevronRight size={14}/>
                 </Link>
               </div>
             )}
@@ -376,8 +399,8 @@ export default function Dashboard() {
                 <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
               </div>
             )}
-            
-            {isAdmin && (
+             
+            {mostrarFaltaPostar && (
               <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest mt-1">Aguardando Postar</h3>
@@ -393,13 +416,13 @@ export default function Dashboard() {
                 <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
                 <div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div>
               </div>
-              <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
+              <span className="text-4xl font-black text-gray-800">{kanban.finalizados}</span>
               <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
             </div>
           </div>
 
           {/* =========================================================================
-              MOTOR DE GESTÃO À VISTA POR DATA ESTRITA (Sem Adivinhar Texto)
+                 MOTOR DE GESTÃO À VISTA POR DATA ESTRITA (Sem Adivinhar Texto)
               ========================================================================= */}
           {(gestaoVista.atual || gestaoVista.anterior) && (
             <div className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
