@@ -65,20 +65,21 @@ export default function FaltaPostar() {
               pendencias.push({
                 id: doc.id,
                 tarefaId: ativ.tarefaId,
-                alunoId: ativ.alunoId, // NOVO: Guardamos a ID do aluno para o teletransporte!
-                nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
-                nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
+                alunoId: ativ.alunoId, 
+                // AJUSTE: Fallback triplo para garantir que o nome apareça (Fim do bug do ".")
+                nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || 'Aluno Removido',
+                nomeTarefa: mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || 'Tarefa Removida',
                 dataAprovacao: ativ.dataAprovacao || ativ.dataCriacao
               });
             }
           }
         });
 
-        // Ordena da mais antiga para a mais nova (O que foi aprovado primeiro, aparece primeiro)
+        // AJUSTE: Ordena da mais NOVA para a mais ANTIGA (O que foi aprovado por último, aparece primeiro no topo)
         pendencias.sort((a, b) => {
           const tempoA = a.dataAprovacao?.toMillis ? a.dataAprovacao.toMillis() : 0;
           const tempoB = b.dataAprovacao?.toMillis ? b.dataAprovacao.toMillis() : 0;
-          return tempoA - tempoB;
+          return tempoB - tempoA; 
         });
 
         setListaPendencias(pendencias);
@@ -92,8 +93,7 @@ export default function FaltaPostar() {
     fetchFaltaPostar();
   }, [currentUser, userProfile, escolaSelecionada, isAdmin]);
 
-  // NOVO: BLINDAGEM DA PATRÍCIA (Tier 2)
-  // Se ela tentar acessar a URL /faltapostar na mão, o sistema avisa e bloqueia com elegância.
+  // BLINDAGEM DA PATRÍCIA (Tier 2)
   if (isTier2 && !isAdmin) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 text-center">
@@ -150,7 +150,7 @@ export default function FaltaPostar() {
             <Link 
               key={item.id} 
               to={`/revisar/${item.tarefaId}`} 
-              state={{ alunoId: item.alunoId }} // NOVO: "Jogando" o ID do aluno para a página seguinte!
+              state={{ alunoId: item.alunoId }}
               className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-400 transition-all group"
             >
               <div className="bg-blue-50 text-blue-600 p-4 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
