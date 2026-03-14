@@ -1,474 +1,170 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  ArrowLeft, CheckCircle, User, Copy, 
-  Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck, Eraser,
-  Lock, Settings 
-} from 'lucide-react';
-import Breadcrumb from '../components/Breadcrumb';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { ArrowLeft, Clock, ChevronRight, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
-export default function RevisarAtividade() {
-  const { id } = useParams();
+export default function AguardandoRevisao() {
+  const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation(); // NOVO: Para ler o "pacote" enviado pelas listas
-  const { currentUser, userProfile } = useAuth();
   
   const [loading, setLoading] = useState(true);
-  const [tarefa, setTarefa] = useState(null);
-  const [alunos, setAlunos] = useState([]);
-  const [atividadesMap, setAtividadesMap] = useState({});
-  
-  // NOVO: Já inicia com o aluno que foi clicado na lista (se houver)
-  const [alunoSelecionadoId, setAlunoSelecionadoId] = useState(location.state?.alunoId || '');
-  
-  const [novaResposta, setNovaResposta] = useState('');
-  const [feedbackEditado, setFeedbackEditado] = useState('');
-  const [notaAluno, setNotaAluno] = useState(''); 
-  
-  const [salvando, setSalvando] = useState(false);
-  const [copiado, setCopiado] = useState(false);
-  const [gerandoIA, setGerandoIA] = useState(false);
-  const [marcandoPostado, setMarcandoPostado] = useState(false);
-
-  // Leitura de Crachá (Camaleão)
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
-  const isPremium = userProfile?.plano === 'premium' || isAdmin;
-  const isTier2 = userProfile?.plano === 'intermediario';
-  const isTier1 = !isPremium && !isTier2;
-
-  const respostaEstaVazia = novaResposta.trim().length === 0;
-
-  // NOVO: Fica escutando caso o professor clique em outro link enquanto já está na página
-  useEffect(() => {
-    if (location.state?.alunoId) {
-      setAlunoSelecionadoId(location.state.alunoId);
-    }
-  }, [location.state?.alunoId]);
+  const [listaPendencias, setListaPendencias] = useState([]);
 
   useEffect(() => {
-    async function buscarDadosDaEstacao() {
+    async function fetchAguardandoRevisao() {
+      if (!currentUser || !escolaSelecionada?.id) return;
       setLoading(true);
       try {
-        const snapTarefa = await getDoc(doc(db, 'tarefas', id));
-        if (!snapTarefa.exists()) return navigate('/');
-        setTarefa({ id: snapTarefa.id, ...snapTarefa.data() });
+        // 1. Regra de Acesso: Busca as turmas que este usuário pode ver
+        const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+        
+        const turmasRef = collection(db, 'turmas');
+        const qTurmas = isAdmin
+          ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
+          : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+          
+        const snapTurmas = await getDocs(qTurmas);
+        const turmasIds = snapTurmas.docs.map(t => t.id);
 
-        const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', snapTarefa.data().turmaId));
+        if (turmasIds.length === 0) {
+          setListaPendencias([]);
+          setLoading(false);
+          return;
+        }
+
+        // 2. Busca Tarefas e Alunos para cruzar os nomes (Dicionários)
+        const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
+        const snapTarefas = await getDocs(qTarefas);
+        const mapaTarefas = {};
+        snapTarefas.docs.forEach(d => { mapaTarefas[d.id] = d.data().nomeTarefa || d.data().titulo; });
+
+        const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAlunos = await getDocs(qAlunos);
-        const listaAlunos = snapAlunos.docs.map(d => ({ 
-          id: d.id, ...d.data() 
-        })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome));
-        setAlunos(listaAlunos);
+        const mapaAlunos = {};
+        snapAlunos.docs.forEach(d => { mapaAlunos[d.id] = d.data().nome; });
 
-        const qAtividades = query(collection(db, 'atividades'), where('tarefaId', '==', id));
+        // 3. Busca as Atividades "Aguardando Revisão" com a Nova Matemática (V3)
+        const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
-        const mapa = {};
-        snapAtividades.docs.forEach(d => { mapa[d.data().alunoId] = { id: d.id, ...d.data() }; });
-        setAtividadesMap(mapa);
-      } catch (error) { console.error(error); } 
-      finally { setLoading(false); }
+        
+        const pendencias = [];
+        
+        snapAtividades.docs.forEach(doc => {
+          const ativ = doc.data();
+          
+          if (turmasIds.includes(ativ.turmaId)) {
+            // LÓGICA ESPELHADA DO DASHBOARD
+            const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
+            const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+            const temResposta = ativ.resposta && String(ativ.resposta).trim() !== '';
+
+            // Só entra na lista de Revisão se tiver resposta colada E não tiver sido aprovado nem postado
+            if (!jaPostado && !jaAprovado && temResposta) {
+              pendencias.push({
+                id: doc.id,
+                tarefaId: ativ.tarefaId,
+                alunoId: ativ.alunoId, // Guardamos a ID do aluno para o teletransporte!
+                // AJUSTE: Fallback triplo para garantir que o nome apareça (Fim do bug do ".")
+                nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || 'Aluno Removido',
+                nomeTarefa: mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || 'Tarefa Removida',
+                dataCriacao: ativ.dataCriacao
+              });
+            }
+          }
+        });
+
+        // AJUSTE: Ordena da mais NOVA para a mais ANTIGA (O que foi salvo por último, aparece primeiro no topo)
+        pendencias.sort((a, b) => {
+          const tempoA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
+          const tempoB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
+          return tempoB - tempoA; // tempoB - tempoA garante ordem decrescente
+        });
+
+        setListaPendencias(pendencias);
+      } catch (error) {
+        console.error("Erro ao buscar pendências:", error);
+      } finally {
+        setLoading(false);
+      }
     }
-    buscarDadosDaEstacao();
-  }, [id, navigate]);
 
-  const alunoAtual = alunoSelecionadoId ? alunos.find(a => a.id === alunoSelecionadoId) : null;
-  const atividadeAtual = alunoAtual ? atividadesMap[alunoAtual.id] : null;
+    fetchAguardandoRevisao();
+  }, [currentUser, userProfile, escolaSelecionada]);
 
-  useEffect(() => {
-    setNovaResposta(atividadeAtual?.resposta || '');
-    setFeedbackEditado(atividadeAtual?.feedbackFinal || atividadeAtual?.feedbackSugerido || '');
-    setNotaAluno(atividadeAtual?.nota || '');
-  }, [alunoSelecionadoId, atividadeAtual]);
-
-  // Gatilho da IA com Trava de Novato e Vitrine Tier 1
-  async function handleGerarIA() {
-    if (isTier1) {
-      if (window.confirm("🔒 Ganhe tempo! Deixe nossa IA integrada ler a resposta do aluno e redigir o feedback por você.\n\nDeseja conhecer o Plano Premium agora?")) {
-        navigate('/planos');
-      }
-      return;
-    }
-    
-    if (!userProfile?.promptPersonalizado) {
-      if (window.confirm("Opa! Antes de gerar a mágica, você precisa dizer para a IA como você gosta de avaliar. Vamos lá configurar em 'Configurações'?")) {
-        navigate('/configuracoes');
-      }
-      return;
-    }
-
-    if (respostaEstaVazia) return;
-    setGerandoIA(true);
-
+  const formatarData = (ts) => {
+    if (!ts) return "";
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: "gemini-3.1-flash-lite-preview",
-        tools: [{ googleSearch: {} }] 
-      });
-
-      const promptCompleto = `
-        Aja como um preceptor médico. Estilo: ${userProfile?.promptPersonalizado || 'Direto e técnico.'}
-        QUESTÃO: ${tarefa?.enunciado}
-        RESPOSTA: "${novaResposta}"
-        Gere um feedback direto ao aluno.
-      `;
-
-      const result = await model.generateContent(promptCompleto);
-      setFeedbackEditado(result.response.text());
-    } catch (e) { 
-      console.error("ERRO COMPLETO DA API:", e);
-      alert("A API recusou o pedido. Erro: " + e.message); 
-    }
-    finally { setGerandoIA(false); }
-  }
-
-  // Função para salvar e pausar (Fica na Revisão)
-  async function handleSalvarRascunho() {
-    if (salvando || !alunoAtual) return;
-    setSalvando(true);
-    try {
-      const payload = { 
-        resposta: novaResposta.trim(),
-        feedbackFinal: feedbackEditado.trim(), 
-        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
-        nota: notaAluno.trim() || null, 
-        status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente_revisao', 
-        dataAprovacao: serverTimestamp() 
-      };
-
-      if (atividadeAtual) {
-        await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
-        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
-      } else {
-        const novaAtiv = { alunoId: alunoAtual.id, turmaId: tarefa.turmaId, instituicaoId: tarefa.instituicaoId, tarefaId: tarefa.id, dataCriacao: serverTimestamp(), postado: false, ...payload };
-        const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
-        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
-      }
-      alert("Rascunho salvo! A atividade continua aguardando revisão.");
-    } catch (error) { console.error(error); } finally { setSalvando(false); }
-  }
-
-  // Função para Aprovar (Manda para a UFPI ou pro Admin)
-  async function handleAprovar(copiarAoAprovar = false) {
-    if (salvando || !alunoAtual) return;
-    setSalvando(true);
-    try {
-      const payload = { 
-        resposta: novaResposta.trim(),
-        feedbackFinal: feedbackEditado.trim(), 
-        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
-        nota: notaAluno.trim() || null, 
-        status: 'aprovado', 
-        dataAprovacao: serverTimestamp() 
-      };
-
-      if (atividadeAtual) {
-        await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
-        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
-      } else {
-        const novaAtiv = { alunoId: alunoAtual.id, turmaId: tarefa.turmaId, instituicaoId: tarefa.instituicaoId, tarefaId: tarefa.id, dataCriacao: serverTimestamp(), postado: false, ...payload };
-        const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
-        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
-      }
-      
-      if (copiarAoAprovar) {
-        navigator.clipboard.writeText(feedbackEditado.trim());
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-      }
-
-      if (isTier2) {
-        alert("Feedback aprovado! O administrador já foi notificado para postar no sistema oficial.");
-        setAlunoSelecionadoId(''); // Tira da tela e vai pro próximo
-      } else if (!copiarAoAprovar) {
-        alert("Feedback aprovado e pronto para lançamento!");
-      }
-      
-    } catch (error) { console.error(error); } finally { setSalvando(false); }
-  }
-
-  async function handleMarcarPostado() {
-    if (marcandoPostado || !atividadeAtual) return;
-    setMarcandoPostado(true);
-    try {
-      await updateDoc(doc(db, 'atividades', atividadeAtual.id), { postado: true, dataPostagem: serverTimestamp() });
-      setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], postado: true } }));
-      alert("Status atualizado para FINALIZADO.");
-    } catch (error) { console.error(error); } finally { setMarcandoPostado(false); }
-  }
-    if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse text-xl">Iniciando estação...</div>;
+      let d = ts.toDate ? ts.toDate() : new Date(ts);
+      if (isNaN(d.getTime())) return "";
+      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch (e) { return ""; }
+  };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans">
-      
-      <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3 self-start md:self-auto">
-             <Link to="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><ArrowLeft size={20} /></Link>
-             <div>
-               <h2 className="text-lg font-black text-slate-900 tracking-tight leading-none truncate max-w-[250px] md:max-w-none">{tarefa?.nomeTarefa}</h2>
-               <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Estação de Trabalho</p>
-             </div>
-          </div>
-          
-          <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-2xl w-full md:w-[450px]">
-            <Search size={16} className="text-blue-500" />
-            <select 
-              className="bg-transparent font-black text-slate-700 outline-none w-full cursor-pointer text-xs md:text-sm"
-              value={alunoSelecionadoId}
-              onChange={(e) => setAlunoSelecionadoId(e.target.value)}
-            >
-              <option value="">Buscar Aluno na Lista...</option>
-              {alunos.map(a => {
-                const registro = atividadesMap[a.id];
-                let icone = '🔴'; 
-                if (registro) {
-                  if (registro.postado) icone = '✅';
-                  else icone = '🟡';
-                }
-                return <option key={a.id} value={a.id}>{icone} {a.nome}</option>;
-              })}
-            </select>
-          </div>
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Cabeçalho */}
+      <div className="flex items-center gap-4 mb-8">
+        <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-yellow-600 transition-colors p-2 -ml-2">
+          <ArrowLeft size={28} />
+        </button>
+        <div>
+          <h1 className="text-2xl font-black text-gray-800 tracking-tight">Aguardando Revisão</h1>
+          <p className="text-sm font-medium text-gray-500 mt-1">Trabalhos com resposta colada aguardando a sua revisão e aprovação.</p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6 md:mt-10">
-        {!alunoAtual ? (
-          <div className="bg-white p-12 md:p-24 rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
-             <h3 className="text-2xl font-black text-slate-800 mb-8">Status das Atividades</h3>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
-                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col items-center text-center">
-                   <span className="text-3xl mb-3">🔴</span>
-                   <h4 className="font-black text-slate-700 text-sm uppercase mb-1">Aguardando</h4>
-                   <p className="text-[11px] text-slate-500 font-bold leading-tight">Você ainda não trouxe a resposta do aluno para esta plataforma.</p>
-                </div>
-                <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col items-center text-center shadow-sm">
-                   <span className="text-3xl mb-3">🟡</span>
-                   <h4 className="font-black text-amber-700 text-sm uppercase mb-1">Em Revisão</h4>
-                   <p className="text-[11px] text-amber-600 font-bold leading-tight">
-                     A resposta já está aqui, mas ainda não foi aprovado o feedback sugerido pela IA e a atividade não foi marcada como lançada no sistema oficial.
-                   </p>
-                </div>
-                <div className="bg-green-50 p-6 rounded-3xl border border-green-100 flex flex-col items-center text-center shadow-sm">
-                   <span className="text-3xl mb-3">✅</span>
-                   <h4 className="font-black text-green-700 text-sm uppercase mb-1">Lançado</h4>
-                   <p className="text-[11px] text-green-600 font-bold leading-tight">
-                     Trabalho concluído! O feedback e/ou a nota já foi (foram) lançada(os) para o portal da sua instituição.
-                   </p>
-                </div>
-             </div>
+      {loading ? (
+        <div className="text-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-yellow-500 mx-auto mb-4"></div>
+          <p className="text-gray-500 font-bold">Buscando pendências...</p>
+        </div>
+      ) : listaPendencias.length === 0 ? (
+        <div className="bg-green-50 border-2 border-dashed border-green-200 rounded-3xl p-12 text-center shadow-sm">
+          <div className="bg-green-100 text-green-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+            <CheckCircle2 size={40} />
           </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-8 space-y-6">
+          <h2 className="text-2xl font-black text-green-800 mb-2">Caixa Vazia!</h2>
+          <p className="text-green-700 font-medium">Você não tem nenhum rascunho ou revisão pendente no momento.</p>
+          <Link to="/" className="inline-block mt-6 bg-white text-green-700 font-bold px-6 py-3 rounded-xl border border-green-200 hover:bg-green-100 transition-all shadow-sm">
+            Voltar ao Dashboard
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {listaPendencias.map((item) => (
+            <Link 
+              key={item.id} 
+              to={`/revisar/${item.tarefaId}`} 
+              state={{ alunoId: item.alunoId }} // "Jogando" o ID do aluno para a Estação de Trabalho!
+              className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-yellow-400 transition-all group"
+            >
+              {/* Ícone de Relógio (Espera) */}
+              <div className="bg-yellow-50 text-yellow-600 p-4 rounded-xl group-hover:bg-yellow-500 group-hover:text-white transition-colors shrink-0">
+                <Clock size={24} />
+              </div>
               
-              {/* NOVO: BARRA DE PROGRESSO VISUAL (E-commerce) */}
-              <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 mb-6">
-                <div className="flex items-center justify-between relative px-4 md:px-12">
-                   {/* Linha Fundo */}
-                   <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
-                   
-                   {/* Linha de Progresso Dinâmica */}
-                   <div className={`absolute left-10 top-1/2 -translate-y-1/2 h-1 bg-blue-500 -z-10 rounded-full transition-all duration-500 ${
-                     atividadeAtual?.postado ? 'w-[calc(100%-5rem)] bg-green-500' : (atividadeAtual?.status === 'aprovado' ? 'w-1/2 bg-amber-400' : 'w-0')
-                   }`}></div>
-
-                   {/* Passo 1 */}
-                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${novaResposta ? 'text-blue-600' : 'text-slate-400'}`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${novaResposta ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>1</div>
-                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Trazer<br/>Resposta</span>
-                   </div>
-
-                   {/* Passo 2 */}
-                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${atividadeAtual?.status === 'aprovado' ? (atividadeAtual?.postado ? 'text-green-600' : 'text-amber-500') : 'text-slate-400'}`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${atividadeAtual?.status === 'aprovado' ? (atividadeAtual?.postado ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-amber-400 text-white shadow-lg shadow-amber-400/30') : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>2</div>
-                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Revisar<br/>Feedback</span>
-                   </div>
-
-                   {/* Passo 3 */}
-                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${atividadeAtual?.postado ? 'text-green-600' : 'text-slate-400'}`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${atividadeAtual?.postado ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>3</div>
-                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Lançar<br/>Oficial</span>
-                   </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-black text-gray-800 text-base md:text-lg uppercase tracking-wide truncate group-hover:text-yellow-700 transition-colors">
+                  {item.nomeAluno}
+                </h3>
+                <p className="text-sm font-bold text-gray-500 truncate mt-0.5">
+                  {item.nomeTarefa}
+                </p>
+                <div className="flex items-center gap-1.5 mt-2 text-xs font-bold text-yellow-700 bg-yellow-50 inline-flex px-2 py-1 rounded-lg border border-yellow-100">
+                  <CalendarDays size={14} />
+                  <span>Gerado em: {formatarData(item.dataCriacao)}</span>
                 </div>
               </div>
 
-              <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-6 md:p-10 space-y-12">
-                  <section>
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black">1</div>
-                      <h4 className="text-xs font-black text-slate-900 uppercase">Enunciado</h4>
-                    </div>
-                    <div className="bg-slate-50 p-6 md:p-8 rounded-2xl text-slate-700 leading-relaxed font-medium text-base md:text-lg">
-                      {tarefa?.enunciado || "Sem enunciado."}
-                    </div>
-                  </section>
-                  
-                  <section>
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black">2</div>
-                      <h4 className="text-xs font-black text-slate-900 uppercase flex-1">Resposta do Aluno</h4>
-                      
-                      {novaResposta && (
-                         <button 
-                           onClick={() => setNovaResposta('')} 
-                           className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
-                           title="Limpar caixa de texto"
-                         >
-                           <Eraser size={14}/> Limpar
-                         </button>
-                      )}
-                    </div>
-                    <textarea 
-                      rows="14" 
-                      placeholder="Cole a resposta aqui..." 
-                      className="w-full p-6 md:p-8 rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-base md:text-lg" 
-                      value={novaResposta} 
-                      onChange={(e) => setNovaResposta(e.target.value)}
-                    />
-                  </section>
+              <div className="text-gray-300 group-hover:text-yellow-500 transition-colors shrink-0">
+                <ChevronRight size={24} />
               </div>
-            </div>
-
-            <div className="lg:col-span-4 lg:sticky lg:top-24">
-              <div className="bg-slate-900 rounded-[32px] p-6 md:p-8 text-white shadow-2xl border border-slate-800">
-                <div className="mb-6">
-                  <h3 className="text-lg md:text-xl font-black flex items-center gap-3 mb-6">
-                    <CheckCircle className="text-green-400" size={24}/>Avaliação
-                  </h3>
-                 
-                  {/* NOVO: BOTÃO IA CAMALEÃO */}
-                  <div className="flex flex-col items-center">
-                    <button 
-                      onClick={handleGerarIA} 
-                      disabled={gerandoIA || respostaEstaVazia} 
-                      className={`w-full py-4 rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 mb-3 ${
-                        isTier1 
-                          ? 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 cursor-pointer' 
-                          : (gerandoIA ? 'bg-slate-800 text-indigo-300' : respostaEstaVazia ? 'bg-slate-800 text-slate-600 border border-slate-800 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 shadow-indigo-500/20')
-                      }`}
-                    >
-                      {isTier1 ? <Lock size={18}/> : (gerandoIA ? <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>)}
-                      {isTier1 ? 'Gerar Feedback IA' : (gerandoIA ? 'Escrevendo...' : 'Gerar Feedback IA')}
-                    </button>
-                    
-                    {(isPremium || isTier2) && (
-                      <Link to="/configuracoes" className="inline-flex items-center gap-1.5 text-[9px] font-bold text-slate-400 hover:text-blue-400 transition-colors uppercase tracking-widest mt-1">
-                        <Settings size={12}/> Editar instruções para feedback
-                      </Link>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  
-                  <div>
-                    <div className="flex justify-between items-end mb-2 px-2">
-                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Texto do Feedback</label>
-                       {feedbackEditado && (
-                         <button 
-                           onClick={() => setFeedbackEditado('')} 
-                           className="text-[10px] font-bold text-slate-400 hover:text-red-400 flex items-center gap-1 uppercase tracking-widest transition-colors"
-                         >
-                           <Eraser size={12}/> Limpar
-                         </button>
-                       )}
-                    </div>
-                    <textarea 
-                      rows="10" 
-                      placeholder="O feedback aparecerá aqui..." 
-                      className="w-full bg-slate-800 border-none rounded-2xl p-5 text-sm font-medium text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none leading-relaxed" 
-                      value={feedbackEditado} 
-                      onChange={e => setFeedbackEditado(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-3 bg-slate-800 p-4 rounded-2xl border border-slate-700">
-                    <GraduationCap className="text-blue-400" size={20}/>
-                    <div className="flex-1">
-                      <label className="block text-[9px] font-black text-slate-500 uppercase mb-0.5">Nota</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ex: 10.0" 
-                        className="bg-transparent border-none outline-none font-black text-white w-full text-base" 
-                        value={notaAluno} 
-                        onChange={e => setNotaAluno(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* NOVO: RODAPÉ CAMALEÃO E FLUXO EXPRESSO */}
-                  {atividadeAtual?.postado ? (
-                     <div className="w-full bg-green-500/20 border border-green-500/30 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
-                        <CheckCheck size={18}/> LANÇADO OFICIALMENTE
-                     </div>
-                  ) : atividadeAtual?.status === 'aprovado' ? (
-                     
-                     isTier2 ? (
-                        <div className="w-full bg-amber-500/20 border border-amber-500/30 text-amber-500 py-4 rounded-2xl text-[10px] font-black flex justify-center items-center gap-2 text-center px-4 leading-tight">
-                          <CheckCheck size={16}/> APROVADO POR VOCÊ.<br/>AGUARDANDO POSTAGEM DO ADMIN.
-                        </div>
-                     ) : (
-                        <div className="pt-2 border-t border-slate-800 space-y-3">
-                          <button 
-                            onClick={() => handleAprovar(true)} 
-                            className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"
-                          >
-                            <Copy size={18}/> {copiado ? 'Copiado para o seu Sistema!' : '1. Copiar Feedback'}
-                          </button>
-
-                          <button 
-                            onClick={handleMarcarPostado} 
-                            disabled={marcandoPostado} 
-                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl"
-                          >
-                            <Send size={18}/> 2. Confirmar Lançamento Oficial
-                          </button>
-                        </div>
-                     )
-
-                  ) : (
-                     isTier2 ? (
-                        <button 
-                          onClick={() => handleAprovar(false)} 
-                          disabled={salvando || !feedbackEditado} 
-                          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-3xl shadow-xl transition-all flex justify-center items-center gap-3 text-lg"
-                        >
-                          {salvando ? <RefreshCw className="animate-spin" size={20}/> : <CheckCircle size={20}/>}
-                          Aprovar Feedback
-                        </button>
-                     ) : (
-                        <div className="grid grid-cols-2 gap-3 pt-2">
-                          <button 
-                            onClick={handleSalvarRascunho} 
-                            disabled={salvando || !feedbackEditado} 
-                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-black py-3.5 rounded-2xl transition-all flex justify-center items-center gap-2 text-xs border border-slate-700"
-                          >
-                            {salvando ? <RefreshCw className="animate-spin" size={16}/> : '💾 Salvar Rascunho'}
-                          </button>
-                          <button 
-                            onClick={() => handleAprovar(true)} 
-                            disabled={salvando || !feedbackEditado} 
-                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 rounded-2xl shadow-xl transition-all flex justify-center items-center gap-2 text-xs"
-                          >
-                            {salvando ? <RefreshCw className="animate-spin" size={16}/> : '🚀 Aprovar e Copiar'}
-                          </button>
-                        </div>
-                     )
-                  )}
-
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
