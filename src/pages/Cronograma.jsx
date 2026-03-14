@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowLeft, CalendarDays, Clock, CheckCircle2, GraduationCap, Calendar, StickyNote, AlertCircle, FileText, BookOpen, LayoutList } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, CheckCircle2, GraduationCap, Calendar, AlertCircle, BookOpen, LayoutList, PlayCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -20,6 +20,7 @@ export default function Cronograma() {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
   const [tarefas, setTarefas] = useState([]);
+  const [progressoTarefas, setProgressoTarefas] = useState({}); // NOVO: Guarda quais tarefas já começaram
   const [loading, setLoading] = useState(true);
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
@@ -60,18 +61,38 @@ export default function Cronograma() {
   }, [currentUser, escolaSelecionada, isAdmin, location.state?.turmaIdSelecionada, turmaAtiva]);
 
   useEffect(() => {
-    async function fetchTarefas() {
-      if (!turmaAtiva) { setTarefas([]); setLoading(false); return; }
+    async function fetchTarefasEProgresso() {
+      if (!turmaAtiva) { setTarefas([]); setProgressoTarefas({}); setLoading(false); return; }
       setLoading(true);
       try {
+        // 1. Busca as Tarefas
         const qA = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapA = await getDocs(qA);
         const tarefasData = snapA.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTarefas(tarefasData);
+
+        // 2. Busca as Atividades para saber se a tarefa já começou (Lógica do Botão Inteligente)
+        const qAtiv = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
+        const snapAtiv = await getDocs(qAtiv);
+        
+        let progressoLocal = {};
+        snapAtiv.docs.forEach(doc => {
+          const ativ = doc.data();
+          const temResposta = ativ.resposta && String(ativ.resposta).trim() !== '';
+          const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+          const jaPostado = ativ.postado === true || ativ.status === 'finalizado';
+
+          if (temResposta || jaAprovado || jaPostado) {
+            progressoLocal[ativ.tarefaId] = true;
+          }
+        });
+        
+        setProgressoTarefas(progressoLocal);
+
       } catch (error) { console.error("Erro buscar tarefas:", error); } 
       finally { setLoading(false); }
     }
-    fetchTarefas();
+    fetchTarefasEProgresso();
   }, [turmaAtiva]);
 
   const getStatusPrazo = (tsInicio, tsFim) => {
@@ -191,6 +212,9 @@ export default function Cronograma() {
                       const { status, diasRestantes, dataFormatada } = item.statusObj;
                       const isAtual = status === 'atual';
                       const isPassado = status === 'passado';
+                      
+                      // AJUSTE: O texto do botão muda se já tiver progresso!
+                      const textoAcao = progressoTarefas[item.id] ? "Continuar correções" : "Iniciar correções";
 
                       return (
                         <div key={item.id} className="relative group">
@@ -204,23 +228,36 @@ export default function Cronograma() {
                           
                           {isPassado && <span className="absolute -top-3 left-6 bg-gray-200 text-gray-500 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 z-20"><CheckCircle2 size={12}/> CONCLUÍDO</span>}
 
-                          <Link 
-                            to={item.tipo === 'entrega' ? `/revisar/${item.id}` : '#'} 
-                            className={`block p-6 rounded-2xl border transition-all ${isAtual ? 'bg-blue-50 border-blue-300 shadow-lg transform scale-[1.01]' : 'bg-white border-gray-200 hover:border-blue-200'} ${isPassado ? 'opacity-60' : ''}`}
-                          >
-                            <div className="mt-1">
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                                {item.tipo === 'entrega' ? 'ATIVIDADE ACADÊMICA' : item.tipo?.toUpperCase() || 'ATIVIDADE'}
-                              </p>
-                              <h3 className={`text-xl font-black mb-3 ${isAtual ? 'text-blue-900' : 'text-gray-800'}`}>
-                                {item.nomeTarefa || item.titulo}
-                              </h3>
-                              <div className="flex items-center gap-2 text-sm font-bold text-gray-500 bg-white/50 inline-flex px-3 py-1.5 rounded-lg border border-gray-100">
-                                <Calendar size={16} className={isAtual ? 'text-blue-500' : 'text-gray-400'} />
-                                {dataFormatada}
+                          <div className={`block p-6 rounded-2xl border transition-all ${isAtual ? 'bg-blue-50 border-blue-300 shadow-lg transform scale-[1.01]' : 'bg-white border-gray-200 hover:border-blue-200'} ${isPassado ? 'opacity-60' : ''}`}>
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-1">
+                              <div>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                  {item.tipo === 'entrega' ? 'ATIVIDADE ACADÊMICA' : item.tipo?.toUpperCase() || 'ATIVIDADE'}
+                                </p>
+                                <h3 className={`text-xl font-black mb-3 ${isAtual ? 'text-blue-900' : 'text-gray-800'}`}>
+                                  {item.nomeTarefa || item.titulo}
+                                </h3>
+                                <div className="flex items-center gap-2 text-sm font-bold text-gray-500 bg-white/50 inline-flex px-3 py-1.5 rounded-lg border border-gray-100">
+                                  <Calendar size={16} className={isAtual ? 'text-blue-500' : 'text-gray-400'} />
+                                  {dataFormatada}
+                                </div>
                               </div>
+                              
+                              {/* NOVO: Botão de ação rápida refeito */}
+                              {item.tipo === 'entrega' && (
+                                <Link 
+                                  to={`/revisar/${item.id}`} 
+                                  className={`shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl font-black text-sm transition-all shadow-sm ${
+                                    isAtual 
+                                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/30' 
+                                      : 'bg-white border-2 border-gray-200 text-gray-600 hover:border-blue-500 hover:text-blue-600'
+                                  }`}
+                                >
+                                  <PlayCircle size={18}/> {textoAcao}
+                                </Link>
+                              )}
                             </div>
-                          </Link>
+                          </div>
                         </div>
                       );
                     })}
