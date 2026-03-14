@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,13 +14,16 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export default function RevisarAtividade() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation(); // NOVO: Para ler o "pacote" enviado pelas listas
   const { currentUser, userProfile } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [tarefa, setTarefa] = useState(null);
   const [alunos, setAlunos] = useState([]);
   const [atividadesMap, setAtividadesMap] = useState({});
-  const [alunoSelecionadoId, setAlunoSelecionadoId] = useState('');
+  
+  // NOVO: Já inicia com o aluno que foi clicado na lista (se houver)
+  const [alunoSelecionadoId, setAlunoSelecionadoId] = useState(location.state?.alunoId || '');
   
   const [novaResposta, setNovaResposta] = useState('');
   const [feedbackEditado, setFeedbackEditado] = useState('');
@@ -38,6 +41,13 @@ export default function RevisarAtividade() {
   const isTier1 = !isPremium && !isTier2;
 
   const respostaEstaVazia = novaResposta.trim().length === 0;
+
+  // NOVO: Fica escutando caso o professor clique em outro link enquanto já está na página
+  useEffect(() => {
+    if (location.state?.alunoId) {
+      setAlunoSelecionadoId(location.state.alunoId);
+    }
+  }, [location.state?.alunoId]);
 
   useEffect(() => {
     async function buscarDadosDaEstacao() {
