@@ -37,11 +37,11 @@ Todas as coleções recebem a chave `instituicaoId` para isolamento absoluto de 
 ## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
 * **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada na sessão, o Dashboard exibe a interface de criação (Empty State de Nível 1).
 * **Troca de Contexto Inteligente:** O Dashboard possui um *Dropdown* nativo no cabeçalho para alternar entre Instituições.
-* **Atalho VIP de Ação Rápida (Teletransporte):** Foco em redução de *Time to Value*. O Dashboard avalia dinamicamente se existe uma tarefa em andamento (data de hoje contida no prazo). Caso positivo, exibe um card roxo de destaque que teletransporta o professor diretamente para a tela de Estação de Correção (`/revisar/:id`) com um clique.
-* **A Esteira de Produção (Kanban Numérico Inteligente):** O Dashboard apresenta o funil de trabalho com links diretos para páginas físicas independentes. Sua exibição se adapta ao Perfil (Role):
-    * **Visão Gestor (Admin):** 3 Caixas (Aguardando Revisão `/aguardandorevisao` ➔ Pronto p/ Lançar `/faltapostar` ➔ Histórico Finalizado `/historico`).
-    * **Visão Professor Básico (Tier 1):** 1 Caixa (Resumo do Histórico Finalizado).
-    * **Visão Professor Inter/Premium (Tier 2/3):** 2 Caixas (Aguardando Revisão ➔ Histórico Finalizado). A caixa `/faltapostar` é oculta e seus valores somados ao Histórico.
+* **Atalho VIP de Ação Rápida (Teletransporte):** Foco em redução de *Time to Value*. O Dashboard avalia dinamicamente se existe uma tarefa em andamento (data de hoje contida no prazo). Caso positivo, exibe um card roxo de destaque que teletransporta o professor diretamente para a tela de Estação de Correção (`/revisar/:id`). O texto do botão possui inteligência de banco de dados: se não houver progresso, exibe **"Iniciar correções"**; se pelo menos uma resposta já foi colada, atualiza para **"Continuar correções"**.
+* **A Esteira de Produção (Kanban Matemático Inteligente):** O Dashboard apresenta o funil de trabalho espelhado no Semáforo Acadêmico. Os alunos só entram na matemática da Revisão a partir do momento em que o professor **cola a resposta deles** no sistema (`temResposta === true`):
+    * **Caixa 1: Aguardando Revisão (`/aguardandorevisao`):** Resposta colada, mas feedback não aprovado. (Bolinhas vermelhas *não* somam aqui, pois não há resposta para revisar).
+    * **Caixa 2: Aguardando Postar (`/faltapostar`):** Feedback aprovado, mas `postado` ainda é `false`. (Oculta para o Tier 2).
+    * **Caixa 3: Histórico Finalizado (`/historico`):** `postado` é `true`. Ciclo encerrado definitivamente.
 * **Termômetro da IA:** Mede a eficiência do prompt. Regra: Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Apenas visível para Tier Premium e Admin.
 * **Motor de Urgência (Gestão à Vista):** Exibe listas nominais de pendências no Dashboard usando cruzamento matemático estrito de `dataInicio`, `dataFim` e data atual do navegador. Hierarquia de exibição: 1º Tarefa Atual (ou próxima), 2º Última Tarefa Anterior (vencida recentemente).
 
@@ -55,28 +55,26 @@ A plataforma diferencia quem opera de quem administra o SaaS através do campo `
 ## 8. Modelos de Operação (Tiers/Planos de Assinatura)
 * **Trial Automático (A Barreira do SaaS):** Ao criar uma nova conta, o sistema injeta automaticamente o `plano: 'trial'` e define a `dataExpiracao` para 30 dias após o cadastro.
 * **Bloqueio de Inadimplência:** O arquivo `App.jsx` atua como catraca (`PrivateRoute`). Se `dataExpiracao` for menor que a data de hoje, o usuário é redirecionado compulsoriamente para `/assinatura-vencida`, bloqueando o acesso ao painel, mas preservando seus dados no banco. O e-mail do fundador e usuários com `isVitalicio: true` ignoram essa trava.
-* **Tier 1: Básico (Gestão Visual):** Focado no controle de recebimento e agenda. (Restrito ao funil de Histórico).
-* **Tier 2: Intermediário (Modelo Gestão):** Esteira de produção completa para feedbacks gerados externamente. (Acesso à fila de Revisão).
-* **Tier 3: Premium (IA Integrada):** Automação via API. 
-    * **Configuração Privada:** O campo `promptPersonalizado` aparece na página de Configurações apenas para usuários Premium, permitindo treinar a personalidade da IA.
+* **Tier 1: Básico ("O Organizador Pessoal"):** Focado na Gestão Visual e Régua de Cobrança. O professor faz a operação manual de avaliação. A interface da IA na tela de correção atua como uma **Vitrine de Vendas** (Botão com Cadeado 🔒) que alerta o usuário e o redireciona para a página `/planos`.
+* **Tier 2: Intermediário ("SaaS Assistido" / Ex: Patrícia):** Operação terceirizada. O professor atua apenas como Revisor Vip. O botão de "Confirmar Lançamento Oficial" não existe em sua tela. Ao clicar em "Aprovar Feedback", a atividade vai para a caixa "Falta Postar" do Super Admin, que finaliza o processo no site da faculdade.
+* **Tier 3: Premium ("O Lobo Solitário Turbo"):** Automação completa integrada via IA (Gemini). O professor faz tudo sozinho, mas com velocidade extrema no fluxo de correção usando a API na própria tela.
+    * **Configuração Privada:** O campo `promptPersonalizado` aparece na página de Configurações, permitindo treinar a personalidade e o rigor acadêmico da IA.
 
 ## 9. A Nova Estação de Correção (Fluxo "Ficha Médica" e IA)
-A página de Revisar Atividade (`/revisar/id`) atua como o HUB de entrada e saída de dados.
+A página de Revisar Atividade (`/revisar/id`) atua como o HUB de entrada e saída de dados, adaptando-se inteligentemente ao "crachá" do usuário (Interface Camaleão).
+* **Barra de Progresso (UX E-commerce):** O topo da tela exibe os 3 passos vitais do "Digitador": `1. Trazer Resposta` ➔ `2. Revisar Feedback` ➔ `3. Lançar Oficial`. As cores da barra avançam dinamicamente acompanhando o status no banco de dados.
+* **Interface Camaleão (Rodapé Inteligente):** * Para Tiers 1 e 3, libera opções de *"Salvar Rascunho"* (pausa o trabalho na caixa Aguardando Revisão) ou o fluxo The Flash *"Aprovar e Copiar"*, seguido do botão final *"Confirmar Lançamento"*.
+    * Para Tier 2, exibe apenas um botão gigante *"✅ Aprovar Feedback"*, que encerra a participação do revisor na esteira.
+* **Onboarding da IA:** Se um professor Tier 3 clicar em "Gerar IA" sem ter configurado instruções, o sistema barra a ação e o redireciona para a página de Configurações, protegendo a cota da API.
 * **IA Gemini 3.1 Flash Lite:** Integra modelo avançado com *Search Grounding* ativo (pesquisa no Google em tempo real para validação de protocolos médicos).
 * **Layout "Sticky":** No Desktop, a coluna da direita (Mesa de Avaliação) fica fixada, acompanhando o professor enquanto rola o texto longo da resposta à esquerda. No Mobile, as áreas empilham-se naturalmente.
-* **Botão "Sinal Verde":** O botão de "Gerar Feedback IA" nasce inativo e com fundo opaco. Ele só acende com gradiente após o professor inserir pelo menos 1 caractere na resposta do aluno.
 * **Tratamento de Cota (429):** O sistema captura falhas de limite de cota do Google e exibe um alerta amigável instruindo o professor a aguardar 60 segundos.
 
 ## 10. Semáforo Acadêmico e Fluxo de Trabalho (Linha de Chegada)
-O sistema orienta o professor através de Ícones Tricolores no buscador de alunos, baseados no avanço do trabalho:
-* 🔴 **Aguardando:** A resposta do aluno ainda não foi trazida para a plataforma.
-* 🟡 **Em Revisão:** A resposta já está na plataforma, mas ainda não foi aprovado o feedback sugerido pela IA ou a atividade não foi marcada como lançada no sistema oficial.
-* ✅ **Lançado:** Trabalho concluído! O feedback e/ou a nota já foi (foram) lançada(os) para o portal oficial da instituição.
-
-**Fluxo de Lançamento (2 Passos):**
-Ao clicar em "Salvar Avaliação", a plataforma atualiza o status para Amarelo e libera dois botões finais essenciais para o workflow do "Digitador":
-1. **Copiar Feedback:** Copia o texto para a área de transferência.
-2. **Confirmar Lançamento Oficial:** Registra `postado: true` no banco, transformando a bolinha do aluno em Verde e fechando o ciclo.
+O sistema orienta o professor através de Ícones Tricolores no buscador de alunos, refletindo exatamente o status nas Caixas do Kanban:
+* 🔴 **Aguardando (Fora da Caixa de Revisão):** O aluno está matriculado, mas você ainda não trouxe a resposta dele do site da faculdade para a nossa plataforma.
+* 🟡 **Em Revisão (Caixas 1 e 2):** A resposta já foi colada aqui, mas ainda não foi aprovado o feedback sugerido pela IA, ou a atividade já foi aprovada mas ainda não marcada como lançada no sistema oficial.
+* ✅ **Lançado (Caixa 3 - Histórico):** Trabalho concluído! O feedback e/ou a nota já foi (foram) lançada(os) para o portal oficial da instituição. Status blindado e irretroativo no funil.
 
 ## 11. Gestão de Tarefas, Automação e Motor de Clonagem
 O cadastro de itens ocorre na página de `/tarefas` com as categorias: `Tarefa do Aluno`, `Compromisso` ou `Post-it`.
@@ -113,7 +111,7 @@ O cadastro exige vínculo com `Turma`.
 
 ## 15. Cronograma Dinâmico e Fichas Técnicas SaaS
 A página `/cronograma` foi reestruturada com um layout de Abas Duplas para isolar a agenda de operação da ementa pedagógica:
-* **Aba 1 (Agenda de Entregas):** Processa todas as tarefas do banco em tempo real, utilizando agrupamento visual por urgência com cores semânticas (Laranja = Atual, Azul = Futuro, Cinza = Passado) com dot-indicators na linha do tempo. Lembretes sem prazo ficam no Radar (Grid) no rodapé.
+* **Aba 1 (Agenda de Entregas):** Processa todas as tarefas do banco em tempo real, utilizando agrupamento visual por urgência com cores semânticas (Laranja = Atual, Azul = Futuro, Cinza = Passado) com dot-indicators na linha do tempo. Lembretes sem prazo ficam no Radar (Grid) no rodapé. **O botão de ação rápida na tarefa é inteligente, lendo o banco de dados e mudando de "Iniciar correções" para "Continuar correções" conforme o avanço do professor.**
 * **Aba 2 (Ficha Técnica Oficial):** Exibe documentos curriculares estáticos (ex: Eixos, Módulos, CH e Créditos). Para garantir velocidade e custo zero de Firebase, os dados residem em arquivos locais no frontend (ex: `src/data/ementaMaisMedicos.js`).
 * **Trava de Segurança (Strict Match):** A Aba 2 só é renderizada se houver um casamento EXATO entre a Instituição selecionada e a Turma ativa (Ex: "UFPI" + "Facilitador Mais Médico"). Professores de outros nichos acessam apenas a "Agenda", garantindo que a propriedade intelectual (O Pacote Premium) seja escalada com segurança.
 
