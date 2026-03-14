@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { Link } from 'react-router-dom';
 import { 
   User, Phone, Sparkles, Save, ShieldCheck, Mail, 
   CheckCircle2, Target, Zap, RefreshCw, AlertCircle,
-  MessageSquareHeart, Stethoscope
+  MessageSquareHeart, Stethoscope, Lock, ChevronRight
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -20,9 +21,13 @@ export default function Configuracoes() {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState(null);
 
+  // AJUSTE: Leitura de Crachá 100% alinhada com o modelo da V3
   const isPremium = userProfile?.plano === 'premium';
+  const isTier2 = userProfile?.plano === 'intermediario';
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
-  const mostrarIA = isPremium || isAdmin;
+  
+  // O Tier 2 (Patrícia) também tem acesso ao motor para o modelo híbrido!
+  const mostrarIA = isPremium || isAdmin || isTier2;
 
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
   const [loadingMetricas, setLoadingMetricas] = useState(true);
@@ -48,7 +53,6 @@ export default function Configuracoes() {
 
   // Função para aplicar template com confirmação de segurança
   const aplicarTemplate = (textoTemplate) => {
-    // Se a caixa não estiver vazia e for diferente do template, pede confirmação
     if (promptIA.trim() !== "" && promptIA.trim() !== textoTemplate.trim()) {
       const confirmacao = window.confirm("Isso substituirá suas instruções atuais por este modelo. Deseja continuar?");
       if (!confirmacao) return;
@@ -267,13 +271,19 @@ export default function Configuracoes() {
             </div>
           </div>
         ) : (
-          <div className="bg-blue-50 p-8 rounded-[32px] border-2 border-dashed border-blue-200 text-center">
-            <Sparkles className="mx-auto text-blue-300 mb-4" size={48} />
-            <h3 className="text-xl font-black text-blue-900 mb-2">IA de Correção Indisponível</h3>
-            <p className="text-blue-700 font-medium max-w-md mx-auto mb-6">
-              A Patrícia está no plano Básico. Para liberar a correção automática e o treinamento da IA, mude o plano dela no Painel Admin.
+          
+          /* AJUSTE: VITRINE DE VENDAS PARA O TIER 1 */
+          <div className="bg-slate-50 p-10 rounded-[32px] border border-slate-200 text-center shadow-sm">
+            <Lock className="mx-auto text-slate-300 mb-4" size={48} />
+            <h3 className="text-2xl font-black text-slate-800 mb-2">Motor de Inteligência Artificial Bloqueado</h3>
+            <p className="text-slate-500 font-medium max-w-md mx-auto mb-8">
+              O seu plano atual é o Básico (Tier 1). Para liberar a correção de atividades com 1-clique, criação de prompts e o treinamento da nossa IA com o seu estilo de avaliação, faça um upgrade.
             </p>
+            <Link to="/planos" className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 rounded-2xl transition-all shadow-lg text-sm md:text-base">
+              Ver Planos de Assinatura <ChevronRight size={18}/>
+            </Link>
           </div>
+
         )}
 
         {/* BOTÃO FINAL */}
@@ -293,4 +303,4 @@ export default function Configuracoes() {
       </form>
     </div>
   );
-                  }
+}
