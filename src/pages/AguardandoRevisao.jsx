@@ -65,6 +65,7 @@ export default function AguardandoRevisao() {
               pendencias.push({
                 id: doc.id,
                 tarefaId: ativ.tarefaId,
+                alunoId: ativ.alunoId, // NOVO: Guardamos a ID do aluno para o teletransporte!
                 nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
                 nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
                 dataCriacao: ativ.dataCriacao
@@ -135,6 +136,7 @@ export default function AguardandoRevisao() {
             <Link 
               key={item.id} 
               to={`/revisar/${item.tarefaId}`} 
+              state={{ alunoId: item.alunoId }} // NOVO: "Jogando" o ID do aluno para a Estação de Trabalho!
               className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-yellow-400 transition-all group"
             >
               {/* Ícone de Relógio (Espera) */}
