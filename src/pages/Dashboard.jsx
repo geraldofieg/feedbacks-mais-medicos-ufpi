@@ -25,7 +25,7 @@ export default function Dashboard() {
   const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]);
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
-  const [progressoTarefas, setProgressoTarefas] = useState({}); // Memória para saber se a tarefa já começou
+  const [progressoTarefas, setProgressoTarefas] = useState({}); 
   
   const [loading, setLoading] = useState(true);
   const [temAlunos, setTemAlunos] = useState(true); 
@@ -92,7 +92,9 @@ export default function Dashboard() {
           let p = 0, f = 0, ok = 0;
           let iaTotal = 0, iaOriginais = 0;
           let progressoLocal = {};
-          const pendenciasPorTarefa = {};
+          
+          // NOVO: Dicionário para cruzar quem já fez com a chamada da turma
+          const ativMap = {}; 
 
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
@@ -103,13 +105,13 @@ export default function Dashboard() {
               const temResposta = d.resposta && String(d.resposta).trim() !== '';
 
               if (jaPostado) {
-                ok++; // CAIXA 3: Histórico Finalizado
+                ok++; // CAIXA 3
                 progressoLocal[d.tarefaId] = true;
               } else if (jaAprovado) {
-                f++;  // CAIXA 2: Falta Postar
+                f++;  // CAIXA 2
                 progressoLocal[d.tarefaId] = true;
               } else if (temResposta) {
-                p++;  // CAIXA 1: Aguardando Revisão (Só entra se já tiver colado a resposta!)
+                p++;  // CAIXA 1
                 progressoLocal[d.tarefaId] = true;
               }
 
@@ -121,18 +123,41 @@ export default function Dashboard() {
                 if (fFinal === fSugerido) iaOriginais++;
               }
 
-              // GESTÃO À VISTA (Quem está devendo / Falta trazer resposta)
-              const faltaAteTrazerResposta = !jaPostado && !jaAprovado && !temResposta;
-              if (faltaAteTrazerResposta && alunosMap[d.alunoId]) {
-                if (!pendenciasPorTarefa[d.tarefaId]) pendenciasPorTarefa[d.tarefaId] = [];
-                pendenciasPorTarefa[d.tarefaId].push(alunosMap[d.alunoId]);
-              }
+              // Salva o status do aluno para a Gestão à Vista
+              ativMap[`${d.tarefaId}_${d.alunoId}`] = { jaPostado, jaAprovado, temResposta };
             }
           });
 
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
           setProgressoTarefas(progressoLocal);
+
+          // NOVO: GESTÃO À VISTA (Matemática Blindada)
+          // Cruza a lista oficial de alunos da turma com o dicionário de atividades para ver quem tá devendo
+          const pendenciasPorTarefa = {};
+          tarefasVivas.forEach(t => {
+             if (!tIds.includes(t.turmaId)) return;
+             pendenciasPorTarefa[t.id] = [];
+             
+             // Pega todos os alunos daquela turma específica
+             const alunosDaTurma = alunosVivos.filter(a => a.data().turmaId === t.turmaId);
+             
+             alunosDaTurma.forEach(alunoDoc => {
+                const alunoId = alunoDoc.id;
+                const nomeAluno = alunoDoc.data().nome;
+                const ativDoAluno = ativMap[`${t.id}_${alunoId}`];
+                
+                // Se a atividade do aluno não existe, ele não entregou. Se existe, verifica se tá preenchida.
+                if (!ativDoAluno) {
+                    pendenciasPorTarefa[t.id].push(nomeAluno);
+                } else {
+                    const faltaAteTrazerResposta = !ativDoAluno.jaPostado && !ativDoAluno.jaAprovado && !ativDoAluno.temResposta;
+                    if (faltaAteTrazerResposta) {
+                        pendenciasPorTarefa[t.id].push(nomeAluno);
+                    }
+                }
+             });
+          });
 
           let tarefasEntregas = tarefasVivas.filter(t => tIds.includes(t.turmaId) && t.dataFim && t.tipo === 'entrega');
           tarefasEntregas = tarefasEntregas.map(t => {
@@ -229,6 +254,8 @@ export default function Dashboard() {
     fetchDados();
   }, [escolaSelecionada]);
 
+  const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
+
   // --- LÓGICA DE EXIBIÇÃO DO GRID E DO CARD DE AÇÃO RÁPIDA ---
   const tarefaAtualValida = tarefasEmAndamento.length > 0 && !tarefasEmAndamento[0].isFutura ? tarefasEmAndamento[0] : null;
   
@@ -265,8 +292,9 @@ export default function Dashboard() {
         </Link>
       </div>
     );
-      }
-    return (
+  }
+
+  return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
@@ -416,7 +444,7 @@ export default function Dashboard() {
                 <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
                 <div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div>
               </div>
-              <span className="text-4xl font-black text-gray-800">{kanban.finalizados}</span>
+              <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
               <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
             </div>
           </div>
