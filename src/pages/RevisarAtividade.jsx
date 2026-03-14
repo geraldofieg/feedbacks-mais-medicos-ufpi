@@ -77,7 +77,9 @@ export default function RevisarAtividade() {
   // Gatilho da IA com Trava de Novato e Vitrine Tier 1
   async function handleGerarIA() {
     if (isTier1) {
-      alert("🔒 Ganhe tempo! Deixe nossa IA integrada ler a resposta do aluno e redigir o feedback por você. Conheça o Plano Premium.");
+      if (window.confirm("🔒 Ganhe tempo! Deixe nossa IA integrada ler a resposta do aluno e redigir o feedback por você.\n\nDeseja conhecer o Plano Premium agora?")) {
+        navigate('/planos');
+      }
       return;
     }
     
