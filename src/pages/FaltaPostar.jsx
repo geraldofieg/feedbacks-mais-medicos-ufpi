@@ -6,21 +6,21 @@ import { ArrowLeft, Send, ChevronRight, CalendarDays } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function FaltaPostar() {
-  // AJUSTE: Puxando o userProfile para ler a Rule do Banco de Dados
   const { currentUser, userProfile, escolaSelecionada } = useAuth();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
   const [listaPendencias, setListaPendencias] = useState([]);
 
+  // LEITURA DE CRACHÁ
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  const isTier2 = userProfile?.plano === 'intermediario';
+
   useEffect(() => {
     async function fetchFaltaPostar() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoading(true);
       try {
-        // AJUSTE: Agora é Admin se o banco disser que é, ou se for o seu email mestre
-        const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
-        
         // 1. Busca todas as turmas que esse usuário tem acesso na Instituição
         const turmasRef = collection(db, 'turmas');
         const qTurmas = isAdmin
@@ -47,7 +47,7 @@ export default function FaltaPostar() {
         const mapaAlunos = {};
         snapAlunos.docs.forEach(d => { mapaAlunos[d.id] = d.data().nome; });
 
-        // 3. Busca as Atividades "Falta Postar" (Aprovadas e Não Postadas)
+        // 3. Busca as Atividades "Falta Postar" com a Nova Matemática (V3)
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
         
@@ -55,15 +55,22 @@ export default function FaltaPostar() {
         
         snapAtividades.docs.forEach(doc => {
           const ativ = doc.data();
-          // Filtra: Só turmas ativas + Aprovado + Não Postado
-          if (turmasIds.includes(ativ.turmaId) && ativ.status === 'aprovado' && ativ.postado === false) {
-            pendencias.push({
-              id: doc.id,
-              tarefaId: ativ.tarefaId,
-              nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
-              nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
-              dataAprovacao: ativ.dataAprovacao
-            });
+          if (turmasIds.includes(ativ.turmaId)) {
+            // LÓGICA ESPELHADA DO DASHBOARD
+            const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
+            const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+
+            // Só entra na lista se estiver aprovado E não tiver sido postado
+            if (!jaPostado && jaAprovado) {
+              pendencias.push({
+                id: doc.id,
+                tarefaId: ativ.tarefaId,
+                alunoId: ativ.alunoId, // NOVO: Guardamos a ID do aluno para o teletransporte!
+                nomeAluno: mapaAlunos[ativ.alunoId] || 'Aluno Removido',
+                nomeTarefa: mapaTarefas[ativ.tarefaId] || 'Tarefa Removida',
+                dataAprovacao: ativ.dataAprovacao || ativ.dataCriacao
+              });
+            }
           }
         });
 
@@ -83,7 +90,24 @@ export default function FaltaPostar() {
     }
 
     fetchFaltaPostar();
-  }, [currentUser, userProfile, escolaSelecionada]);
+  }, [currentUser, userProfile, escolaSelecionada, isAdmin]);
+
+  // NOVO: BLINDAGEM DA PATRÍCIA (Tier 2)
+  // Se ela tentar acessar a URL /faltapostar na mão, o sistema avisa e bloqueia com elegância.
+  if (isTier2 && !isAdmin) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
+        <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-3xl p-12 shadow-sm max-w-2xl mx-auto">
+          <Send className="mx-auto text-blue-400 mb-4" size={56} />
+          <h2 className="text-2xl font-black text-blue-800 mb-2">Acesso Restrito</h2>
+          <p className="text-blue-600 font-medium mb-6">Como Revisor(a), você não precisa se preocupar com as postagens. O administrador do sistema cuidará do lançamento oficial por você!</p>
+          <Link to="/" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-3 px-8 rounded-xl shadow-lg hover:bg-blue-700 transition-all">
+            <ArrowLeft size={18}/> Voltar ao Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const formatarData = (ts) => {
     if (!ts) return "";
@@ -96,7 +120,7 @@ export default function FaltaPostar() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Cabeçalho igual ao da V1 */}
+      {/* Cabeçalho */}
       <div className="flex items-center gap-4 mb-8">
         <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-blue-600 transition-colors p-2 -ml-2">
           <ArrowLeft size={28} />
@@ -126,9 +150,9 @@ export default function FaltaPostar() {
             <Link 
               key={item.id} 
               to={`/revisar/${item.tarefaId}`} 
+              state={{ alunoId: item.alunoId }} // NOVO: "Jogando" o ID do aluno para a página seguinte!
               className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-400 transition-all group"
             >
-              {/* Ícone igual ao da V1 */}
               <div className="bg-blue-50 text-blue-600 p-4 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
                 <Send size={24} />
               </div>
