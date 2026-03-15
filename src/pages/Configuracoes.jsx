@@ -19,20 +19,17 @@ export default function Configuracoes() {
   
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
-  const [mensagem, setMensagem] = useState(null);
+  const [sucessoVisual, setSucessoVisual] = useState(false); // NOVO: Estado para a animação de sucesso do botão
 
-  // AJUSTE: Leitura de Crachá 100% alinhada com o modelo da V3
   const isPremium = userProfile?.plano === 'premium';
   const isTier2 = userProfile?.plano === 'intermediario';
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   
-  // O Tier 2 (Patrícia) também tem acesso ao motor para o modelo híbrido!
   const mostrarIA = isPremium || isAdmin || isTier2;
 
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
   const [loadingMetricas, setLoadingMetricas] = useState(true);
 
-  // --- TEMPLATES DE PROMPT ---
   const templates = [
     {
       label: 'Empático',
@@ -51,7 +48,6 @@ export default function Configuracoes() {
     }
   ];
 
-  // Função para aplicar template com confirmação de segurança
   const aplicarTemplate = (textoTemplate) => {
     if (promptIA.trim() !== "" && promptIA.trim() !== textoTemplate.trim()) {
       const confirmacao = window.confirm("Isso substituirá suas instruções atuais por este modelo. Deseja continuar?");
@@ -126,17 +122,25 @@ export default function Configuracoes() {
   async function handleSalvar(e) {
     e.preventDefault();
     setSalvando(true);
-    setMensagem(null);
+    setSucessoVisual(false); // Reseta caso estivesse verde
     try {
       await updateDoc(doc(db, 'usuarios', currentUser.uid), {
         nome: nome.trim(),
         whatsapp: whatsapp.trim(),
         promptPersonalizado: promptIA.trim()
       });
-      setMensagem({ tipo: 'sucesso', texto: 'Configurações salvas com sucesso!' });
+      
+      // AJUSTE: Dispara a animação visual de Sucesso no próprio botão
+      setSucessoVisual(true);
+      setTimeout(() => {
+        setSucessoVisual(false); // Volta ao estado original após 3 segundos
+      }, 3000);
+
     } catch (error) {
-      setMensagem({ tipo: 'erro', texto: 'Erro ao conectar com o banco de dados.' });
-    } finally { setSalvando(false); }
+      alert('Erro ao conectar com o banco de dados. Tente novamente.');
+    } finally { 
+      setSalvando(false); 
+    }
   }
 
   if (loading) return <div className="p-20 text-center animate-pulse font-black text-gray-400">Carregando conta...</div>;
@@ -154,13 +158,6 @@ export default function Configuracoes() {
           <p className="text-slate-500 font-medium">Gerencie seu perfil e inteligência de correção.</p>
         </div>
       </div>
-
-      {mensagem && (
-        <div className={`mb-8 p-5 rounded-3xl font-black flex items-center gap-3 animate-in fade-in slide-in-from-top-4 border-2 ${mensagem.tipo === 'sucesso' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-          {mensagem.tipo === 'sucesso' ? <CheckCircle2 size={24}/> : <AlertCircle size={24}/>}
-          {mensagem.texto}
-        </div>
-      )}
 
       <form onSubmit={handleSalvar} className="space-y-8">
         
@@ -272,7 +269,7 @@ export default function Configuracoes() {
           </div>
         ) : (
           
-          /* AJUSTE: VITRINE DE VENDAS PARA O TIER 1 */
+          /* VITRINE DE VENDAS PARA O TIER 1 */
           <div className="bg-slate-50 p-10 rounded-[32px] border border-slate-200 text-center shadow-sm">
             <Lock className="mx-auto text-slate-300 mb-4" size={48} />
             <h3 className="text-2xl font-black text-slate-800 mb-2">Motor de Inteligência Artificial Bloqueado</h3>
@@ -286,14 +283,23 @@ export default function Configuracoes() {
 
         )}
 
-        {/* BOTÃO FINAL */}
+        {/* AJUSTE: BOTÃO FINAL COM FEEDBACK VISUAL EMBUTIDO */}
         <div className="pt-6 space-y-4">
           <button 
-            type="submit" disabled={salvando} 
-            className={`w-full text-white font-black px-10 py-5 rounded-3xl transition-all shadow-xl flex items-center justify-center gap-3 text-xl active:scale-95 ${salvando ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            type="submit" 
+            disabled={salvando} 
+            className={`w-full text-white font-black px-10 py-5 rounded-3xl transition-all duration-300 shadow-xl flex items-center justify-center gap-3 text-xl active:scale-95 ${
+              sucessoVisual 
+                ? 'bg-green-500 hover:bg-green-600 shadow-green-500/30' 
+                : salvando 
+                  ? 'bg-slate-400 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
+            }`}
           >
             {salvando ? (
               <><RefreshCw className="animate-spin" size={24}/> Gravando...</>
+            ) : sucessoVisual ? (
+              <><CheckCircle2 className="animate-in zoom-in" size={24}/> Salvo com sucesso!</>
             ) : (
               <><Save size={24}/> Salvar Alterações Agora</>
             )}
