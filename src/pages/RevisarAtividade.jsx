@@ -163,7 +163,7 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Rascunho sincronizado com a V1!");
+      alert("Rascunho salvo com sucesso!");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
