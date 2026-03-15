@@ -127,11 +127,13 @@ export default function RevisarAtividade() {
     finally { setGerandoIA(false); }
   }
 
+  // FUNÇÃO SINCRONIZADA: Salva campos da V1 e da V3 simultaneamente
   async function handleSalvarRascunho() {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
     try {
       const payload = { 
+        // 1. Campos da V3
         resposta: novaResposta.trim(),
         arquivoUrl: arquivoUrl,
         nomeArquivo: nomeArquivo,
@@ -139,10 +141,17 @@ export default function RevisarAtividade() {
         feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
         nota: notaAluno.trim() || null, 
         status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente',
-        // CORREÇÃO: Não carimba data de aprovação se for rascunho (Mantém a antiga ou null)
-        dataAprovacao: atividadeAtual?.status === 'aprovado' ? atividadeAtual.dataAprovacao : null, 
         nomeAluno: alunoAtual.nome, 
         nomeTarefa: tarefa.nomeTarefa,
+
+        // 2. Campos da V1 (Backward Compatibility)
+        aluno: alunoAtual.nome,
+        tarefa: tarefa.nomeTarefa,
+        modulo: tarefa.nomeTarefa,
+
+        // 3. Inteligência de Funil: Se rascunho, dataAprovacao deve ser null para a V1
+        dataAprovacao: atividadeAtual?.status === 'aprovado' ? atividadeAtual.dataAprovacao : null, 
+        
         revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
       };
 
@@ -154,7 +163,7 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Rascunho salvo! Agora aparecerá na Revisão da V1.");
+      alert("Rascunho sincronizado com a V1!");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
@@ -167,12 +176,16 @@ export default function RevisarAtividade() {
         feedbackFinal: feedbackEditado.trim(), 
         status: 'aprovado', 
         dataAprovacao: serverTimestamp(),
+        // Tradução para V1
+        aluno: alunoAtual.nome,
+        tarefa: tarefa.nomeTarefa,
+        modulo: tarefa.nomeTarefa,
         revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
       };
       await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
       if (copiarAoAprovar) { navigator.clipboard.writeText(feedbackEditado.trim()); setCopiado(true); setTimeout(() => setCopiado(false), 2000); }
-      alert("Feedback Aprovado!");
+      alert("Feedback Aprovado e visível na V1!");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
@@ -190,6 +203,7 @@ export default function RevisarAtividade() {
     if (!window.confirm("Deseja devolver esta atividade para a fase de revisão?")) return;
     setSalvando(true);
     try {
+        // Limpa a data de aprovação para a V1 entender que voltou para a revisão
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: null });
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false, dataAprovacao: null } }));
     } catch (e) { console.error(e); } finally { setSalvando(false); }
