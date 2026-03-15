@@ -390,10 +390,31 @@ export default function Tarefas() {
             {tarefasFiltradas.map(tarefa => (
               <div key={tarefa.id} className={`bg-white p-5 rounded-2xl border transition-all shadow-sm group ${editandoId === tarefa.id ? 'border-blue-500 ring-4 ring-blue-50 shadow-lg' : `${getCorTipo(tarefa.tipo)} hover:shadow-md`}`}>
                 
+                {/* 🔥 FORMULÁRIO DE EDIÇÃO RESTAURADO AQUI 🔥 */}
                 {editandoId === tarefa.id ? (
-                  <div className="space-y-4 animate-in fade-in zoom-in duration-200">
-                    <button onClick={() => handleSalvarEdicao(tarefa.id)} className="w-full bg-green-600 text-white py-2.5 rounded-lg text-sm font-black shadow-sm">Salvar Alterações</button>
-                    <button onClick={() => setEditandoId(null)} className="w-full bg-gray-100 text-gray-600 py-2.5 rounded-lg text-sm font-black">Cancelar</button>
+                  <div className="space-y-3 animate-in fade-in zoom-in duration-200">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase">Título</label>
+                      <input type="text" className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase">Enunciado</label>
+                      <textarea rows="3" className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-black text-slate-500 uppercase">Início</label>
+                        <input type="date" className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500" value={dataInicioEdicao} onChange={e => setDataInicioEdicao(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-500 uppercase">Prazo Final</label>
+                        <input type="date" className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="pt-2 flex flex-col gap-2">
+                      <button onClick={() => handleSalvarEdicao(tarefa.id)} className="w-full bg-green-600 text-white py-2.5 rounded-lg text-sm font-black shadow-sm">Salvar Alterações</button>
+                      <button onClick={() => setEditandoId(null)} className="w-full bg-gray-100 text-gray-600 py-2.5 rounded-lg text-sm font-black">Cancelar</button>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex flex-col h-full justify-between">
