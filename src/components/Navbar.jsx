@@ -55,12 +55,13 @@ export default function Navbar() {
         {/* === MODO COMPUTADOR === */}
         <div className="hidden md:flex items-center justify-between h-16">
           
-          <Link to="/" className="font-black text-blue-900 flex items-center gap-2 transition-transform hover:scale-105 shrink-0">
-            <span className="bg-blue-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm shadow-sm">
+          {/* AJUSTE: Hierarquia visual corrigida (Plataforma > Instituição) */}
+          <Link to="/" className="flex items-center gap-3 transition-transform hover:scale-105 shrink-0">
+            <span className="font-black text-slate-900 text-lg tracking-tight hidden lg:block">Plataforma do Professor</span>
+            <div className="hidden lg:block w-px h-6 bg-gray-300"></div>
+            <span className="bg-blue-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm shadow-sm font-bold">
               <GraduationCap size={16} /> {siglaEscola}
             </span>
-            {/* AJUSTE: Nome da plataforma corrigido */}
-            <span className="text-gray-700 hidden lg:block">Plataforma do Professor</span>
           </Link>
 
           <div className="flex items-center gap-5 lg:gap-6">
@@ -116,7 +117,6 @@ export default function Navbar() {
                       <Settings size={18} /> Configurações / IA
                     </Link>
                     
-                    {/* NOVO LINK DA LIXEIRA */}
                     <Link to="/lixeira" onClick={() => setMenuAberto(false)} className="flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
                       <Trash2 size={18} /> Lixeira (Recuperar)
                     </Link>
@@ -175,7 +175,6 @@ export default function Navbar() {
             <Settings size={14} /> Ajustes
           </Link>
 
-          {/* LIXEIRA MOBILE */}
           <Link to="/lixeira" className="shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
             <Trash2 size={14} /> Lixeira
           </Link>
