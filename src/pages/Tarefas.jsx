@@ -246,15 +246,23 @@ export default function Tarefas() {
       const listaComNovo = [{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas];
       setTarefas(ordenarTarefas(listaComNovo));
       
-      setNovaTarefa({ titulo: '', enunciado: '', dataInicio: '', horaInicio: '', dataFim: '', horaFim: '', tipo: 'entrega' });
-      setAtribuicaoEspecifica(false);
-      setAlunosSelecionados([]);
-      
+      // FEEDBACK E FECHAMENTO AUTOMÁTICO
       setSucessoMsg(`"${tituloSalvo}" salvo com sucesso!`);
-      setTimeout(() => setSucessoMsg(''), 3000);
-      setTimeout(() => { if (tituloInputRef.current) tituloInputRef.current.focus(); }, 100);
+      
+      setTimeout(() => {
+        setSucessoMsg('');
+        setIsModalOpen(false); // AJUSTE: Fecha o modal sozinho após 1.5s
+        setNovaTarefa({ titulo: '', enunciado: '', dataInicio: '', horaInicio: '', dataFim: '', horaFim: '', tipo: 'entrega' });
+        setAtribuicaoEspecifica(false);
+        setAlunosSelecionados([]);
+      }, 1500);
 
-    } catch (error) { console.error("Erro criar:", error); } finally { setSalvando(false); }
+    } catch (error) { 
+      console.error("Erro criar:", error); 
+      alert("Houve um erro ao salvar. Tente novamente.");
+    } finally { 
+      setSalvando(false); 
+    }
   }
 
   const toggleAlunoSelecao = (alunoId) => {
@@ -458,13 +466,21 @@ export default function Tarefas() {
         )}
       </div>
 
+      {/* MODAL DE CRIAÇÃO - COM BOTÃO DE FECHAR E AUTO-FECHAMENTO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-8">
             
             <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50 sticky top-0 z-10">
               <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Plus className="text-blue-600"/> Adicionar ao Cronograma</h2>
-              <button onClick={() => { setIsModalOpen(false); setSucessoMsg(''); }} className="text-gray-400 hover:text-gray-700 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-105"><X size={20}/></button>
+              {/* BOTÃO DE FECHAR (X) REFORÇADO */}
+              <button 
+                onClick={() => { setIsModalOpen(false); setSucessoMsg(''); }} 
+                className="text-gray-400 hover:text-red-500 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-110 active:scale-95"
+                title="Fechar (Esc)"
+              >
+                <X size={20}/>
+              </button>
             </div>
             
             {sucessoMsg && (
@@ -552,6 +568,7 @@ export default function Tarefas() {
                 )}
               </div>
 
+              {/* BOTÃO DE SALVAMENTO COM FEEDBACK E AUTO-FECHAMENTO */}
               <button disabled={salvando || !turmaAtiva} className={`w-full text-white font-black py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 mt-4 disabled:opacity-50 text-xl active:scale-95 ${sucessoMsg ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'}`}>
                 {salvando ? <><RefreshCw className="animate-spin" size={24}/> Criando Tarefa...</> : sucessoMsg ? <><Check size={28}/> Registro Salvo!</> : 'Salvar no Cronograma'}
               </button>
