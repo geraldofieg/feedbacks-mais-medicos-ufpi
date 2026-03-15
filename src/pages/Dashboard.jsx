@@ -85,10 +85,17 @@ export default function Dashboard() {
         // Lógica de Funis (Seção 8 da Doc)
         const isFinalizado = !!d.dataPostagem || d.postado === true || d.status === 'postado';
         const isAprovado = !!d.dataAprovacao || d.status === 'aprovado';
+        // NOVO: Verifica se existe texto na resposta para evitar contagem de registros vazios da V3
+        const temRespostaReal = d.resposta && String(d.resposta).trim() !== '';
 
-        if (isFinalizado) { contFinalizado++; atividadesProcessadas.push(d); } 
-        else if (isAprovado) { contPostar++; atividadesProcessadas.push(d); } 
-        else { contRevisao++; }
+        if (isFinalizado) { 
+            contFinalizado++; atividadesProcessadas.push(d); 
+        } else if (isAprovado) { 
+            contPostar++; atividadesProcessadas.push(d); 
+        } else if (temRespostaReal) { 
+            // SÓ CONTA REVISÃO SE TIVER TEXTO
+            contRevisao++; 
+        }
       });
 
       setStats({ revisao: contRevisao, postar: contPostar, finalizados: contFinalizado });
@@ -105,7 +112,8 @@ export default function Dashboard() {
       if (alunosAtuais.length > 0 && numsAlvo.length > 0) {
         const entregas = new Set();
         docs.forEach(a => {
-          let nomeAluno = a.aluno || alunosMap[a.alunoId];
+          // AJUSTE: Procura nome em 'aluno' (V1) ou 'nomeAluno' (V3)
+          let nomeAluno = a.aluno || a.nomeAluno || alunosMap[a.alunoId];
           let nomeDaTarefaReal = a.tarefa || a.modulo || tarefasMap[a.tarefaId];
           if (nomeDaTarefaReal && isModuloValido(nomeDaTarefaReal) && nomeAluno) {
             const num = extractNum(nomeDaTarefaReal);
@@ -194,7 +202,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* CARDS DE ESTATÍSTICAS COM "VER LISTA" (RESTAURADOS) */}
+        {/* CARDS DE ESTATÍSTICAS COM "VER LISTA" */}
         <div className={`grid grid-cols-1 gap-4 mb-8 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
             <div>
