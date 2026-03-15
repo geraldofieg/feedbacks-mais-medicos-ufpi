@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'; // NOVO: Storage
+import { db, storage } from '../services/firebase'; // Certifique-se que o storage está exportado no seu firebase.js
 import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, CheckCircle, User, Copy, 
   Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck, Eraser,
-  Lock, Settings, CalendarDays, RotateCcw, Trash2, mousePointerClick, MousePointer2 
+  Lock, Settings, CalendarDays, RotateCcw, Trash2, MousePointer2, Paperclip, FileUp, FileCheck
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -33,12 +34,17 @@ export default function RevisarAtividade() {
   const [gerandoIA, setGerandoIA] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
+  // NOVOS ESTADOS PARA UPLOAD
+  const [uploading, setUploading] = useState(false);
+  const [arquivoUrl, setArquivoUrl] = useState('');
+  const [nomeArquivo, setNomeArquivo] = useState('');
+
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const isPremium = userProfile?.plano === 'premium' || isAdmin;
   const isTier2 = userProfile?.plano === 'intermediario';
   const isTier1 = !isPremium && !isTier2;
 
-  const respostaEstaVazia = novaResposta.trim().length === 0;
+  const respostaEstaVazia = novaResposta.trim().length === 0 && !arquivoUrl;
 
   useEffect(() => {
     if (location.state?.alunoId) {
@@ -79,16 +85,31 @@ export default function RevisarAtividade() {
     setNovaResposta(atividadeAtual?.resposta || '');
     setFeedbackEditado(atividadeAtual?.feedbackFinal || atividadeAtual?.feedbackSugerido || '');
     setNotaAluno(atividadeAtual?.nota || '');
+    setArquivoUrl(atividadeAtual?.arquivoUrl || '');
+    setNomeArquivo(atividadeAtual?.nomeArquivo || '');
   }, [alunoSelecionadoId, atividadeAtual]);
 
-  const formatarData = (ts) => {
-    if (!ts) return "";
-    try {
-      let d = ts.toDate ? ts.toDate() : new Date(ts);
-      if (isNaN(d.getTime())) return "";
-      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch (e) { return ""; }
-  };
+  // FUNÇÃO DE UPLOAD PARA O STORAGE
+  async function handleUploadArquivo(e) {
+    const file = e.target.files[0];
+    if (!file || !alunoAtual) return;
+
+    setUploading(true);
+    const storageRef = ref(storage, `atividades/${currentUser.uid}/${alunoAtual.id}_${Date.now()}_${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', 
+      null, 
+      (error) => { console.error(error); setUploading(false); }, 
+      async () => {
+        const url = await getDownloadURL(uploadTask.snapshot.ref);
+        setArquivoUrl(url);
+        setNomeArquivo(file.name);
+        setUploading(false);
+        alert("Arquivo anexado com sucesso!");
+      }
+    );
+  }
 
   async function handleGerarIA() {
     if (isTier1) {
@@ -112,22 +133,26 @@ export default function RevisarAtividade() {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ 
-        model: "gemini-3.1-flash-lite-preview",
-        tools: [{ googleSearch: {} }] 
+        model: "gemini-1.5-flash", // Versão mais estável para leitura de contexto longo
       });
 
       const promptCompleto = `
-        Aja como um preceptor médico. Estilo: ${userProfile?.promptPersonalizado || 'Direto e técnico.'}
-        QUESTÃO: ${tarefa?.enunciado}
-        RESPOSTA: "${novaResposta}"
-        Gere um feedback direto ao aluno.
+        Aja como um preceptor médico experiente. 
+        Estilo do Professor: ${userProfile?.promptPersonalizado || 'Direto e técnico.'}
+        
+        ENUNCIADO DA TAREFA: ${tarefa?.enunciado}
+        
+        RESPOSTA DO ALUNO (TEXTO): "${novaResposta}"
+        ${arquivoUrl ? `NOTA: O aluno também enviou um arquivo anexo (${nomeArquivo}).` : ''}
+
+        Gere um feedback pedagógico e construtivo diretamente para o aluno.
       `;
 
       const result = await model.generateContent(promptCompleto);
       setFeedbackEditado(result.response.text());
     } catch (e) { 
-      console.error("ERRO COMPLETO DA API:", e);
-      alert("A API recusou o pedido. Erro: " + e.message); 
+      console.error("ERRO API:", e);
+      alert("Houve um erro na IA. Se você enviou um arquivo, tente copiar o texto dele para a caixa por enquanto."); 
     }
     finally { setGerandoIA(false); }
   }
@@ -138,6 +163,8 @@ export default function RevisarAtividade() {
     try {
       const payload = { 
         resposta: novaResposta.trim(),
+        arquivoUrl: arquivoUrl,
+        nomeArquivo: nomeArquivo,
         feedbackFinal: feedbackEditado.trim(), 
         feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
         nota: notaAluno.trim() || null, 
@@ -156,16 +183,19 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Rascunho salvo! A atividade continua aguardando revisão.");
+      alert("Rascunho salvo com sucesso!");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
+  // ... (manter handleAprovar, handleMarcarPostado, handleDevolverRevisao, handleExcluirAtividade iguais ao anterior)
   async function handleAprovar(copiarAoAprovar = false) {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
     try {
       const payload = { 
         resposta: novaResposta.trim(),
+        arquivoUrl: arquivoUrl,
+        nomeArquivo: nomeArquivo,
         feedbackFinal: feedbackEditado.trim(), 
         feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
         nota: notaAluno.trim() || null, 
@@ -192,10 +222,10 @@ export default function RevisarAtividade() {
       }
 
       if (isTier2) {
-        alert("Feedback aprovado! O administrador já foi notificado para postar no sistema oficial.");
+        alert("Feedback aprovado! O administrador já foi notificado.");
         setAlunoSelecionadoId(''); 
       } else if (!copiarAoAprovar) {
-        alert("Feedback aprovado e pronto para lançamento!");
+        alert("Feedback aprovado!");
       }
       
     } catch (error) { console.error(error); } finally { setSalvando(false); }
@@ -212,24 +242,16 @@ export default function RevisarAtividade() {
   }
 
   async function handleDevolverRevisao() {
-    if (!window.confirm("Deseja devolver esta atividade para a fase de revisão (Bolinha Amarela)?")) return;
+    if (!window.confirm("Deseja devolver esta atividade para a fase de revisão?")) return;
     setSalvando(true);
     try {
-        await updateDoc(doc(db, 'atividades', atividadeAtual.id), {
-            status: 'pendente_revisao',
-            postado: false
-        });
-        setAtividadesMap(prev => ({
-            ...prev,
-            [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente_revisao', postado: false }
-        }));
-        alert("Atividade devolvida para revisão!");
-    } catch (e) { console.error(e); }
-    finally { setSalvando(false); }
+        await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente_revisao', postado: false });
+        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente_revisao', postado: false } }));
+    } catch (e) { console.error(e); } finally { setSalvando(false); }
   }
 
   async function handleExcluirAtividade() {
-    if (!window.confirm("ATENÇÃO: Você está prestes a EXCLUIR COMPLETAMENTE a resposta deste aluno. Ele voltará para a estaca zero (Bolinha Vermelha). Deseja continuar?")) return;
+    if (!window.confirm("ATENÇÃO: Você está prestes a EXCLUIR COMPLETAMENTE a resposta. Deseja continuar?")) return;
     setSalvando(true);
     try {
         await deleteDoc(doc(db, 'atividades', atividadeAtual.id));
@@ -238,13 +260,17 @@ export default function RevisarAtividade() {
             delete newMap[alunoAtual.id];
             return newMap;
         });
-        setNovaResposta('');
-        setFeedbackEditado('');
-        setNotaAluno('');
-        alert("Resposta excluída! O aluno voltou para o status Aguardando (Vermelho).");
-    } catch (e) { console.error(e); }
-    finally { setSalvando(false); }
+        setNovaResposta(''); setFeedbackEditado(''); setNotaAluno(''); setArquivoUrl('');
+    } catch (e) { console.error(e); } finally { setSalvando(false); }
   }
+
+  const formatarData = (ts) => {
+    if (!ts) return "";
+    try {
+      let d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleString('pt-BR');
+    } catch (e) { return ""; }
+  };
 
   if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse text-xl">Iniciando estação...</div>;
 
@@ -286,8 +312,6 @@ export default function RevisarAtividade() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6 md:mt-10">
         {!alunoAtual ? (
           <div className="bg-white p-12 md:p-24 rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
-             
-             {/* NOVO: TEXTO DE ORIENTAÇÃO EM DESTAQUE */}
              <div className="flex flex-col items-center mb-10 text-center animate-in fade-in slide-in-from-top-4 duration-700">
                 <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-xl shadow-blue-600/20 mb-4">
                   <MousePointer2 size={32} />
@@ -295,27 +319,21 @@ export default function RevisarAtividade() {
                 <h3 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Primeiro Passo</h3>
                 <p className="text-slate-500 font-medium text-lg mt-2 max-w-sm">Para iniciar uma correção, selecione um aluno no menu de busca acima.</p>
              </div>
-
-             <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-8">Legenda de Status</h4>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
                 <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col items-center text-center">
                    <span className="text-3xl mb-3">🔴</span>
                    <h4 className="font-black text-slate-700 text-sm uppercase mb-1">Aguardando</h4>
-                   <p className="text-[11px] text-slate-500 font-bold leading-tight">Você ainda não trouxe a resposta do aluno para esta plataforma.</p>
+                   <p className="text-[11px] text-slate-500 font-bold leading-tight">Você ainda não trouxe a resposta do aluno.</p>
                 </div>
                 <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col items-center text-center shadow-sm">
                    <span className="text-3xl mb-3">🟡</span>
                    <h4 className="font-black text-amber-700 text-sm uppercase mb-1">Em Revisão</h4>
-                   <p className="text-[11px] text-amber-600 font-bold leading-tight">
-                     A resposta já está aqui, mas ainda não foi aprovado o feedback sugerido pela IA e a atividade não foi marcada como lançada no sistema oficial.
-                   </p>
+                   <p className="text-[11px] text-amber-600 font-bold leading-tight">A resposta já está aqui, aguardando aprovação do feedback.</p>
                 </div>
                 <div className="bg-green-50 p-6 rounded-3xl border border-green-100 flex flex-col items-center text-center shadow-sm">
                    <span className="text-3xl mb-3">✅</span>
                    <h4 className="font-black text-green-700 text-sm uppercase mb-1">Lançado</h4>
-                   <p className="text-[11px] text-green-600 font-bold leading-tight">
-                     Trabalho concluído! O feedback e/ou a nota já foi (foram) lançada(os) para o portal da sua instituição.
-                   </p>
+                   <p className="text-[11px] text-green-600 font-bold leading-tight">Trabalho concluído e postado no sistema oficial.</p>
                 </div>
              </div>
           </div>
@@ -326,21 +344,17 @@ export default function RevisarAtividade() {
               <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 mb-6">
                 <div className="flex items-center justify-between relative px-4 md:px-12">
                    <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
-                   
                    <div className={`absolute left-10 top-1/2 -translate-y-1/2 h-1 bg-blue-500 -z-10 rounded-full transition-all duration-500 ${
                      atividadeAtual?.postado ? 'w-[calc(100%-5rem)] bg-green-500' : (atividadeAtual?.status === 'aprovado' ? 'w-1/2 bg-amber-400' : 'w-0')
                    }`}></div>
-
-                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${novaResposta ? 'text-blue-600' : 'text-slate-400'}`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${novaResposta ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>1</div>
+                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${novaResposta || arquivoUrl ? 'text-blue-600' : 'text-slate-400'}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${novaResposta || arquivoUrl ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>1</div>
                       <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Trazer<br/>Resposta</span>
                    </div>
-
                    <div className={`flex flex-col items-center gap-2 bg-white px-3 ${atividadeAtual?.status === 'aprovado' ? (atividadeAtual?.postado ? 'text-green-600' : 'text-amber-500') : 'text-slate-400'}`}>
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${atividadeAtual?.status === 'aprovado' ? (atividadeAtual?.postado ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-amber-400 text-white shadow-lg shadow-amber-400/30') : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>2</div>
                       <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Revisar<br/>Feedback</span>
                    </div>
-
                    <div className={`flex flex-col items-center gap-2 bg-white px-3 ${atividadeAtual?.postado ? 'text-green-600' : 'text-slate-400'}`}>
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${atividadeAtual?.postado ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>3</div>
                       <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Lançar<br/>Oficial</span>
@@ -364,19 +378,37 @@ export default function RevisarAtividade() {
                       <div className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black">2</div>
                       <h4 className="text-xs font-black text-slate-900 uppercase flex-1">Resposta do Aluno</h4>
                       
-                      {novaResposta && (
-                         <button 
-                           onClick={() => setNovaResposta('')} 
-                           className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
-                           title="Limpar caixa de texto"
-                         >
-                           <Eraser size={14}/> Limpar
-                         </button>
-                      )}
+                      {/* BOTÃO DE UPLOAD HÍBRIDO */}
+                      <div className="flex items-center gap-4">
+                        {arquivoUrl ? (
+                          <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 animate-in zoom-in">
+                            <FileCheck size={14}/>
+                            <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{nomeArquivo}</span>
+                            <button onClick={() => { setArquivoUrl(''); setNomeArquivo(''); }} className="hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                          </div>
+                        ) : (
+                          <label className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
+                            {uploading ? <RefreshCw size={14} className="animate-spin"/> : <FileUp size={14}/>}
+                            <span className="text-[10px] font-black uppercase tracking-wider">{uploading ? 'Enviando...' : 'Anexar Arquivo'}</span>
+                            <input type="file" className="hidden" accept=".pdf,.doc,.docx,.rtf,.txt" onChange={handleUploadArquivo} disabled={uploading}/>
+                          </label>
+                        )}
+
+                        {(novaResposta || arquivoUrl) && (
+                           <button 
+                             onClick={() => { setNovaResposta(''); setArquivoUrl(''); setNomeArquivo(''); }} 
+                             className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
+                             title="Limpar tudo"
+                           >
+                             <Eraser size={14}/> Limpar
+                           </button>
+                        )}
+                      </div>
                     </div>
+
                     <textarea 
                       rows="14" 
-                      placeholder="Cole a resposta aqui..." 
+                      placeholder="Cole a resposta aqui ou anexe um arquivo acima..." 
                       className="w-full p-6 md:p-8 rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-base md:text-lg" 
                       value={novaResposta} 
                       onChange={(e) => setNovaResposta(e.target.value)}
@@ -391,7 +423,6 @@ export default function RevisarAtividade() {
                   <h3 className="text-lg md:text-xl font-black flex items-center gap-3 mb-6">
                     <CheckCircle className="text-green-400" size={24}/>Avaliação
                   </h3>
-                 
                   <div className="flex flex-col items-center">
                     <button 
                       onClick={handleGerarIA} 
@@ -402,10 +433,9 @@ export default function RevisarAtividade() {
                           : (gerandoIA ? 'bg-slate-800 text-indigo-300' : respostaEstaVazia ? 'bg-slate-800 text-slate-600 border border-slate-800 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-500 hover:to-blue-500 shadow-indigo-500/20')
                       }`}
                     >
-                      {isTier1 ? <Lock size={18}/> : (gerandoIA ? <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>)}
-                      {isTier1 ? 'Gerar Feedback IA' : (gerandoIA ? 'Escrevendo...' : 'Gerar Feedback IA')}
+                      {isTier1 ? <Lock size={18}/> : (gerandoIA ? <RefreshCw size={18} className="animate-spin"/> : <Sparkles size={18}/>)}
+                      {isTier1 ? 'Gerar Feedback IA' : (gerandoIA ? 'Analisando...' : 'Gerar Feedback IA')}
                     </button>
-                    
                     {(isPremium || isTier2) && (
                       <Link to="/configuracoes" className="inline-flex items-center gap-1.5 text-[9px] font-bold text-slate-400 hover:text-blue-400 transition-colors uppercase tracking-widest mt-1">
                         <Settings size={12}/> Editar instruções para feedback
@@ -415,7 +445,6 @@ export default function RevisarAtividade() {
                 </div>
 
                 <div className="space-y-6">
-                  
                   <div>
                     <div className="flex justify-between items-end mb-2 px-2">
                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Texto do Feedback</label>
@@ -452,58 +481,35 @@ export default function RevisarAtividade() {
                   </div>
 
                   {atividadeAtual?.postado ? (
-                     <div className="w-full bg-green-500/20 border border-green-500/30 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
+                      <div className="w-full bg-green-500/20 border border-green-500/30 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
                         <CheckCheck size={18}/> LANÇADO OFICIALMENTE
-                     </div>
+                      </div>
                   ) : atividadeAtual?.status === 'aprovado' ? (
-                     
                      isTier2 ? (
                         <div className="w-full bg-amber-500/20 border border-amber-500/30 text-amber-500 py-4 rounded-2xl text-[10px] font-black flex justify-center items-center gap-2 text-center px-4 leading-tight">
-                          <CheckCheck size={16}/> APROVADO POR VOCÊ.<br/>AGUARDANDO POSTAGEM DO ADMIN.
+                          <CheckCheck size={16}/> APROVADO POR VOCÊ. AGUARDANDO ADMIN.
                         </div>
                      ) : (
                         <div className="pt-2 border-t border-slate-800 space-y-3">
-                          <button 
-                            onClick={() => handleAprovar(true)} 
-                            className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"
-                          >
-                            <Copy size={18}/> {copiado ? 'Copiado para o seu Sistema!' : '1. Copiar Feedback'}
+                          <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors">
+                            <Copy size={18}/> {copiado ? 'Copiado!' : '1. Copiar Feedback'}
                           </button>
-
-                          <button 
-                            onClick={handleMarcarPostado} 
-                            disabled={marcandoPostado} 
-                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl"
-                          >
-                            <Send size={18}/> 2. Confirmar Lançamento Oficial
+                          <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl">
+                            <Send size={18}/> 2. Confirmar Lançamento
                           </button>
                         </div>
                      )
-
                   ) : (
                      isTier2 ? (
-                        <button 
-                          onClick={() => handleAprovar(false)} 
-                          disabled={salvando || !feedbackEditado} 
-                          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-3xl shadow-xl transition-all flex justify-center items-center gap-3 text-lg"
-                        >
-                          {salvando ? <RefreshCw className="animate-spin" size={20}/> : <CheckCircle size={20}/>}
-                          Aprovar Feedback
+                        <button onClick={() => handleAprovar(false)} disabled={salvando || !feedbackEditado} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-3xl shadow-xl transition-all flex justify-center items-center gap-3 text-lg">
+                          {salvando ? <RefreshCw className="animate-spin" size={20}/> : <CheckCircle size={20}/>} Aprovar Feedback
                         </button>
                      ) : (
                         <div className="grid grid-cols-2 gap-3 pt-2">
-                          <button 
-                            onClick={handleSalvarRascunho} 
-                            disabled={salvando || !feedbackEditado} 
-                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-black py-3.5 rounded-2xl transition-all flex justify-center items-center gap-2 text-xs border border-slate-700"
-                          >
-                            {salvando ? <RefreshCw className="animate-spin" size={16}/> : '💾 Salvar Rascunho'}
+                          <button onClick={handleSalvarRascunho} disabled={salvando || !feedbackEditado} className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-black py-3.5 rounded-2xl transition-all flex justify-center items-center gap-2 text-xs border border-slate-700">
+                            {salvando ? <RefreshCw className="animate-spin" size={16}/> : '💾 Rascunho'}
                           </button>
-                          <button 
-                            onClick={() => handleAprovar(true)} 
-                            disabled={salvando || !feedbackEditado} 
-                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 rounded-2xl shadow-xl transition-all flex justify-center items-center gap-2 text-xs"
-                          >
+                          <button onClick={() => handleAprovar(true)} disabled={salvando || !feedbackEditado} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 rounded-2xl shadow-xl transition-all flex justify-center items-center gap-2 text-xs">
                             {salvando ? <RefreshCw className="animate-spin" size={16}/> : '🚀 Aprovar e Copiar'}
                           </button>
                         </div>
@@ -513,32 +519,22 @@ export default function RevisarAtividade() {
                   {atividadeAtual?.dataAprovacao && (
                     <div className="mt-4 text-[10px] font-bold text-slate-400 bg-slate-800/50 p-3 rounded-xl flex items-center gap-2">
                         <CalendarDays size={14} className="text-slate-500" />
-                        Revisado por {atividadeAtual.revisadoPor || 'Professor'}: {formatarData(atividadeAtual.dataAprovacao)}
+                        Revisado em: {formatarData(atividadeAtual.dataAprovacao)}
                     </div>
                   )}
 
                   {atividadeAtual && (
                     <div className="mt-8 border border-slate-800 rounded-[24px] p-5 bg-slate-900/40">
-                        <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-4 text-center">Gerenciamento Gestor</p>
                         <div className="space-y-3">
-                            <button 
-                              onClick={handleDevolverRevisao} 
-                              disabled={salvando}
-                              className="w-full flex items-center justify-center gap-2 text-xs font-bold text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 py-3 rounded-xl transition-colors border border-amber-500/20"
-                            >
+                            <button onClick={handleDevolverRevisao} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-amber-500 hover:text-amber-400 py-3 rounded-xl transition-colors border border-amber-500/20">
                                 <RotateCcw size={16}/> Devolver p/ Revisão
                             </button>
-                            <button 
-                              onClick={handleExcluirAtividade} 
-                              disabled={salvando}
-                              className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-500 hover:text-red-400 hover:bg-red-500/10 py-3 rounded-xl transition-colors border border-red-500/20"
-                            >
-                                <Trash2 size={16}/> Excluir Atividade (Voltar p/ Aguardando)
+                            <button onClick={handleExcluirAtividade} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-500 hover:text-red-400 py-3 rounded-xl transition-colors border border-red-500/20">
+                                <Trash2 size={16}/> Excluir Resposta
                             </button>
                         </div>
                     </div>
                   )}
-
                 </div>
               </div>
             </div>
