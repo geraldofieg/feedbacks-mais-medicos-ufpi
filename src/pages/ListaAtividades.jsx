@@ -12,15 +12,14 @@ export default function ListaAtividades() {
   // Padronizado para bater com o Dashboard
   const titulos = {
     'pendente': 'Aguardando Revisão',
-    'aprovado': 'Falta Postar no Site', // Corrigido de 'falta-postar' para 'aprovado'
-    'finalizado': 'Histórico Finalizado' // Corrigido de 'finalizados' para 'finalizado'
+    'aprovado': 'Falta Postar no Site',
+    'finalizado': 'Histórico Finalizado'
   };
 
   useEffect(() => {
     const fetchAtividades = async () => {
       setLoading(true);
 
-      // Regra de 90 dias (Seção 4.2 da Doc)
       const dataLimite = new Date();
       dataLimite.setDate(dataLimite.getDate() - 90);
 
@@ -33,22 +32,24 @@ export default function ListaAtividades() {
         const snap = await getDocs(q);
         let lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Lógica de funil blindado (Seção 8 da Documentação)
+        // LÓGICA DE FUNIL BLINDADO COM INTELIGÊNCIA V3
         lista = lista.filter(atv => {
           const isFinalizado = !!atv.dataPostagem || atv.postado === true || atv.status === 'postado';
           const isAprovado = !!atv.dataAprovacao || atv.status === 'aprovado';
+          // NOVO: Verifica se o registro da V3 tem conteúdo real
+          const temRespostaReal = atv.resposta && String(atv.resposta).trim() !== '';
 
           if (status === 'finalizado' || status === 'finalizados') {
             return isFinalizado;
           } else if (status === 'aprovado' || status === 'falta-postar') {
             return !isFinalizado && isAprovado;
           } else if (status === 'pendente') {
-            return !isFinalizado && !isAprovado;
+            // SÓ MOSTRA NA LISTA SE TIVER RESPOSTA (Elimina os fantasmas com "ponto")
+            return !isFinalizado && !isAprovado && temRespostaReal;
           }
           return false;
         });
 
-        // Ordenação inteligente: os mais recentes primeiro
         lista.sort((a, b) => {
           const tempoA = a.dataPostagem?.seconds || a.dataAprovacao?.seconds || a.dataCriacao?.seconds || 0;
           const tempoB = b.dataPostagem?.seconds || b.dataAprovacao?.seconds || b.dataCriacao?.seconds || 0;
@@ -80,16 +81,15 @@ export default function ListaAtividades() {
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 text-blue-600 font-black animate-pulse">
-            Buscando informações no banco...
+            Sincronizando registros...
           </div>
         ) : atividades.length === 0 ? (
           <div className="bg-white p-10 rounded-2xl text-center border-2 border-dashed border-gray-200 text-gray-500 font-bold">
-            Nenhuma atividade nesta etapa do funil (últimos 90 dias).
+            Nenhuma atividade nesta etapa do funil.
           </div>
         ) : (
           <div className="grid gap-4">
             {atividades.map((atv) => {
-              // Estilização dinâmica baseada no status
               const isFinal = !!atv.dataPostagem || atv.postado === true || atv.status === 'postado';
               const isAprov = !!atv.dataAprovacao || atv.status === 'aprovado';
 
@@ -97,7 +97,6 @@ export default function ListaAtividades() {
               let corIcone = isFinal ? 'bg-green-50 text-green-600' : isAprov ? 'bg-blue-50 text-blue-600' : 'bg-yellow-50 text-yellow-600';
               let icone = isFinal ? <CheckCheck size={24} /> : isAprov ? <Send size={24} /> : <Clock size={24} />;
 
-              // Datas formatadas
               const formatarData = (firebaseData) => {
                 if (!firebaseData) return null;
                 const d = firebaseData.toDate ? firebaseData.toDate() : new Date(firebaseData.seconds * 1000);
@@ -111,8 +110,11 @@ export default function ListaAtividades() {
                   <div className="flex items-center gap-4">
                     <div className={`p-3 rounded-xl ${corIcone}`}>{icone}</div>
                     <div>
-                      <h3 className={`font-bold ${isFinal ? 'text-gray-500' : 'text-gray-900'}`}>{atv.aluno}</h3>
-                      <p className="text-sm text-gray-500 font-medium mb-2">{atv.modulo} • {atv.tarefa}</p>
+                      {/* AJUSTE DE OURO: Tenta ler 'aluno' (V1) ou 'nomeAluno' (V3) para matar o bug do ponto */}
+                      <h3 className={`font-bold ${isFinal ? 'text-gray-500' : 'text-gray-900'}`}>
+                        {atv.aluno || atv.nomeAluno || 'Aluno Identificado'}
+                      </h3>
+                      <p className="text-sm text-gray-500 font-medium mb-2">{atv.modulo} • {atv.tarefa || atv.nomeTarefa}</p>
                       
                       {dataFmt && (
                         <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded ${isFinal ? 'text-green-700 bg-green-50' : 'text-gray-500 bg-gray-100'}`}>
