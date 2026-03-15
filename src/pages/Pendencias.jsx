@@ -20,10 +20,9 @@ export default function Pendencias() {
         
         alunosSnap.docs.forEach(doc => {
           const data = doc.data();
-          // CORREÇÃO 1: Ignora os "Alunos Fantasmas" que estão na lixeira da V3
           if (data.status !== 'lixeira') {
             alunosAtivos.push(data.nome);
-            alunosMap[doc.id] = data.nome; // Guarda o ID para traduzir a V3
+            alunosMap[doc.id] = data.nome; 
           }
         });
 
@@ -65,23 +64,25 @@ export default function Pendencias() {
         const atividadesSnap = await getDocs(qAtividades);
         const entregas = new Set();
         
-        // CORREÇÃO 2: Unifica o Padrão V1 e V3 no mesmo Set
+        // CORREÇÃO: Só adiciona ao Set de "entregas" se houver conteúdo real
         atividadesSnap.docs.forEach(doc => {
           const a = doc.data();
-          let nomeAluno = a.aluno; // Se foi feito na V1
-          let nomeTarefa = a.tarefa; // Se foi feito na V1
+          
+          // Inteligência de Conteúdo: Ignora registros vazios da V3
+          const temRespostaReal = a.resposta && String(a.resposta).trim() !== '';
+          const temArquivo = !!a.arquivoUrl;
 
-          // Se foi feito na V3, traduz o ID para Nome
-          if (a.alunoId && alunosMap[a.alunoId]) {
-            nomeAluno = alunosMap[a.alunoId];
-          }
-          if (a.tarefaId && tarefasMap[a.tarefaId]) {
-            nomeTarefa = tarefasMap[a.tarefaId];
-          }
+          if (temRespostaReal || temArquivo) {
+            let nomeAluno = a.aluno || a.nomeAluno; // Aceita os dois padrões
+            let nomeTarefa = a.tarefa || a.nomeTarefa; // Aceita os dois padrões
 
-          if (nomeAluno && nomeTarefa) {
-            // Guarda a assinatura "NomeDoAluno-NomeDaTarefa"
-            entregas.add(`${nomeAluno}-${nomeTarefa}`);
+            // Tradução de ID para Nome se vier da V3
+            if (a.alunoId && alunosMap[a.alunoId]) nomeAluno = alunosMap[a.alunoId];
+            if (a.tarefaId && tarefasMap[a.tarefaId]) nomeTarefa = tarefasMap[a.tarefaId];
+
+            if (nomeAluno && nomeTarefa) {
+              entregas.add(`${nomeAluno}-${nomeTarefa}`);
+            }
           }
         });
 
@@ -92,7 +93,6 @@ export default function Pendencias() {
           const tarefasDoModulo = mod.tarefas || [];
           
           tarefasDoModulo.forEach(tar => {
-            // Verifica se o aluno entregou aquela tarefa específica (ignora o nome do módulo agora)
             const devedores = alunosAtivos.filter(al => !entregas.has(`${al}-${tar}`));
             if (devedores.length > 0) {
               resultado.push({ 
@@ -143,11 +143,11 @@ export default function Pendencias() {
 
         {loading ? (
           <div className="text-center py-20 text-orange-500 font-bold animate-pulse">
-            Cruzando dados e calculando prazos...
+            Analisando entregas reais no banco...
           </div>
         ) : pendencias.length === 0 ? (
           <div className="bg-white p-10 rounded-2xl text-center border-2 border-dashed border-green-200 text-green-600 font-bold shadow-sm">
-            Uau! Nenhuma pendência nas unidades ativas. Todo mundo em dia! 🎉
+            Tudo em dia! Nenhuma pendência identificada. 🎉
           </div>
         ) : (
           <div className="space-y-6">
@@ -181,7 +181,7 @@ export default function Pendencias() {
                   
                   <div className="p-4 bg-white">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-                      Alunos Pendentes ({item.devedores.length})
+                      Alunos com resposta pendente ({item.devedores.length})
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {item.devedores.map((aluno, i) => (
