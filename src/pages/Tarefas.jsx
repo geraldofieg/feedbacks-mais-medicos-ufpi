@@ -444,128 +444,127 @@ export default function Tarefas() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-8">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-slate-50 sticky top-0 z-10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center p-5 md:p-6 border-b border-gray-100 bg-slate-50 shrink-0 z-10">
               <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Plus className="text-blue-600"/> Adicionar ao Cronograma</h2>
               <button onClick={() => { setIsModalOpen(false); setSucessoMsg(''); }} className="text-gray-400 hover:text-red-500 bg-white border border-gray-200 rounded-full p-2 shadow-sm transition-all hover:scale-110"><X size={20}/></button>
             </div>
             
-            {sucessoMsg && (
-              <div className="mx-6 mt-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-2">
-                <Check size={20} className="shrink-0" /><span className="text-sm font-black">{sucessoMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleCriar} className="p-6 md:p-8 space-y-6">
-              
-              <div>
-                <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Tipo de Registro</label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'entrega'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'entrega' ? 'border-orange-500 bg-orange-50' : 'border-slate-100 bg-white'}`}>
-                    <FileText size={20} className="text-orange-500 mb-2"/><h4 className="font-black text-sm">Tarefa</h4>
-                  </button>
-                  <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'compromisso'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'compromisso' ? 'border-purple-500 bg-purple-50' : 'border-slate-100 bg-white'}`}>
-                    <Calendar size={20} className="text-purple-500 mb-2"/><h4 className="font-black text-sm">Compromisso</h4>
-                  </button>
-                  <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'lembrete'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'lembrete' ? 'border-yellow-500 bg-yellow-50' : 'border-slate-100 bg-white'}`}>
-                    <StickyNote size={20} className="text-yellow-500 mb-2"/><h4 className="font-black text-sm">Post-it</h4>
-                  </button>
+            <div className="overflow-y-auto p-5 md:p-8 flex-1">
+              {sucessoMsg && (
+                <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-2">
+                  <Check size={20} className="shrink-0" /><span className="text-sm font-black">{sucessoMsg}</span>
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-4">
+              <form onSubmit={handleCriar} className="space-y-6 pb-4">
                 <div>
-                  <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 block">Título da Atividade</label>
-                  <input ref={tituloInputRef} type="text" required autoFocus placeholder="Ex: Módulo 08 - Fórum" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-800" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})}/>
+                  <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Tipo de Registro</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'entrega'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'entrega' ? 'border-orange-500 bg-orange-50' : 'border-slate-100 bg-white'}`}>
+                      <FileText size={20} className="text-orange-500 mb-2"/><h4 className="font-black text-sm">Tarefa</h4>
+                    </button>
+                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'compromisso'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'compromisso' ? 'border-purple-500 bg-purple-50' : 'border-slate-100 bg-white'}`}>
+                      <Calendar size={20} className="text-purple-500 mb-2"/><h4 className="font-black text-sm">Compromisso</h4>
+                    </button>
+                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'lembrete'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'lembrete' ? 'border-yellow-500 bg-yellow-50' : 'border-slate-100 bg-white'}`}>
+                      <StickyNote size={20} className="text-yellow-500 mb-2"/><h4 className="font-black text-sm">Post-it</h4>
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">Enunciado da Tarefa</label>
-                    
-                    <div className="flex items-center gap-2">
-                      {enunciadoArquivoUrl ? (
-                        <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 animate-in zoom-in">
-                          <FileCheck size={12}/>
-                          <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{enunciadoArquivoNome}</span>
-                          <button type="button" onClick={() => { setEnunciadoArquivoUrl(''); setEnunciadoArquivoNome(''); }} className="hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 block">Título da Atividade</label>
+                    <input ref={tituloInputRef} type="text" required autoFocus placeholder="Ex: Módulo 08 - Fórum" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-800" value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})}/>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">Enunciado da Tarefa</label>
+                      <div className="flex items-center gap-2">
+                        {enunciadoArquivoUrl ? (
+                          <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 animate-in zoom-in">
+                            <FileCheck size={12}/>
+                            <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{enunciadoArquivoNome}</span>
+                            <button type="button" onClick={() => { setEnunciadoArquivoUrl(''); setEnunciadoArquivoNome(''); }} className="hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
+                          </div>
+                        ) : (
+                          <label className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
+                            {uploading ? <RefreshCw size={12} className="animate-spin"/> : <FileUp size={12}/>}
+                            <span className="text-[10px] font-black uppercase">{uploading ? 'Subindo...' : 'Anexar PDF/Doc'}</span>
+                            <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={handleUploadEnunciado} disabled={uploading}/>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                    <textarea placeholder="Cole o texto ou anexe um arquivo acima..." rows="5" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700 resize-none leading-relaxed" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}/>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-black text-slate-800 uppercase mb-2 block">Início</label>
+                      <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={novaTarefa.dataInicio} onChange={e => setNovaTarefa({...novaTarefa, dataInicio: e.target.value})}/>
+                    </div>
+                    <div>
+                      <label className="text-xs font-black text-slate-800 uppercase mb-2 block">Prazo Final</label>
+                      <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}/>
+                    </div>
+                  </div>
+
+                  {novaTarefa.tipo === 'entrega' && (
+                    <div className="mt-6 border-t border-slate-100 pt-6 animate-in fade-in slide-in-from-bottom-2">
+                      <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Atribuição da Tarefa</label>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                        <button type="button" onClick={() => setAtribuicaoEspecifica(false)} className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${!atribuicaoEspecifica ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                          <div className={`p-2 rounded-full ${!atribuicaoEspecifica ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Users size={18}/></div>
+                          <div className="text-left">
+                            <h4 className="font-black text-sm text-slate-800">Turma Completa</h4>
+                            <p className="text-[11px] font-bold text-slate-500 mt-0.5">Todos receberão a tarefa</p>
+                          </div>
+                        </button>
+
+                        <button type="button" onClick={() => setAtribuicaoEspecifica(true)} className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${atribuicaoEspecifica ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                          <div className={`p-2 rounded-full ${atribuicaoEspecifica ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}><User size={18}/></div>
+                          <div className="text-left">
+                            <h4 className="font-black text-sm text-slate-800">Alunos Específicos</h4>
+                            <p className="text-[11px] font-bold text-slate-500 mt-0.5">Ex: Atividade de recuperação</p>
+                          </div>
+                        </button>
+                      </div>
+
+                      {atribuicaoEspecifica && alunosTurma.length > 0 && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-48 overflow-y-auto mt-2 animate-in slide-in-from-top-2">
+                          <div className="flex justify-between items-center mb-3 sticky top-0 bg-slate-50 pb-2">
+                            <span className="text-xs font-bold text-slate-500">Selecione os alunos:</span>
+                            <span className="text-xs font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{alunosSelecionados.length} selecionados</span>
+                          </div>
+                          <div className="space-y-1">
+                            {alunosTurma.map(aluno => (
+                              <label key={aluno.id} className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${alunosSelecionados.includes(aluno.id) ? 'bg-blue-100 text-blue-900 font-bold' : 'hover:bg-slate-200 text-slate-700'}`}>
+                                <input 
+                                  type="checkbox" 
+                                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                                  checked={alunosSelecionados.includes(aluno.id)}
+                                  onChange={() => toggleAlunoSelecao(aluno.id)}
+                                />
+                                <span className="text-sm truncate select-none">{aluno.nome}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                      ) : (
-                        <label className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
-                          {uploading ? <RefreshCw size={12} className="animate-spin"/> : <FileUp size={12}/>}
-                          <span className="text-[10px] font-black uppercase">{uploading ? 'Subindo...' : 'Anexar PDF/Doc'}</span>
-                          <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={handleUploadEnunciado} disabled={uploading}/>
-                        </label>
                       )}
                     </div>
-                  </div>
-                  <textarea placeholder="Cole o texto ou anexe um arquivo acima..." rows="5" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700 resize-none leading-relaxed" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}/>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-black text-slate-800 uppercase mb-2 block">Início</label>
-                    <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={novaTarefa.dataInicio} onChange={e => setNovaTarefa({...novaTarefa, dataInicio: e.target.value})}/>
-                  </div>
-                  <div>
-                    <label className="text-xs font-black text-slate-800 uppercase mb-2 block">Prazo Final</label>
-                    <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}/>
-                  </div>
-                </div>
-
-                {novaTarefa.tipo === 'entrega' && (
-                  <div className="mt-6 border-t border-slate-100 pt-6 animate-in fade-in slide-in-from-bottom-2">
-                    <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Atribuição da Tarefa</label>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                      <button type="button" onClick={() => setAtribuicaoEspecifica(false)} className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${!atribuicaoEspecifica ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                        <div className={`p-2 rounded-full ${!atribuicaoEspecifica ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Users size={18}/></div>
-                        <div className="text-left">
-                          <h4 className="font-black text-sm text-slate-800">Turma Completa</h4>
-                          <p className="text-[11px] font-bold text-slate-500 mt-0.5">Todos receberão a tarefa</p>
-                        </div>
-                      </button>
-
-                      <button type="button" onClick={() => setAtribuicaoEspecifica(true)} className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${atribuicaoEspecifica ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                        <div className={`p-2 rounded-full ${atribuicaoEspecifica ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}><User size={18}/></div>
-                        <div className="text-left">
-                          <h4 className="font-black text-sm text-slate-800">Alunos Específicos</h4>
-                          <p className="text-[11px] font-bold text-slate-500 mt-0.5">Ex: Atividade de recuperação</p>
-                        </div>
-                      </button>
-                    </div>
-
-                    {atribuicaoEspecifica && alunosTurma.length > 0 && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-48 overflow-y-auto mt-2 animate-in slide-in-from-top-2">
-                        <div className="flex justify-between items-center mb-3 sticky top-0 bg-slate-50 pb-2">
-                          <span className="text-xs font-bold text-slate-500">Selecione os alunos:</span>
-                          <span className="text-xs font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{alunosSelecionados.length} selecionados</span>
-                        </div>
-                        <div className="space-y-1">
-                          {alunosTurma.map(aluno => (
-                            <label key={aluno.id} className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${alunosSelecionados.includes(aluno.id) ? 'bg-blue-100 text-blue-900 font-bold' : 'hover:bg-slate-200 text-slate-700'}`}>
-                              <input 
-                                type="checkbox" 
-                                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                                checked={alunosSelecionados.includes(aluno.id)}
-                                onChange={() => toggleAlunoSelecao(aluno.id)}
-                              />
-                              <span className="text-sm truncate select-none">{aluno.nome}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-              </div>
-
-              <button disabled={salvando || uploading} className={`w-full text-white font-black py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 mt-4 text-xl active:scale-95 ${sucessoMsg ? 'bg-green-500' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                {salvando ? <RefreshCw className="animate-spin" size={24}/> : sucessoMsg ? <><Check size={28}/> Sucesso!</> : 'Salvar no Cronograma'}
-              </button>
-            </form>
+                <button disabled={salvando || uploading} className={`w-full text-white font-black py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 mt-4 text-xl active:scale-95 ${sucessoMsg ? 'bg-green-500' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  {salvando ? <RefreshCw className="animate-spin" size={24}/> : sucessoMsg ? <><Check size={28}/> Sucesso!</> : 'Salvar no Cronograma'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
