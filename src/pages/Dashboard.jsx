@@ -313,7 +313,11 @@ export default function Dashboard() {
               }}
             >
               <option value="" disabled>Selecione...</option>
-              {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+              {instituicoes.map(i => (
+  <option key={i.id} value={i.id}>
+    {i.nome} {isAdmin && i.professorUid === currentUser.uid ? '(Sua conta)' : isAdmin ? '(De outro prof.)' : ''}
+  </option>
+))}
               <option disabled>──────────</option>
               <option value="nova_instituicao">+ Criar Nova Instituição</option>
             </select>
