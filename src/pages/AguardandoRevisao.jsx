@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, Clock, ChevronRight, CalendarDays, CheckCircle2 } from 'lucide-react';
@@ -33,16 +33,21 @@ export default function AguardandoRevisao() {
           return;
         }
 
-        // 1. Busca Tarefas reais para obter o ID correto (O "Tradutor")
+        // 1. Puxa as tarefas da V3 para checagem
         const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapTarefas = await getDocs(qTarefas);
-        const mapaTarefas = {};
-        const mapaNomesParaId = {}; // NOVO: Dicionário reverso para achar ID pelo Nome
+        
+        const tarefasPorId = {};
+        const tarefasPorNomeLimpo = {}; 
         
         snapTarefas.docs.forEach(d => { 
-          const nomeDaTarefa = d.data().nomeTarefa || d.data().titulo;
-          mapaTarefas[d.id] = nomeDaTarefa; 
-          mapaNomesParaId[nomeDaTarefa] = d.id; // Guarda o ID verdadeiro associado ao nome
+          const data = d.data();
+          tarefasPorId[d.id] = true; // Guarda os IDs válidos
+          
+          // Normalização agressiva (tira espaços, hifens e deixa minúsculo)
+          const nomeOriginal = data.nomeTarefa || data.titulo || '';
+          const nomeLimpo = nomeOriginal.toLowerCase().replace(/[\s-]/g, '');
+          if (nomeLimpo) tarefasPorNomeLimpo[nomeLimpo] = d.id;
         });
 
         const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
@@ -55,8 +60,9 @@ export default function AguardandoRevisao() {
         
         const pendencias = [];
         
-        snapAtividades.docs.forEach(doc => {
-          const ativ = doc.data();
+        // Usando um loop 'for...of' para podermos usar 'await' na auto-criação sem engasgar o sistema
+        for (const docSnap of snapAtividades.docs) {
+          const ativ = docSnap.data();
           
           if (turmasIds.includes(ativ.turmaId)) {
             const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
@@ -64,27 +70,53 @@ export default function AguardandoRevisao() {
             const temResposta = ativ.resposta && String(ativ.resposta).trim() !== '';
 
             if (!jaPostado && !jaAprovado && temResposta) {
-              // RESOLVENDO O BUG DO LINK QUEBRADO (HERANÇA DA V1)
-              const nomeRealTarefa = mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || ativ.tarefa || 'Tarefa Desconhecida';
+              const nomeOriginalTarefa = ativ.nomeTarefa || ativ.tarefa || ativ.modulo || 'Tarefa Importada';
+              const nomeLimpoAtividade = nomeOriginalTarefa.toLowerCase().replace(/[\s-]/g, '');
               
-              // Se o tarefaId da atividade não existir ou não for um ID válido do Firebase, 
-              // ele usa o dicionário reverso para achar o ID verdadeiro pelo nome da tarefa.
-              let idVerdadeiroDaTarefa = ativ.tarefaId;
-              if (!idVerdadeiroDaTarefa || !mapaTarefas[idVerdadeiroDaTarefa]) {
-                  idVerdadeiroDaTarefa = mapaNomesParaId[nomeRealTarefa] || 'id_nao_encontrado';
+              let idVerdadeiro = ativ.tarefaId;
+
+              // SE A TAREFA ESTÁ COM LINK QUEBRADO OU HERANÇA DA V1:
+              if (!idVerdadeiro || !tarefasPorId[idVerdadeiro]) {
+                  
+                  if (tarefasPorNomeLimpo[nomeLimpoAtividade]) {
+                      // CASO 1: Achou a tarefa no banco da V3. Só amarra os IDs.
+                      idVerdadeiro = tarefasPorNomeLimpo[nomeLimpoAtividade];
+                      updateDoc(doc(db, 'atividades', docSnap.id), { tarefaId: idVerdadeiro }).catch(e => console.log('Erro silencioso DB', e));
+                  } else {
+                      // CASO 2: Tarefa não existe na V3. O sistema CRIA ELA AGORA MESMO!
+                      const novaTarefa = {
+                          nomeTarefa: nomeOriginalTarefa,
+                          titulo: nomeOriginalTarefa,
+                          instituicaoId: escolaSelecionada.id,
+                          turmaId: ativ.turmaId,
+                          tipo: 'entrega',
+                          enunciado: 'Tarefa migrada/gerada automaticamente do cronograma V1.',
+                          dataCriacao: new Date() // Data atual local
+                      };
+                      
+                      const docRef = await addDoc(collection(db, 'tarefas'), novaTarefa);
+                      idVerdadeiro = docRef.id;
+                      
+                      // Adiciona ao mapa local para não criar duplicatas se houver outro aluno na mesma tarefa
+                      tarefasPorId[idVerdadeiro] = true;
+                      tarefasPorNomeLimpo[nomeLimpoAtividade] = idVerdadeiro;
+                      
+                      // Amarra a atividade à tarefa recém-criada
+                      updateDoc(doc(db, 'atividades', docSnap.id), { tarefaId: idVerdadeiro }).catch(e => console.log('Erro silencioso DB', e));
+                  }
               }
 
               pendencias.push({
-                id: doc.id,
-                tarefaId: idVerdadeiroDaTarefa, // Agora vai sempre o ID verdadeiro da URL
+                id: docSnap.id,
+                tarefaId: idVerdadeiro, 
                 alunoId: ativ.alunoId,
                 nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || ativ.aluno || 'Aluno Removido',
-                nomeTarefa: nomeRealTarefa,
+                nomeTarefa: nomeOriginalTarefa,
                 dataCriacao: ativ.dataCriacao
               });
             }
           }
-        });
+        }
 
         pendencias.sort((a, b) => {
           const tempoA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
@@ -127,7 +159,7 @@ export default function AguardandoRevisao() {
       {loading ? (
         <div className="text-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-yellow-500 mx-auto mb-4"></div>
-          <p className="text-gray-500 font-bold">Buscando pendências...</p>
+          <p className="text-gray-500 font-bold">Inspecionando banco e sincronizando tarefas...</p>
         </div>
       ) : listaPendencias.length === 0 ? (
         <div className="bg-green-50 border-2 border-dashed border-green-200 rounded-3xl p-12 text-center shadow-sm">
