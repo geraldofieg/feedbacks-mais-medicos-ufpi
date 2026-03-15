@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'; // NOVO: Storage
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, Check, X, Clock, Info, RefreshCw, Paperclip, FileUp, FileCheck, ExternalLink } from 'lucide-react';
+import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, Check, X, Clock, Info, RefreshCw, Paperclip, FileUp, FileCheck, ExternalLink, Users, User } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 const ordenarTarefas = (lista) => {
@@ -125,7 +125,6 @@ export default function Tarefas() {
     fetchDadosTurma();
   }, [turmaAtiva, escolaSelecionada]);
 
-  // FUNÇÃO DE UPLOAD DO ENUNCIADO
   async function handleUploadEnunciado(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -230,8 +229,8 @@ export default function Tarefas() {
       const tData = {
         nomeTarefa: tituloSalvo, 
         enunciado: novaTarefa.enunciado.trim(),
-        enunciadoArquivoUrl: enunciadoArquivoUrl, // NOVO
-        enunciadoArquivoNome: enunciadoArquivoNome, // NOVO
+        enunciadoArquivoUrl: enunciadoArquivoUrl, 
+        enunciadoArquivoNome: enunciadoArquivoNome, 
         dataInicio: prazoInicial,
         dataFim: prazoFinal, 
         tipo: novaTarefa.tipo, 
@@ -385,7 +384,6 @@ export default function Tarefas() {
                 
                 {editandoId === tarefa.id ? (
                   <div className="space-y-4 animate-in fade-in zoom-in duration-200">
-                    {/* (O formulário de edição segue o mesmo padrão de campos, omitido aqui para brevidade mas presente no arquivo original) */}
                     <button onClick={() => handleSalvarEdicao(tarefa.id)} className="w-full bg-green-600 text-white py-2.5 rounded-lg text-sm font-black shadow-sm">Salvar Alterações</button>
                     <button onClick={() => setEditandoId(null)} className="w-full bg-gray-100 text-gray-600 py-2.5 rounded-lg text-sm font-black">Cancelar</button>
                   </div>
@@ -438,7 +436,7 @@ export default function Tarefas() {
         )}
       </div>
 
-      {/* MODAL DE CRIAÇÃO ATUALIZADO COM UPLOAD */}
+      {/* MODAL DE CRIAÇÃO ATUALIZADO COM UPLOAD E SELEÇÃO DE ALUNOS RESTAURADA */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-8">
@@ -480,7 +478,7 @@ export default function Tarefas() {
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">Enunciado da Tarefa</label>
                     
-                    {/* BOTÃO DE UPLOAD HÍBRIDO (IGUAL À ESTAÇÃO DE REVISÃO) */}
+                    {/* BOTÃO DE UPLOAD HÍBRIDO */}
                     <div className="flex items-center gap-2">
                       {enunciadoArquivoUrl ? (
                         <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 animate-in zoom-in">
@@ -510,6 +508,55 @@ export default function Tarefas() {
                     <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}/>
                   </div>
                 </div>
+
+                {/* FUNCIONALIDADE RESTAURADA: SELETOR DE ALUNOS (Aparece apenas para o tipo "Tarefa") */}
+                {novaTarefa.tipo === 'entrega' && (
+                  <div className="mt-6 border-t border-slate-100 pt-6 animate-in fade-in slide-in-from-bottom-2">
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Atribuição da Tarefa</label>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                      <button type="button" onClick={() => setAtribuicaoEspecifica(false)} className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${!atribuicaoEspecifica ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                        <div className={`p-2 rounded-full ${!atribuicaoEspecifica ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Users size={18}/></div>
+                        <div className="text-left">
+                          <h4 className="font-black text-sm text-slate-800">Turma Completa</h4>
+                          <p className="text-[11px] font-bold text-slate-500 mt-0.5">Todos receberão a tarefa</p>
+                        </div>
+                      </button>
+
+                      <button type="button" onClick={() => setAtribuicaoEspecifica(true)} className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${atribuicaoEspecifica ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                        <div className={`p-2 rounded-full ${atribuicaoEspecifica ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}><User size={18}/></div>
+                        <div className="text-left">
+                          <h4 className="font-black text-sm text-slate-800">Alunos Específicos</h4>
+                          <p className="text-[11px] font-bold text-slate-500 mt-0.5">Ex: Atividade de recuperação</p>
+                        </div>
+                      </button>
+                    </div>
+
+                    {atribuicaoEspecifica && alunosTurma.length > 0 && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-48 overflow-y-auto mt-2 animate-in slide-in-from-top-2">
+                        <div className="flex justify-between items-center mb-3 sticky top-0 bg-slate-50 pb-2">
+                          <span className="text-xs font-bold text-slate-500">Selecione os alunos:</span>
+                          <span className="text-xs font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{alunosSelecionados.length} selecionados</span>
+                        </div>
+                        <div className="space-y-1">
+                          {alunosTurma.map(aluno => (
+                            <label key={aluno.id} className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${alunosSelecionados.includes(aluno.id) ? 'bg-blue-100 text-blue-900 font-bold' : 'hover:bg-slate-200 text-slate-700'}`}>
+                              <input 
+                                type="checkbox" 
+                                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                                checked={alunosSelecionados.includes(aluno.id)}
+                                onChange={() => toggleAlunoSelecao(aluno.id)}
+                              />
+                              <span className="text-sm truncate select-none">{aluno.nome}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* FIM DA FUNCIONALIDADE RESTAURADA */}
+
               </div>
 
               <button disabled={salvando || uploading} className={`w-full text-white font-black py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 mt-4 text-xl active:scale-95 ${sucessoMsg ? 'bg-green-500' : 'bg-blue-600 hover:bg-blue-700'}`}>
