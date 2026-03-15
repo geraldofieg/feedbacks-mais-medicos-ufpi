@@ -255,6 +255,14 @@ export default function Tarefas() {
             turmaId: turmaAtiva,
             instituicaoId: escolaSelecionada.id,
             tarefaId: novaId,
+            
+            // 🔥 CIRURGIA V1: Etiquetas Poliglotas injetadas na criação
+            nomeAluno: aluno.nome,
+            aluno: aluno.nome,
+            nomeTarefa: tituloSalvo,
+            tarefa: tituloSalvo,
+            modulo: tituloSalvo,
+
             resposta: '',
             nota: null,
             feedbackSugerido: '',
@@ -417,7 +425,6 @@ export default function Tarefas() {
                         <p className="text-sm text-slate-600 font-medium line-clamp-4 mb-4 bg-white/50 p-3 rounded-lg whitespace-pre-wrap">{tarefa.enunciado}</p>
                       )}
 
-                      {/* NOVO: INDICADOR DE ARQUIVO NO CARD */}
                       {tarefa.enunciadoArquivoUrl && (
                         <a href={tarefa.enunciadoArquivoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider mb-4 hover:bg-blue-100 transition-colors">
                           <Paperclip size={12}/> Ver Anexo <ExternalLink size={10}/>
@@ -436,7 +443,6 @@ export default function Tarefas() {
         )}
       </div>
 
-      {/* MODAL DE CRIAÇÃO ATUALIZADO COM UPLOAD E SELEÇÃO DE ALUNOS RESTAURADA */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-8">
@@ -478,7 +484,6 @@ export default function Tarefas() {
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">Enunciado da Tarefa</label>
                     
-                    {/* BOTÃO DE UPLOAD HÍBRIDO */}
                     <div className="flex items-center gap-2">
                       {enunciadoArquivoUrl ? (
                         <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 animate-in zoom-in">
@@ -509,7 +514,6 @@ export default function Tarefas() {
                   </div>
                 </div>
 
-                {/* FUNCIONALIDADE RESTAURADA: SELETOR DE ALUNOS (Aparece apenas para o tipo "Tarefa") */}
                 {novaTarefa.tipo === 'entrega' && (
                   <div className="mt-6 border-t border-slate-100 pt-6 animate-in fade-in slide-in-from-bottom-2">
                     <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Atribuição da Tarefa</label>
@@ -555,7 +559,6 @@ export default function Tarefas() {
                     )}
                   </div>
                 )}
-                {/* FIM DA FUNCIONALIDADE RESTAURADA */}
 
               </div>
 
