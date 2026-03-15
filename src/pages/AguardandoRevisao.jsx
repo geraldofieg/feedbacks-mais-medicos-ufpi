@@ -17,7 +17,6 @@ export default function AguardandoRevisao() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoading(true);
       try {
-        // 1. Regra de Acesso: Busca as turmas que este usuário pode ver
         const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
         
         const turmasRef = collection(db, 'turmas');
@@ -34,18 +33,23 @@ export default function AguardandoRevisao() {
           return;
         }
 
-        // 2. Busca Tarefas e Alunos para cruzar os nomes (Dicionários)
+        // 1. Busca Tarefas reais para obter o ID correto (O "Tradutor")
         const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapTarefas = await getDocs(qTarefas);
         const mapaTarefas = {};
-        snapTarefas.docs.forEach(d => { mapaTarefas[d.id] = d.data().nomeTarefa || d.data().titulo; });
+        const mapaNomesParaId = {}; // NOVO: Dicionário reverso para achar ID pelo Nome
+        
+        snapTarefas.docs.forEach(d => { 
+          const nomeDaTarefa = d.data().nomeTarefa || d.data().titulo;
+          mapaTarefas[d.id] = nomeDaTarefa; 
+          mapaNomesParaId[nomeDaTarefa] = d.id; // Guarda o ID verdadeiro associado ao nome
+        });
 
         const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAlunos = await getDocs(qAlunos);
         const mapaAlunos = {};
         snapAlunos.docs.forEach(d => { mapaAlunos[d.id] = d.data().nome; });
 
-        // 3. Busca as Atividades "Aguardando Revisão" com a Nova Matemática (V3)
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
         
@@ -55,31 +59,37 @@ export default function AguardandoRevisao() {
           const ativ = doc.data();
           
           if (turmasIds.includes(ativ.turmaId)) {
-            // LÓGICA ESPELHADA DO DASHBOARD
             const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
             const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
             const temResposta = ativ.resposta && String(ativ.resposta).trim() !== '';
 
-            // Só entra na lista de Revisão se tiver resposta colada E não tiver sido aprovado nem postado
             if (!jaPostado && !jaAprovado && temResposta) {
+              // RESOLVENDO O BUG DO LINK QUEBRADO (HERANÇA DA V1)
+              const nomeRealTarefa = mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || ativ.tarefa || 'Tarefa Desconhecida';
+              
+              // Se o tarefaId da atividade não existir ou não for um ID válido do Firebase, 
+              // ele usa o dicionário reverso para achar o ID verdadeiro pelo nome da tarefa.
+              let idVerdadeiroDaTarefa = ativ.tarefaId;
+              if (!idVerdadeiroDaTarefa || !mapaTarefas[idVerdadeiroDaTarefa]) {
+                  idVerdadeiroDaTarefa = mapaNomesParaId[nomeRealTarefa] || 'id_nao_encontrado';
+              }
+
               pendencias.push({
                 id: doc.id,
-                tarefaId: ativ.tarefaId,
-                alunoId: ativ.alunoId, // Guardamos a ID do aluno para o teletransporte!
-                // AJUSTE: Fallback triplo para garantir que o nome apareça (Fim do bug do ".")
-                nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || 'Aluno Removido',
-                nomeTarefa: mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || 'Tarefa Removida',
+                tarefaId: idVerdadeiroDaTarefa, // Agora vai sempre o ID verdadeiro da URL
+                alunoId: ativ.alunoId,
+                nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || ativ.aluno || 'Aluno Removido',
+                nomeTarefa: nomeRealTarefa,
                 dataCriacao: ativ.dataCriacao
               });
             }
           }
         });
 
-        // AJUSTE: Ordena da mais NOVA para a mais ANTIGA (O que foi salvo por último, aparece primeiro no topo)
         pendencias.sort((a, b) => {
           const tempoA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
           const tempoB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
-          return tempoB - tempoA; // tempoB - tempoA garante ordem decrescente
+          return tempoB - tempoA;
         });
 
         setListaPendencias(pendencias);
@@ -104,7 +114,6 @@ export default function AguardandoRevisao() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Cabeçalho */}
       <div className="flex items-center gap-4 mb-8">
         <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-yellow-600 transition-colors p-2 -ml-2">
           <ArrowLeft size={28} />
@@ -137,10 +146,9 @@ export default function AguardandoRevisao() {
             <Link 
               key={item.id} 
               to={`/revisar/${item.tarefaId}`} 
-              state={{ alunoId: item.alunoId }} // "Jogando" o ID do aluno para a Estação de Trabalho!
+              state={{ alunoId: item.alunoId }} 
               className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-yellow-400 transition-all group"
             >
-              {/* Ícone de Relógio (Espera) */}
               <div className="bg-yellow-50 text-yellow-600 p-4 rounded-xl group-hover:bg-yellow-500 group-hover:text-white transition-colors shrink-0">
                 <Clock size={24} />
               </div>
