@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+// 🔥 CIRURGIA V1: Importado o deleteField do firestore
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, deleteField } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -127,13 +128,11 @@ export default function RevisarAtividade() {
     finally { setGerandoIA(false); }
   }
 
-  // FUNÇÃO SINCRONIZADA: Salva campos da V1 e da V3 simultaneamente
   async function handleSalvarRascunho() {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
     try {
       const payload = { 
-        // 1. Campos da V3
         resposta: novaResposta.trim(),
         arquivoUrl: arquivoUrl,
         nomeArquivo: nomeArquivo,
@@ -143,21 +142,27 @@ export default function RevisarAtividade() {
         status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente',
         nomeAluno: alunoAtual.nome, 
         nomeTarefa: tarefa.nomeTarefa,
-
-        // 2. Campos da V1 (Backward Compatibility)
         aluno: alunoAtual.nome,
         tarefa: tarefa.nomeTarefa,
         modulo: tarefa.nomeTarefa,
-
-        // 3. Inteligência de Funil: Se rascunho, dataAprovacao deve ser null para a V1
-        dataAprovacao: atividadeAtual?.status === 'aprovado' ? atividadeAtual.dataAprovacao : null, 
-        
         revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
       };
 
+      // 🔥 CIRURGIA V1: Lida com a data de aprovação via deleteField() se for um UPDATE pendente
+      if (atividadeAtual?.status === 'aprovado') {
+          payload.dataAprovacao = atividadeAtual.dataAprovacao;
+      } else {
+          // Se estamos atualizando um rascunho, arrancamos o campo do banco para não inflar a V1
+          if (atividadeAtual) {
+              payload.dataAprovacao = deleteField();
+          }
+          // Se for uma atividade nova (addDoc), simplesmente não enviamos esse campo.
+      }
+
       if (atividadeAtual) {
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
-        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
+        // Atualiza a memória visual (para a UI não quebrar com deleteField)
+        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload, dataAprovacao: null } }));
       } else {
         const novaAtiv = { alunoId: alunoAtual.id, turmaId: tarefa.turmaId, instituicaoId: tarefa.instituicaoId, tarefaId: tarefa.id, dataCriacao: serverTimestamp(), postado: false, ...payload };
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
@@ -176,7 +181,6 @@ export default function RevisarAtividade() {
         feedbackFinal: feedbackEditado.trim(), 
         status: 'aprovado', 
         dataAprovacao: serverTimestamp(),
-        // Tradução para V1
         aluno: alunoAtual.nome,
         tarefa: tarefa.nomeTarefa,
         modulo: tarefa.nomeTarefa,
@@ -203,8 +207,8 @@ export default function RevisarAtividade() {
     if (!window.confirm("Deseja devolver esta atividade para a fase de revisão?")) return;
     setSalvando(true);
     try {
-        // Limpa a data de aprovação para a V1 entender que voltou para a revisão
-        await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: null });
+        // 🔥 CIRURGIA V1: Troca de 'null' para deleteField() na devolução
+        await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: deleteField() });
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false, dataAprovacao: null } }));
     } catch (e) { console.error(e); } finally { setSalvando(false); }
   }
