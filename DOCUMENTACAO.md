@@ -28,12 +28,14 @@ O sistema opera em uma hierarquia plana de 3 níveis protegida por Tenant ID:
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
 * **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role`, `plano`, `promptPersonalizado`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`.
-* **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` ('pendente_revisao'|'aprovado'), `nota`, `feedbackSugerido`, `feedbackFinal`, `postado` (Booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`. **Campos de Retrocompatibilidade V1/V3:** `nomeAluno` (Texto), `nomeTarefa` (Texto), `revisadoPor` (Nome do revisor).
+* **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` ('pendente'|'aprovado'), `nota`, `feedbackSugerido`, `feedbackFinal`, `postado` (Booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`. 
+* **Campos de Retrocompatibilidade V1/V3 (Estratégia Poliglota/Dupla Etiqueta):** Salva simultaneamente `nomeAluno` (V3) e `aluno` (V1), `nomeTarefa` (V3) e `tarefa`/`modulo` (V1), `revisadoPor` (Nome do revisor). 
+* **Regra Crítica de Sincronia:** Em rascunhos (`status: 'pendente'`), o campo `dataAprovacao` deve ser forçadamente `null` para evitar falsos positivos e não inflar a caixa de postagem da V1.
 
 ## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
 * **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada, o Dashboard exibe a interface de criação de Nível 1.
-* **Atalho VIP de Ação Rápida (Teletransporte):** O Dashboard avalia se existe uma tarefa em andamento. O texto do botão possui inteligência: se não houver progresso, exibe **"Iniciar correções"**; se pelo menos uma resposta já foi colada, atualiza para **"Continuar correções"**.
-* **A Esteira de Produção (Kanban Matemático Blindado):** Os alunos só entram no funil a partir do momento em que o professor **cola a resposta deles** no sistema:
+* **Atalho VIP de Ação Rápida (Card Multi-Tarefas):** O Dashboard avalia se existem tarefas em andamento cruzando a data atual. Se houver múltiplas tarefas ativas, o card central se adapta transformando-se em uma lista rolável (Cardápio Completo). O texto do botão de cada tarefa possui inteligência: se não houver progresso, exibe **"Iniciar correções"**; se pelo menos uma resposta já foi colada, atualiza para **"Continuar correções"**.
+* **A Esteira de Produção (Kanban Matemático Blindado):** Os alunos só entram no funil a partir do momento em que o professor **cola a resposta deles** no sistema (ou anexa arquivo):
     * **Caixa 1: Aguardando Revisão (`/aguardandorevisao`):** Resposta colada, mas feedback não aprovado. (Ordenado: Mais recente no topo).
     * **Caixa 2: Aguardando Postar (`/faltapostar`):** Feedback aprovado, mas `postado` é `false`. (Oculta para o Tier 2).
     * **Caixa 3: Histórico Finalizado (`/historico`):** `postado` é `true`. Ciclo encerrado.
@@ -54,7 +56,7 @@ Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '=='
 A página de Revisar Atividade (`/revisar/id`) é o HUB principal do sistema.
 * **Barra de Progresso (UX E-commerce):** Exibe os 3 passos: `1. Trazer Resposta` ➔ `2. Revisar Feedback` ➔ `3. Lançar Oficial`.
 * **Assinatura e Log:** Toda atividade aprovada exibe a hora exata e o nome de quem revisou (Log de Auditoria visível na tela).
-* **Gerenciamento Gestor (Opções de Emergência):** Botões para **Devolver p/ Revisão** (volta para Amarelo) ou **Excluir Atividade** (apaga a resposta e volta o aluno para Vermelho).
+* **Gerenciamento Gestor (Opções de Emergência):** Botões para **Devolver p/ Revisão** (volta para Amarelo limpando a data) ou **Excluir Atividade** (apaga a resposta e volta o aluno para Vermelho).
 * **IA Gemini 3.1 Flash Lite:** Integra modelo avançado com *Search Grounding* ativo.
 * **Layout "Sticky":** No Desktop, a Mesa de Avaliação (coluna direita) fica fixada durante a rolagem.
 
@@ -102,6 +104,7 @@ Automatização de cobranças baseada no cruzamento de alunos x tarefas pendente
 4. **CRUD Dinâmico e Soft Delete:** Oculta dados via `status: 'lixeira'`. Resgate via `/lixeira`.
 5. **Memória de Navegação (Auto-Foco):** Pré-seleção da última Turma ativa ou Tarefa mais recente nos Dropdowns.
 6. **Global Utility Menu:** Alocado no canto superior direito para configurações privadas, resgate de lixeira e logout.
+7. **Super Auto-Linker (Migração Silenciosa):** Nas listas de pendências da V3, o sistema normaliza agressivamente os nomes das tarefas (removendo espaços e maiúsculas). Se detectar uma tarefa órfã importada via cronograma da V1, ele a recria dinamicamente no banco e amarra o `tarefaId` correto sob o capô, prevenindo links quebrados (chutes para a Home) de forma 100% transparente ao usuário.
 
 ## 17. Acelerador de Fluxo: Botão Global (FAB)
 * **Atalho Flutuante:** Acesso rápido à criação de Turmas, Tarefas e Alunos.
