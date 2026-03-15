@@ -55,16 +55,17 @@ export default function Navbar() {
         {/* === MODO COMPUTADOR === */}
         <div className="hidden md:flex items-center justify-between h-16">
           
-          {/* AJUSTE: Hierarquia visual corrigida (Plataforma > Instituição) */}
-          <Link to="/" className="flex items-center gap-3 transition-transform hover:scale-105 shrink-0">
+          {/* AJUSTE: Hierarquia visual e margem adicionada para separar do menu (mr-8) */}
+          <Link to="/" className="flex items-center gap-3 transition-transform hover:scale-105 shrink-0 mr-8 lg:mr-12">
             <span className="font-black text-slate-900 text-lg tracking-tight hidden lg:block">Plataforma do Professor</span>
-            <div className="hidden lg:block w-px h-6 bg-gray-300"></div>
-            <span className="bg-blue-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm shadow-sm font-bold">
-              <GraduationCap size={16} /> {siglaEscola}
+            <div className="hidden lg:block w-px h-5 bg-gray-300"></div>
+            {/* AJUSTE: Tag menor e mais discreta (px-2.5 py-1 text-xs) */}
+            <span className="bg-blue-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs shadow-sm font-bold tracking-wide">
+              <GraduationCap size={14} /> {siglaEscola}
             </span>
           </Link>
 
-          <div className="flex items-center gap-5 lg:gap-6">
+          <div className="flex items-center gap-5 lg:gap-6 flex-1 justify-end">
             {mostrarLinks && navLinks.map(link => (
               <Link
                 key={link.path}
@@ -145,8 +146,8 @@ export default function Navbar() {
         {/* === MODO CELULAR === */}
         <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           
-          <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-3 py-2 rounded-lg mr-1 font-bold text-xs gap-1 shadow-sm">
-            <GraduationCap size={16} /> {siglaEscola}
+          <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-2.5 py-1 rounded-md mr-1 font-bold text-xs gap-1 shadow-sm">
+            <GraduationCap size={14} /> {siglaEscola}
           </Link>
 
           {mostrarLinks && navLinks.filter(link => link.path !== '/').map(link => (
