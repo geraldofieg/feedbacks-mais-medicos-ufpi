@@ -45,7 +45,11 @@ export default function Navbar() {
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
   ];
 
-  const siglaEscola = escolaSelecionada?.nome ? escolaSelecionada.nome.split(' ')[0] : 'SaaS';
+  // AJUSTE: Lógica inteligente para as reticências e Tooltip
+  const nomeCompleto = escolaSelecionada?.nome || 'SaaS';
+  const arrayNome = nomeCompleto.split(' ');
+  const siglaEscola = arrayNome.length > 1 ? `${arrayNome[0]}...` : arrayNome[0];
+  
   const mostrarLinks = !!escolaSelecionada?.id;
 
   return (
@@ -55,12 +59,15 @@ export default function Navbar() {
         {/* === MODO COMPUTADOR === */}
         <div className="hidden md:flex items-center justify-between h-16">
           
-          {/* AJUSTE: Hierarquia visual e margem adicionada para separar do menu (mr-8) */}
           <Link to="/" className="flex items-center gap-3 transition-transform hover:scale-105 shrink-0 mr-8 lg:mr-12">
             <span className="font-black text-slate-900 text-lg tracking-tight hidden lg:block">Plataforma do Professor</span>
             <div className="hidden lg:block w-px h-5 bg-gray-300"></div>
-            {/* AJUSTE: Tag menor e mais discreta (px-2.5 py-1 text-xs) */}
-            <span className="bg-blue-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs shadow-sm font-bold tracking-wide">
+            
+            {/* AJUSTE: Injetado o atributo 'title' para criar o Tooltip nativo */}
+            <span 
+              className="bg-blue-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs shadow-sm font-bold tracking-wide"
+              title={nomeCompleto}
+            >
               <GraduationCap size={14} /> {siglaEscola}
             </span>
           </Link>
@@ -146,7 +153,11 @@ export default function Navbar() {
         {/* === MODO CELULAR === */}
         <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           
-          <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-2.5 py-1 rounded-md mr-1 font-bold text-xs gap-1 shadow-sm">
+          <Link 
+            to="/" 
+            className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-2.5 py-1 rounded-md mr-1 font-bold text-xs gap-1 shadow-sm"
+            title={nomeCompleto}
+          >
             <GraduationCap size={14} /> {siglaEscola}
           </Link>
 
