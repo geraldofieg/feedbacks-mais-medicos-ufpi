@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
-// NOVO: Importamos arrayUnion para gravar o histórico sem apagar o que já existe
-import { collection, query, getDocs, doc, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, deleteDoc, arrayUnion, where, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-// NOVO: Ícones Edit3 (Lápis) e History (Relógio) adicionados
-import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History } from 'lucide-react';
+import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History, Ban, UserCheck } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Admin() {
@@ -51,11 +49,6 @@ export default function Admin() {
     } catch (e) { alert("Erro ao mudar plano."); }
   }
 
-  // =========================================================================
-  // GESTÃO DE ASSINATURA E HISTÓRICO DE AUDITORIA
-  // =========================================================================
-
-  // Helper para gerar o log
   const criarLog = (acaoDetalhe) => ({
     dataOperacao: new Date().toISOString(),
     acao: acaoDetalhe,
@@ -68,7 +61,6 @@ export default function Admin() {
       let dataBase = new Date(); 
 
       if (userData && userData.dataExpiracao) {
-        // CORREÇÃO DO BUG "INVALID DATE": Garantindo a extração certa da data
         const currentExp = userData.dataExpiracao.toDate ? userData.dataExpiracao.toDate() : new Date(userData.dataExpiracao.seconds ? userData.dataExpiracao.seconds * 1000 : userData.dataExpiracao);
         if (currentExp > dataBase) {
           dataBase = currentExp;
@@ -100,17 +92,15 @@ export default function Admin() {
     }
   }
 
-  // NOVO: Edição Manual da Data de Vencimento
   async function editarDataManual(id, dataAtualStr) {
     const input = window.prompt("Digite a nova data exata de vencimento (Formato: DD/MM/AAAA):", dataAtualStr);
-    if (!input) return; // Cancelou
+    if (!input) return;
 
     const [dia, mes, ano] = input.split('/');
     if (!dia || !mes || !ano || ano.length !== 4) {
       return alert("Formato inválido. Por favor, use DD/MM/AAAA.");
     }
 
-    // Criando a data (O mês no JS começa em 0, por isso mes - 1)
     const novaData = new Date(ano, mes - 1, dia, 23, 59, 59);
     
     if (isNaN(novaData.getTime())) {
@@ -161,13 +151,11 @@ export default function Admin() {
     }
   }
 
-  // NOVO: Visualizar Histórico
   function exibirHistorico(user) {
     if (!user.historicoAssinatura || user.historicoAssinatura.length === 0) {
       return alert("Nenhum histórico financeiro encontrado para este cliente.");
     }
     
-    // Formata o array de logs para um texto legível
     const textoHistorico = user.historicoAssinatura.map((log, index) => {
       const dataLog = new Date(log.dataOperacao).toLocaleString('pt-BR');
       return `${index + 1}. [${dataLog}]\nAção: ${log.acao}\nPor: ${log.responsavel}\n`;
@@ -176,12 +164,80 @@ export default function Admin() {
     alert(`HISTÓRICO DE ASSINATURA: ${user.nome || user.email}\n\n${textoHistorico}`);
   }
 
-  async function handleExcluirUsuario(id, nome) {
-    if (!window.confirm(`PERIGO: Excluir permanentemente a conta de "${nome}"? Esta ação não pode ser desfeita.`)) return;
+  // NOVO: BOTÃO DE SUSPENDER MANUALMENTE (Ponto 2)
+  async function handleAlternarBloqueio(user) {
+    const isAtualmenteBloqueado = user.status === 'bloqueado';
+    const acao = isAtualmenteBloqueado ? 'reativar' : 'bloquear';
+    
+    if (!window.confirm(`Deseja ${acao.toUpperCase()} o acesso do usuário ${user.nome || user.email}?`)) return;
+
     try {
-      await deleteDoc(doc(db, 'usuarios', id));
-      setUsuarios(usuarios.filter(u => u.id !== id));
-    } catch (e) { alert("Erro ao excluir."); }
+      const novoStatus = isAtualmenteBloqueado ? 'ativo' : 'bloqueado';
+      const logAuditoria = criarLog(`Acesso alterado manualmente para ${novoStatus.toUpperCase()}`);
+
+      await updateDoc(doc(db, 'usuarios', user.id), {
+        status: novoStatus,
+        historicoAssinatura: arrayUnion(logAuditoria)
+      });
+
+      setUsuarios(usuarios.map(u => u.id === user.id ? { 
+        ...u, 
+        status: novoStatus,
+        historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
+      } : u));
+
+      alert(`Usuário ${novoStatus} com sucesso!`);
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao alterar o status do usuário.");
+    }
+  }
+
+  // NOVO: HARD DELETE PROFUNDO (Ponto 3) - Efeito Dominó para apagar histórico
+  async function handleExcluirUsuario(user) {
+    const confirmacao = window.confirm(
+      `CUIDADO EXTREMO!\n\nVocê está prestes a fazer um HARD DELETE na conta de:\n"${user.nome || user.email}".\n\nIsso irá APAGAR DE VEZ:\n- O Perfil do Usuário\n- Todas as Instituições\n- Todas as Turmas\n- Todos os Alunos\n- Todas as Tarefas e Respostas que este e-mail criou.\n\nEssa ação é irreversível e feita apenas para testes. Deseja DESTRUIR todos os dados deste usuário?`
+    );
+    
+    if (!confirmacao) return;
+
+    try {
+      const uidParaApagar = user.id; // No seu código, o document ID da coleção usuarios é o próprio UID do auth
+      const batch = writeBatch(db); // Vamos usar Batch para apagar até 500 itens de uma vez
+
+      // 1. Apagar Atividades
+      const ativSnap = await getDocs(query(collection(db, 'atividades'), where('professorUid', '==', uidParaApagar)));
+      ativSnap.forEach(doc => batch.delete(doc.ref));
+
+      // 2. Apagar Tarefas
+      const tarefasSnap = await getDocs(query(collection(db, 'tarefas'), where('professorUid', '==', uidParaApagar)));
+      tarefasSnap.forEach(doc => batch.delete(doc.ref));
+
+      // 3. Apagar Alunos
+      const alunosSnap = await getDocs(query(collection(db, 'alunos'), where('professorUid', '==', uidParaApagar)));
+      alunosSnap.forEach(doc => batch.delete(doc.ref));
+
+      // 4. Apagar Turmas
+      const turmasSnap = await getDocs(query(collection(db, 'turmas'), where('professorUid', '==', uidParaApagar)));
+      turmasSnap.forEach(doc => batch.delete(doc.ref));
+
+      // 5. Apagar Instituições
+      const instSnap = await getDocs(query(collection(db, 'instituicoes'), where('professorUid', '==', uidParaApagar)));
+      instSnap.forEach(doc => batch.delete(doc.ref));
+
+      // 6. Finalmente, Apagar o Perfil
+      batch.delete(doc(db, 'usuarios', uidParaApagar));
+
+      // Executa o apocalipse
+      await batch.commit();
+
+      setUsuarios(usuarios.filter(u => u.id !== uidParaApagar));
+      alert("Operação concluída. O histórico inteiro do professor foi pulverizado do banco de dados.");
+
+    } catch (e) { 
+      alert("Erro ao tentar executar o Hard Delete. Veja o console.");
+      console.error(e);
+    }
   }
 
   if (!isAdmin) {
@@ -218,7 +274,7 @@ export default function Admin() {
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Nível de Acesso</th>
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Plano de Assinatura</th>
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Assinatura (SaaS)</th>
-                <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest text-right">Gestão</th>
+                <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest text-right">Gestão e Bloqueio</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -227,14 +283,19 @@ export default function Admin() {
                 let statusVisual = "Ativo";
                 let corStatus = "text-green-700 bg-green-100";
                 let textoValidade = "";
+                let textoDiasRestantes = null; // NOVO
                 let dataApenasString = ""; 
 
-                if (user.isVitalicio) {
+                // NOVO: Checagem da Trava Manual primeiro
+                if (user.status === 'bloqueado') {
+                  statusVisual = "Bloqueado Manualmente";
+                  corStatus = "text-red-700 bg-red-100";
+                  textoValidade = "Acesso suspenso.";
+                } else if (user.isVitalicio) {
                   statusVisual = "Vitalício";
                   corStatus = "text-purple-700 bg-purple-100";
                   textoValidade = "Sem data de expiração";
                 } else if (user.dataExpiracao) {
-                  // CORREÇÃO DO BUG AQUI PARA RENDERIZAÇÃO
                   const dataVencimento = user.dataExpiracao.toDate 
                     ? user.dataExpiracao.toDate() 
                     : new Date(user.dataExpiracao.seconds ? user.dataExpiracao.seconds * 1000 : user.dataExpiracao);
@@ -243,12 +304,20 @@ export default function Admin() {
                   dataApenasString = dataVencimento.toLocaleDateString('pt-BR');
                   textoValidade = `Vence em: ${dataApenasString}`;
                   
-                  if (hoje > dataVencimento) {
+                  // NOVO: Contador Exato de Dias
+                  const diffTime = dataVencimento - hoje;
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                  if (diffDays < 0) {
                     statusVisual = "Vencido";
                     corStatus = "text-red-700 bg-red-100";
-                  } else if ((dataVencimento - hoje) / (1000 * 60 * 60 * 24) <= 5) {
-                    statusVisual = "Vence em breve";
-                    corStatus = "text-orange-700 bg-orange-100";
+                    textoDiasRestantes = `Vencido há ${Math.abs(diffDays)} dias`;
+                  } else {
+                    textoDiasRestantes = `Restam ${diffDays} dias`;
+                    if (diffDays <= 5) {
+                      statusVisual = "Vence em breve";
+                      corStatus = "text-orange-700 bg-orange-100";
+                    }
                   }
                 } else {
                    statusVisual = "Sem Trial";
@@ -257,7 +326,7 @@ export default function Admin() {
                 }
 
                 return (
-                  <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
+                  <tr key={user.id} className={`hover:bg-slate-50/50 transition-colors group ${user.status === 'bloqueado' ? 'opacity-70' : ''}`}>
                     
                     <td className="p-6">
                       <div className="flex items-center gap-4">
@@ -274,11 +343,12 @@ export default function Admin() {
                     <td className="p-6">
                       <button 
                         onClick={() => handleMudarCargo(user.id, user.role)}
+                        disabled={user.status === 'bloqueado'}
                         className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
                           user.role === 'admin' 
                             ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' 
                             : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'
-                        }`}
+                        } ${user.status === 'bloqueado' && 'cursor-not-allowed opacity-50'}`}
                       >
                         {user.role === 'admin' ? <><Crown size={14}/> Super Admin</> : <><UserCog size={14}/> Professor</>}
                       </button>
@@ -289,8 +359,9 @@ export default function Admin() {
                         <Zap className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${user.plano === 'premium' ? 'text-yellow-500' : 'text-slate-300'}`} size={16} />
                         <select 
                           value={user.plano || 'basico'} 
+                          disabled={user.status === 'bloqueado'}
                           onChange={(e) => handleMudarPlano(user.id, e.target.value)}
-                          className="bg-slate-50 border-2 border-slate-100 text-slate-700 text-sm rounded-xl py-2.5 pl-10 pr-4 font-black outline-none focus:border-blue-500 appearance-none cursor-pointer shadow-sm min-w-[200px]"
+                          className={`bg-slate-50 border-2 border-slate-100 text-slate-700 text-sm rounded-xl py-2.5 pl-10 pr-4 font-black outline-none focus:border-blue-500 appearance-none shadow-sm min-w-[200px] ${user.status === 'bloqueado' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                         >
                           <option value="trial">Trial de 30 Dias</option>
                           <option value="basico">Tier 1: Básico</option>
@@ -306,19 +377,25 @@ export default function Admin() {
                           <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-wider ${corStatus}`}>
                             {statusVisual}
                           </span>
-                          {/* BOTÃO DE HISTÓRICO */}
                           <button onClick={() => exibirHistorico(user)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Ver Histórico de Assinatura">
                             <History size={16} />
                           </button>
                         </div>
                         
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-slate-500 font-medium">{textoValidade}</p>
-                          {/* BOTÃO DE EDIÇÃO MANUAL (LÁPIS) */}
-                          {!user.isVitalicio && (
-                            <button onClick={() => editarDataManual(user.id, dataApenasString)} className="text-slate-300 hover:text-blue-600 transition-colors" title="Editar Data Manualmente">
-                              <Edit3 size={14} />
-                            </button>
+                        <div className="flex flex-col items-start">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-slate-500 font-medium">{textoValidade}</p>
+                            {!user.isVitalicio && (
+                              <button onClick={() => editarDataManual(user.id, dataApenasString)} className="text-slate-300 hover:text-blue-600 transition-colors" title="Editar Data Manualmente">
+                                <Edit3 size={14} />
+                              </button>
+                            )}
+                          </div>
+                          {/* NOVO: Exibição visual dos dias restantes */}
+                          {textoDiasRestantes && (
+                            <p className={`text-[10px] font-black uppercase tracking-widest mt-1 ${textoDiasRestantes.includes('Vencido') ? 'text-red-500' : 'text-orange-500'}`}>
+                              {textoDiasRestantes}
+                            </p>
                           )}
                         </div>
 
@@ -336,10 +413,32 @@ export default function Admin() {
                       </div>
                     </td>
 
-                    <td className="p-6 text-right">
-                      <button onClick={() => handleExcluirUsuario(user.id, user.nome)} className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all opacity-20 group-hover:opacity-100" title="Excluir Definitivamente">
-                        <Trash2 size={20} />
-                      </button>
+                    <td className="p-6">
+                      <div className="flex flex-col items-end gap-2">
+                        
+                        {/* NOVO: Botão de Bloqueio Manual */}
+                        <button 
+                          onClick={() => handleAlternarBloqueio(user)} 
+                          className={`flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm w-full justify-center border ${
+                            user.status === 'bloqueado' 
+                              ? 'bg-green-50 text-green-600 border-green-200 hover:bg-green-600 hover:text-white' 
+                              : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-600 hover:text-white'
+                          }`}
+                          title={user.status === 'bloqueado' ? "Liberar Acesso do Usuário" : "Bloquear Acesso do Usuário"}
+                        >
+                          {user.status === 'bloqueado' ? <><UserCheck size={14}/> Reativar</> : <><Ban size={14}/> Suspender</>}
+                        </button>
+
+                        {/* NOVO: Botão de Apagar Todos os Dados */}
+                        <button 
+                          onClick={() => handleExcluirUsuario(user)} 
+                          className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm w-full justify-center" 
+                          title="Vaporizar Todos os Dados do Banco"
+                        >
+                          <Trash2 size={14} /> Excluir Dados
+                        </button>
+                        
+                      </div>
                     </td>
 
                   </tr>
