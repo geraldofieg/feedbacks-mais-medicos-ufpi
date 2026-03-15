@@ -127,7 +127,6 @@ export default function RevisarAtividade() {
     finally { setGerandoIA(false); }
   }
 
-  // CORREÇÃO: Usando 'pendente' para compatibilidade com V1
   async function handleSalvarRascunho() {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
@@ -139,8 +138,9 @@ export default function RevisarAtividade() {
         feedbackFinal: feedbackEditado.trim(), 
         feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
         nota: notaAluno.trim() || null, 
-        status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente', // STATUS V1
-        dataAprovacao: serverTimestamp(),
+        status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente',
+        // CORREÇÃO: Não carimba data de aprovação se for rascunho (Mantém a antiga ou null)
+        dataAprovacao: atividadeAtual?.status === 'aprovado' ? atividadeAtual.dataAprovacao : null, 
         nomeAluno: alunoAtual.nome, 
         nomeTarefa: tarefa.nomeTarefa,
         revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
@@ -154,7 +154,7 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Rascunho salvo! Patrícia já pode ver na V1.");
+      alert("Rascunho salvo! Agora aparecerá na Revisão da V1.");
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
@@ -190,8 +190,8 @@ export default function RevisarAtividade() {
     if (!window.confirm("Deseja devolver esta atividade para a fase de revisão?")) return;
     setSalvando(true);
     try {
-        await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false });
-        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false } }));
+        await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: null });
+        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false, dataAprovacao: null } }));
     } catch (e) { console.error(e); } finally { setSalvando(false); }
   }
 
@@ -236,7 +236,6 @@ export default function RevisarAtividade() {
                   } else if (registro.status === 'aprovado') {
                     icone = '🟡';
                   } else {
-                    // LÓGICA CORRIGIDA: Vermelho se estiver vazio, Amarelo se tiver rascunho
                     const temConteudo = (registro.resposta && registro.resposta.trim() !== '') || registro.arquivoUrl;
                     icone = temConteudo ? '🟡' : '🔴';
                   }
