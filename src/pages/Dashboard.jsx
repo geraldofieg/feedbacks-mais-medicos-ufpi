@@ -17,8 +17,8 @@ export default function Dashboard() {
   const isTier3 = planoUsuario === 'premium';
 
   // VISIBILIDADE DAS CAIXAS
-  const mostrarRevisao = true; // Todos veem a caixa de Revisão
-  const mostrarFaltaPostar = isAdmin || isTier1 || isTier3; // Tier 2 (Patrícia) não precisa ver a caixa de postar
+  const mostrarRevisao = true; 
+  const mostrarFaltaPostar = isAdmin || isTier1 || isTier3; 
   const mostrarTermometroIA = isAdmin || isTier3;
 
   const [instituicoes, setInstituicoes] = useState([]);
@@ -202,19 +202,16 @@ export default function Dashboard() {
           };
 
           let blocoDestaque = null;
-          let ativasParaBarraPreta = [];
 
           if (atuais.length > 0) {
             atuais.sort((a, b) => a.timeFim - b.timeFim);
             const dataFimAlvo = atuais[0].timeFim;
             const grupoAtual = atuais.filter(t => t.timeFim === dataFimAlvo);
             blocoDestaque = buildGroup(grupoAtual, 'atual');
-            ativasParaBarraPreta = grupoAtual;
           } else if (futuras.length > 0) {
             const dataInicioAlvo = futuras[0].timeInicio;
             const grupoFuturo = futuras.filter(t => t.timeInicio === dataInicioAlvo);
             blocoDestaque = buildGroup(grupoFuturo, 'futuro');
-            ativasParaBarraPreta = grupoFuturo;
           }
 
           let blocoAnterior = null;
@@ -225,17 +222,28 @@ export default function Dashboard() {
 
           setGestaoVista({ atual: blocoDestaque, anterior: blocoAnterior });
 
-          if (ativasParaBarraPreta.length > 0) {
-            const t = ativasParaBarraPreta[0];
-            const isFutura = t.timeInicio > hoje.getTime();
-            const alvoTempo = isFutura ? t.timeInicio : t.timeFim;
-            const diasRestantes = Math.ceil((alvoTempo - hoje.getTime()) / (1000 * 3600 * 24));
-
+          // NOVO: INTELIGÊNCIA DO PAINEL PRINCIPAL (CARD)
+          // Agora carrega TODAS as tarefas ativas, sem filtrar apenas a de prazo mais curto
+          if (atuais.length > 0) {
+            const andamentoList = atuais.map(t => {
+              const diasRestantes = Math.ceil((t.timeFim - hojeTime) / (1000 * 3600 * 24));
+              return {
+                id: t.id,
+                nomeTarefa: t.nomeTarefa || t.titulo,
+                diasRestantes: diasRestantes,
+                isFutura: false
+              };
+            });
+            andamentoList.sort((a, b) => a.diasRestantes - b.diasRestantes); // A mais urgente primeiro
+            setTarefasEmAndamento(andamentoList);
+          } else if (futuras.length > 0) {
+            const t = futuras[0];
+            const diasRestantes = Math.ceil((t.timeInicio - hojeTime) / (1000 * 3600 * 24));
             setTarefasEmAndamento([{
               id: t.id,
               nomeTarefa: t.nomeTarefa || t.titulo,
               diasRestantes: diasRestantes,
-              isFutura: isFutura
+              isFutura: true
             }]);
           } else {
             setTarefasEmAndamento([]);
@@ -250,7 +258,7 @@ export default function Dashboard() {
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   // --- INTELIGÊNCIA DO PASSO A PASSO (ONBOARDING) ---
-  let passoAtual = 5; // Assumimos que está tudo pronto por padrão
+  let passoAtual = 5; 
   if (!escolaSelecionada) passoAtual = 1;
   else if (minhasTurmas.length === 0) passoAtual = 2;
   else if (!temAlunos) passoAtual = 3;
@@ -269,16 +277,11 @@ export default function Dashboard() {
     return (
       <div className="max-w-3xl mx-auto mb-10 w-full px-4 pt-6">
         <div className="relative flex items-center justify-between">
-          
-          {/* Linha de Fundo (Cinza) */}
           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1.5 bg-gray-200 rounded-full z-0"></div>
-          
-          {/* Linha de Preenchimento (Azul) */}
           <div 
             className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full z-0 transition-all duration-700 ease-out" 
             style={{ width: `${porcentagem}%` }}
           ></div>
-
           {passos.map(passo => {
             const concluido = passo.id < passoAtual;
             const ativo = passo.id === passoAtual;
@@ -317,16 +320,12 @@ export default function Dashboard() {
   };
 
 
-  // --- LÓGICA DE EXIBIÇÃO DO GRID E DO CARD DE AÇÃO RÁPIDA ---
-  const tarefaAtualValida = tarefasEmAndamento.length > 0 && !tarefasEmAndamento[0].isFutura ? tarefasEmAndamento[0] : null;
-  
-  let textoBotaoTeletransporte = "Iniciar correções";
-  if (tarefaAtualValida && progressoTarefas[tarefaAtualValida.id]) {
-    textoBotaoTeletransporte = "Continuar correções";
-  }
+  // --- LÓGICA DE EXIBIÇÃO DO GRID E DO CARD MULTI-TAREFA ---
+  const tarefasAtuais = tarefasEmAndamento.filter(t => !t.isFutura);
+  const temTarefaAtual = tarefasAtuais.length > 0;
 
   let numCards = 1; 
-  if (tarefaAtualValida) numCards++;
+  if (temTarefaAtual) numCards++;
   if (mostrarRevisao) numCards++;
   if (mostrarFaltaPostar) numCards++;
 
@@ -341,9 +340,7 @@ export default function Dashboard() {
   if (!escolaSelecionada) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-        {/* BARRA DE PROGRESSO AQUI (PASSO 1) */}
         {renderBarraProgresso()}
-
         <div className="bg-blue-600 text-white w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 mt-16 shadow-2xl shadow-blue-600/30">
           <School size={48} />
         </div>
@@ -389,7 +386,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* BARRA DE PROGRESSO APARECE AQUI NOS PASSOS 2, 3 E 4 */}
       {passoAtual <= 4 && renderBarraProgresso()}
 
       {minhasTurmas.length === 0 ? (
@@ -436,14 +432,25 @@ export default function Dashboard() {
                 <h2 className="text-base font-black text-white mb-1.5 tracking-wide">Ponto de Situação do Curso</h2>
                 <div className="space-y-1 text-sm font-medium text-slate-300">
                   {tarefasEmAndamento.length > 0 ? (
-                    <p className="flex items-center gap-2 truncate">
-                      <span className={`w-2 h-2 rounded-full animate-pulse shrink-0 ${tarefasEmAndamento[0].isFutura ? 'bg-blue-500' : 'bg-green-500'}`}></span>
-                      <span className="text-gray-400 shrink-0">Agenda:</span>
-                      <strong className="text-white truncate" title={tarefasEmAndamento[0].nomeTarefa}>{tarefasEmAndamento[0].nomeTarefa}</strong>
-                      <span className={`${tarefasEmAndamento[0].isFutura ? 'text-blue-400' : 'text-green-400'} text-xs font-bold shrink-0`}>
-                        ({tarefasEmAndamento[0].isFutura ? `Inicia em ${tarefasEmAndamento[0].diasRestantes} dias` : `Faltam ${tarefasEmAndamento[0].diasRestantes} dias`})
-                      </span>
-                    </p>
+                    tarefasEmAndamento.length === 1 ? (
+                      <p className="flex items-center gap-2 truncate">
+                        <span className={`w-2 h-2 rounded-full animate-pulse shrink-0 ${tarefasEmAndamento[0].isFutura ? 'bg-blue-500' : 'bg-green-500'}`}></span>
+                        <span className="text-gray-400 shrink-0">Agenda:</span>
+                        <strong className="text-white truncate" title={tarefasEmAndamento[0].nomeTarefa}>{tarefasEmAndamento[0].nomeTarefa}</strong>
+                        <span className={`${tarefasEmAndamento[0].isFutura ? 'text-blue-400' : 'text-green-400'} text-xs font-bold shrink-0`}>
+                          ({tarefasEmAndamento[0].isFutura ? `Inicia em ${tarefasEmAndamento[0].diasRestantes} dias` : `Faltam ${tarefasEmAndamento[0].diasRestantes} dias`})
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="flex items-center gap-2 truncate">
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>
+                        <span className="text-gray-400 shrink-0">Agenda:</span>
+                        <strong className="text-white truncate">{tarefasAtuais.length} tarefas ativas simultaneamente</strong>
+                        <span className="text-green-400 text-xs font-bold shrink-0">
+                          (Ver painel abaixo)
+                        </span>
+                      </p>
+                    )
                   ) : (
                     <p className="flex items-center gap-2 text-gray-400">
                       <span className="w-2 h-2 rounded-full bg-gray-500 shrink-0"></span>
@@ -478,20 +485,45 @@ export default function Dashboard() {
           {/* KANBAN E ATALHOS */}
           <div className={gridClass}>
             
-            {/* CARD DE TELETRANSPORTE (SÓ APARECE SE TIVER TAREFA ROLANDO HOJE) */}
-            {tarefaAtualValida && (
-              <div className="bg-white border border-indigo-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full -z-0"></div>
-                <div className="flex justify-between items-start mb-2 relative z-10">
-                  <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest mt-1">Tarefa Atual</h3>
-                  <div className="text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"><PlayCircle size={20}/></div>
+            {/* CARD DE TAREFAS ATUAIS (TELETRANSPORTE MUTANTE) */}
+            {temTarefaAtual && (
+              <div className="bg-white border border-indigo-200 rounded-2xl shadow-sm flex flex-col hover:shadow-md transition-shadow relative overflow-hidden h-full">
+                {/* Background Decorativo Fixo */}
+                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full z-0 pointer-events-none"></div>
+                
+                {/* Header fixo do card */}
+                <div className="p-5 pb-2 relative z-10 shrink-0 bg-white">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest mt-1">
+                      {tarefasAtuais.length === 1 ? 'Tarefa Atual' : 'Tarefas em Andamento'}
+                    </h3>
+                    <div className="text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"><PlayCircle size={20}/></div>
+                  </div>
                 </div>
-                <span className="text-2xl font-black text-gray-800 relative z-10 leading-tight line-clamp-2" title={tarefaAtualValida.nomeTarefa}>
-                  {tarefaAtualValida.nomeTarefa}
-                </span>
-                <Link to={`/revisar/${tarefaAtualValida.id}`} className="mt-4 text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline w-fit relative z-10">
-                  {textoBotaoTeletransporte} <ChevronRight size={14}/>
-                </Link>
+
+                {/* Área de conteúdo dinâmico (com scroll invisível se passar de 2 itens) */}
+                <div className="p-5 pt-0 relative z-10 flex-1 overflow-y-auto max-h-[140px]" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="space-y-4">
+                    {tarefasAtuais.map((tarefa, idx) => (
+                      <div key={tarefa.id} className={idx > 0 ? "pt-4 border-t border-indigo-50" : ""}>
+                        <span className={`block font-black text-gray-800 leading-tight line-clamp-2 ${tarefasAtuais.length === 1 ? 'text-2xl' : 'text-[17px]'}`} title={tarefa.nomeTarefa}>
+                          {tarefa.nomeTarefa}
+                        </span>
+                        
+                        <div className="flex items-center justify-between mt-2">
+                          <Link to={`/revisar/${tarefa.id}`} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline w-fit">
+                            {progressoTarefas[tarefa.id] ? "Continuar correções" : "Iniciar correções"} <ChevronRight size={14}/>
+                          </Link>
+                          {tarefasAtuais.length > 1 && (
+                            <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                              Faltam {tarefa.diasRestantes} dias
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -529,7 +561,7 @@ export default function Dashboard() {
           </div>
 
           {/* =========================================================================
-                 MOTOR DE GESTÃO À VISTA POR DATA ESTRITA (Sem Adivinhar Texto)
+                 MOTOR DE GESTÃO À VISTA POR DATA ESTRITA 
               ========================================================================= */}
           {(gestaoVista.atual || gestaoVista.anterior) && (
             <div className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
