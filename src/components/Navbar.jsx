@@ -59,7 +59,8 @@ export default function Navbar() {
             <span className="bg-blue-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm shadow-sm">
               <GraduationCap size={16} /> {siglaEscola}
             </span>
-            <span className="text-gray-700 hidden lg:block">Plataforma</span>
+            {/* AJUSTE: Nome da plataforma corrigido */}
+            <span className="text-gray-700 hidden lg:block">Plataforma do Professor</span>
           </Link>
 
           <div className="flex items-center gap-5 lg:gap-6">
