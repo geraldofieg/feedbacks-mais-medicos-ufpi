@@ -3,10 +3,11 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, PlayCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
+  const navigate = useNavigate(); 
   
   // LEITURA DE CRACHÁ (RBAC)
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
@@ -93,7 +94,6 @@ export default function Dashboard() {
           let iaTotal = 0, iaOriginais = 0;
           let progressoLocal = {};
           
-          // NOVO: Dicionário para cruzar quem já fez com a chamada da turma
           const ativMap = {}; 
 
           snapAtiv.docs.forEach(doc => {
@@ -105,13 +105,13 @@ export default function Dashboard() {
               const temResposta = d.resposta && String(d.resposta).trim() !== '';
 
               if (jaPostado) {
-                ok++; // CAIXA 3
+                ok++; 
                 progressoLocal[d.tarefaId] = true;
               } else if (jaAprovado) {
-                f++;  // CAIXA 2
+                f++;  
                 progressoLocal[d.tarefaId] = true;
               } else if (temResposta) {
-                p++;  // CAIXA 1
+                p++;  
                 progressoLocal[d.tarefaId] = true;
               }
 
@@ -132,14 +132,12 @@ export default function Dashboard() {
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
           setProgressoTarefas(progressoLocal);
 
-          // NOVO: GESTÃO À VISTA (Matemática Blindada)
-          // Cruza a lista oficial de alunos da turma com o dicionário de atividades para ver quem tá devendo
+          // GESTÃO À VISTA (Matemática Blindada)
           const pendenciasPorTarefa = {};
           tarefasVivas.forEach(t => {
              if (!tIds.includes(t.turmaId)) return;
              pendenciasPorTarefa[t.id] = [];
              
-             // Pega todos os alunos daquela turma específica
              const alunosDaTurma = alunosVivos.filter(a => a.data().turmaId === t.turmaId);
              
              alunosDaTurma.forEach(alunoDoc => {
@@ -147,7 +145,6 @@ export default function Dashboard() {
                 const nomeAluno = alunoDoc.data().nome;
                 const ativDoAluno = ativMap[`${t.id}_${alunoId}`];
                 
-                // Se a atividade do aluno não existe, ele não entregou. Se existe, verifica se tá preenchida.
                 if (!ativDoAluno) {
                     pendenciasPorTarefa[t.id].push(nomeAluno);
                 } else {
@@ -302,13 +299,25 @@ export default function Dashboard() {
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-sm font-bold text-gray-500">Instituição:</span>
+            
+            {/* SELETOR ATUALIZADO COM O GATILHO DE NAVEGAÇÃO */}
             <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner" 
               value={escolaSelecionada?.id || ''} 
-              onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}
+              onChange={e => {
+                if (e.target.value === 'nova_instituicao') {
+                  // NOVO: Navega e envia a "ordem" para abrir o formulário
+                  navigate('/turmas', { state: { abrirModalInstituicao: true } });
+                } else {
+                  setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value));
+                }
+              }}
             >
               <option value="" disabled>Selecione...</option>
               {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+              <option disabled>──────────</option>
+              <option value="nova_instituicao">+ Criar Nova Instituição</option>
             </select>
+
           </div>
         </div>
       </div>
