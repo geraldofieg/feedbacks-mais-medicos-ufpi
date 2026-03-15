@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
-import { collection, query, getDocs, doc, updateDoc, deleteDoc, arrayUnion, where, writeBatch } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, arrayUnion, where, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History, Ban, UserCheck } from 'lucide-react';
+import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History, Ban, UserCheck, XCircle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Admin() {
@@ -130,24 +130,35 @@ export default function Admin() {
     }
   }
 
-  async function tornarVitalicio(id) {
-    if (!window.confirm("Deseja conceder acesso permanente e vitalício a este cliente?")) return;
-    try {
-      const logAuditoria = criarLog(`Acesso Vitalício concedido`);
+  // AJUSTE: Transformado em um Interruptor Inteligente (Conceder / Revogar)
+  async function handleToggleVitalicio(user) {
+    const isAtualVitalicio = user.isVitalicio === true;
+    const acaoTexto = isAtualVitalicio ? "REVOGAR" : "conceder acesso permanente e";
+    
+    if (!window.confirm(`Deseja ${acaoTexto} vitalício a este cliente?`)) return;
 
-      await updateDoc(doc(db, 'usuarios', id), { 
-        isVitalicio: true,
+    try {
+      const logMsg = isAtualVitalicio ? "Acesso Vitalício REVOGADO" : "Acesso Vitalício concedido";
+      const logAuditoria = criarLog(logMsg);
+      const hoje = new Date();
+
+      await updateDoc(doc(db, 'usuarios', user.id), { 
+        isVitalicio: !isAtualVitalicio,
+        dataExpiracao: isAtualVitalicio ? hoje : user.dataExpiracao || hoje, // Se revogar, bota a data de hoje pra vencer na hora
         historicoAssinatura: arrayUnion(logAuditoria)
       });
 
-      setUsuarios(usuarios.map(u => u.id === id ? { 
+      setUsuarios(usuarios.map(u => u.id === user.id ? { 
         ...u, 
-        isVitalicio: true,
+        isVitalicio: !isAtualVitalicio,
+        dataExpiracao: isAtualVitalicio ? hoje : u.dataExpiracao || hoje,
         historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
       } : u));
-      alert("Acesso Vitalício concedido com sucesso!");
+
+      alert(`Acesso Vitalício ${isAtualVitalicio ? 'revogado' : 'concedido'} com sucesso!`);
     } catch (error) {
-      alert("Erro ao conceder acesso vitalício.");
+      alert("Erro ao alterar acesso vitalício.");
+      console.error(error);
     }
   }
 
@@ -164,7 +175,6 @@ export default function Admin() {
     alert(`HISTÓRICO DE ASSINATURA: ${user.nome || user.email}\n\n${textoHistorico}`);
   }
 
-  // NOVO: BOTÃO DE SUSPENDER MANUALMENTE (Ponto 2)
   async function handleAlternarBloqueio(user) {
     const isAtualmenteBloqueado = user.status === 'bloqueado';
     const acao = isAtualmenteBloqueado ? 'reativar' : 'bloquear';
@@ -193,7 +203,6 @@ export default function Admin() {
     }
   }
 
-  // NOVO: HARD DELETE PROFUNDO (Ponto 3) - Efeito Dominó para apagar histórico
   async function handleExcluirUsuario(user) {
     const confirmacao = window.confirm(
       `CUIDADO EXTREMO!\n\nVocê está prestes a fazer um HARD DELETE na conta de:\n"${user.nome || user.email}".\n\nIsso irá APAGAR DE VEZ:\n- O Perfil do Usuário\n- Todas as Instituições\n- Todas as Turmas\n- Todos os Alunos\n- Todas as Tarefas e Respostas que este e-mail criou.\n\nEssa ação é irreversível e feita apenas para testes. Deseja DESTRUIR todos os dados deste usuário?`
@@ -202,8 +211,8 @@ export default function Admin() {
     if (!confirmacao) return;
 
     try {
-      const uidParaApagar = user.id; // No seu código, o document ID da coleção usuarios é o próprio UID do auth
-      const batch = writeBatch(db); // Vamos usar Batch para apagar até 500 itens de uma vez
+      const uidParaApagar = user.id; 
+      const batch = writeBatch(db); 
 
       // 1. Apagar Atividades
       const ativSnap = await getDocs(query(collection(db, 'atividades'), where('professorUid', '==', uidParaApagar)));
@@ -283,10 +292,9 @@ export default function Admin() {
                 let statusVisual = "Ativo";
                 let corStatus = "text-green-700 bg-green-100";
                 let textoValidade = "";
-                let textoDiasRestantes = null; // NOVO
+                let textoDiasRestantes = null; 
                 let dataApenasString = ""; 
 
-                // NOVO: Checagem da Trava Manual primeiro
                 if (user.status === 'bloqueado') {
                   statusVisual = "Bloqueado Manualmente";
                   corStatus = "text-red-700 bg-red-100";
@@ -304,7 +312,6 @@ export default function Admin() {
                   dataApenasString = dataVencimento.toLocaleDateString('pt-BR');
                   textoValidade = `Vence em: ${dataApenasString}`;
                   
-                  // NOVO: Contador Exato de Dias
                   const diffTime = dataVencimento - hoje;
                   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -391,7 +398,6 @@ export default function Admin() {
                               </button>
                             )}
                           </div>
-                          {/* NOVO: Exibição visual dos dias restantes */}
                           {textoDiasRestantes && (
                             <p className={`text-[10px] font-black uppercase tracking-widest mt-1 ${textoDiasRestantes.includes('Vencido') ? 'text-red-500' : 'text-orange-500'}`}>
                               {textoDiasRestantes}
@@ -406,9 +412,20 @@ export default function Admin() {
                           <button onClick={() => estenderAssinatura(user.id, 365)} className="flex items-center gap-1 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors" title="Adicionar 1 Ano">
                             <CalendarPlus size={14} /> +1a
                           </button>
-                          <button onClick={() => tornarVitalicio(user.id)} className="flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors" title="Tornar Vitalício">
-                            <Infinity size={14} /> Vitalício
+                          
+                          {/* AJUSTE: Botão de Vitalício agora é um "Interruptor Inteligente" (Toggle) */}
+                          <button 
+                            onClick={() => handleToggleVitalicio(user)} 
+                            className={`flex items-center gap-1 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors ${
+                              user.isVitalicio 
+                                ? 'bg-orange-50 border border-orange-200 text-orange-700 hover:bg-orange-100' 
+                                : 'bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100'
+                            }`} 
+                            title={user.isVitalicio ? "Revogar Acesso Permanente" : "Tornar Vitalício"}
+                          >
+                            {user.isVitalicio ? <><XCircle size={14} /> Revogar</> : <><Infinity size={14} /> Vitalício</>}
                           </button>
+
                         </div>
                       </div>
                     </td>
@@ -416,7 +433,6 @@ export default function Admin() {
                     <td className="p-6">
                       <div className="flex flex-col items-end gap-2">
                         
-                        {/* NOVO: Botão de Bloqueio Manual */}
                         <button 
                           onClick={() => handleAlternarBloqueio(user)} 
                           className={`flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm w-full justify-center border ${
@@ -429,7 +445,6 @@ export default function Admin() {
                           {user.status === 'bloqueado' ? <><UserCheck size={14}/> Reativar</> : <><Ban size={14}/> Suspender</>}
                         </button>
 
-                        {/* NOVO: Botão de Apagar Todos os Dados */}
                         <button 
                           onClick={() => handleExcluirUsuario(user)} 
                           className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm w-full justify-center" 
