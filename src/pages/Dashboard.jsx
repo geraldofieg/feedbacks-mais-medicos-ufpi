@@ -99,7 +99,6 @@ export default function Dashboard() {
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
             if (tIds.includes(d.turmaId)) {
-              // MATEMÁTICA PURA DAS CAIXAS
               const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
               const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
               const temResposta = d.resposta && String(d.resposta).trim() !== '';
@@ -115,7 +114,6 @@ export default function Dashboard() {
                 progressoLocal[d.tarefaId] = true;
               }
 
-              // TERMÔMETRO IA
               const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
               const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
               if ((jaAprovado || jaPostado) && fSugerido !== '') {
@@ -123,7 +121,6 @@ export default function Dashboard() {
                 if (fFinal === fSugerido) iaOriginais++;
               }
 
-              // Salva o status do aluno para a Gestão à Vista
               ativMap[`${d.tarefaId}_${d.alunoId}`] = { jaPostado, jaAprovado, temResposta };
             }
           });
@@ -132,7 +129,6 @@ export default function Dashboard() {
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
           setProgressoTarefas(progressoLocal);
 
-          // GESTÃO À VISTA (Matemática Blindada)
           const pendenciasPorTarefa = {};
           tarefasVivas.forEach(t => {
              if (!tIds.includes(t.turmaId)) return;
@@ -253,17 +249,83 @@ export default function Dashboard() {
 
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
+  // --- INTELIGÊNCIA DO PASSO A PASSO (ONBOARDING) ---
+  let passoAtual = 5; // Assumimos que está tudo pronto por padrão
+  if (!escolaSelecionada) passoAtual = 1;
+  else if (minhasTurmas.length === 0) passoAtual = 2;
+  else if (!temAlunos) passoAtual = 3;
+  else if (!temTarefasGeral) passoAtual = 4;
+
+  const renderBarraProgresso = () => {
+    const passos = [
+      { id: 1, titulo: 'Instituição', icone: <School size={18} /> },
+      { id: 2, titulo: 'Turma', icone: <Building2 size={18} /> },
+      { id: 3, titulo: 'Alunos', icone: <UserPlus size={18} /> },
+      { id: 4, titulo: 'Tarefas', icone: <FileText size={18} /> }
+    ];
+
+    const porcentagem = ((passoAtual - 1) / 3) * 100;
+
+    return (
+      <div className="max-w-3xl mx-auto mb-10 w-full px-4 pt-6">
+        <div className="relative flex items-center justify-between">
+          
+          {/* Linha de Fundo (Cinza) */}
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1.5 bg-gray-200 rounded-full z-0"></div>
+          
+          {/* Linha de Preenchimento (Azul) */}
+          <div 
+            className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full z-0 transition-all duration-700 ease-out" 
+            style={{ width: `${porcentagem}%` }}
+          ></div>
+
+          {passos.map(passo => {
+            const concluido = passo.id < passoAtual;
+            const ativo = passo.id === passoAtual;
+            
+            let bgCircle = "bg-white";
+            let borderCircle = "border-gray-200";
+            let textIcon = "text-gray-400";
+            let textLabel = "text-gray-400 font-medium";
+
+            if (concluido) {
+              bgCircle = "bg-green-500";
+              borderCircle = "border-green-500";
+              textIcon = "text-white";
+              textLabel = "text-green-600 font-bold";
+            } else if (ativo) {
+              bgCircle = "bg-blue-600 shadow-lg shadow-blue-600/30";
+              borderCircle = "border-blue-600";
+              textIcon = "text-white";
+              textLabel = "text-blue-700 font-black";
+            }
+
+            return (
+              <div key={passo.id} className="relative z-10 flex flex-col items-center group">
+                <div className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${bgCircle} ${borderCircle} ${textIcon}`}>
+                  {concluido ? <CheckCheck size={20} className="animate-in zoom-in" /> : passo.icone}
+                </div>
+                <span className={`absolute -bottom-7 text-[10px] sm:text-xs uppercase tracking-widest whitespace-nowrap transition-colors ${textLabel}`}>
+                  {passo.titulo}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+
   // --- LÓGICA DE EXIBIÇÃO DO GRID E DO CARD DE AÇÃO RÁPIDA ---
   const tarefaAtualValida = tarefasEmAndamento.length > 0 && !tarefasEmAndamento[0].isFutura ? tarefasEmAndamento[0] : null;
   
-  // INTELIGÊNCIA DO BOTÃO TELETRANSPORTE
   let textoBotaoTeletransporte = "Iniciar correções";
   if (tarefaAtualValida && progressoTarefas[tarefaAtualValida.id]) {
     textoBotaoTeletransporte = "Continuar correções";
   }
 
-  // Calculando quantas colunas o Kanban precisa ter para não quebrar o layout
-  let numCards = 1; // Histórico sempre aparece
+  let numCards = 1; 
   if (tarefaAtualValida) numCards++;
   if (mostrarRevisao) numCards++;
   if (mostrarFaltaPostar) numCards++;
@@ -278,8 +340,11 @@ export default function Dashboard() {
 
   if (!escolaSelecionada) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-        <div className="bg-blue-600 text-white w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-600/30">
+      <div className="max-w-4xl mx-auto px-4 py-8 text-center">
+        {/* BARRA DE PROGRESSO AQUI (PASSO 1) */}
+        {renderBarraProgresso()}
+
+        <div className="bg-blue-600 text-white w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 mt-16 shadow-2xl shadow-blue-600/30">
           <School size={48} />
         </div>
         <h1 className="text-4xl font-black text-gray-800 tracking-tight mb-4">Bem-vindo(a) ao seu novo painel!</h1>
@@ -300,12 +365,10 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 mt-2">
             <span className="text-sm font-bold text-gray-500">Instituição:</span>
             
-            {/* SELETOR ATUALIZADO COM O GATILHO DE NAVEGAÇÃO */}
             <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner" 
               value={escolaSelecionada?.id || ''} 
               onChange={e => {
                 if (e.target.value === 'nova_instituicao') {
-                  // NOVO: Navega e envia a "ordem" para abrir o formulário
                   navigate('/turmas', { state: { abrirModalInstituicao: true } });
                 } else {
                   setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value));
@@ -314,10 +377,10 @@ export default function Dashboard() {
             >
               <option value="" disabled>Selecione...</option>
               {instituicoes.map(i => (
-  <option key={i.id} value={i.id}>
-    {i.nome} {isAdmin && i.professorUid === currentUser.uid ? '(Sua conta)' : isAdmin ? '(De outro prof.)' : ''}
-  </option>
-))}
+                <option key={i.id} value={i.id}>
+                  {i.nome} {isAdmin && i.professorUid === currentUser.uid ? '(Sua conta)' : isAdmin ? '(De outro prof.)' : ''}
+                </option>
+              ))}
               <option disabled>──────────</option>
               <option value="nova_instituicao">+ Criar Nova Instituição</option>
             </select>
@@ -326,8 +389,11 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* BARRA DE PROGRESSO APARECE AQUI NOS PASSOS 2, 3 E 4 */}
+      {passoAtual <= 4 && renderBarraProgresso()}
+
       {minhasTurmas.length === 0 ? (
-        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-8">
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12">
           <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi criada.</h2>
           <p className="text-gray-500 font-medium mb-8 text-lg">Agora, precisamos criar a sua primeira sala de aula para começarmos a organizar as atividades.</p>
@@ -338,7 +404,7 @@ export default function Dashboard() {
       ) : 
 
       !temAlunos ? (
-        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-8">
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12">
           <div className="bg-orange-50 text-orange-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><UserPlus size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Turma criada! Mas e os alunos?</h2>
           <p className="text-gray-500 font-medium mb-8 text-lg">Uma sala de aula não funciona sem eles. Vamos adicionar a lista de alunos para que eles possam receber as atividades.</p>
@@ -349,7 +415,7 @@ export default function Dashboard() {
       ) : 
 
       !temTarefasGeral ? (
-        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-8">
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12">
           <div className="bg-purple-50 text-purple-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><FileText size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Tudo pronto! Vamos ao trabalho.</h2>
           <p className="text-gray-500 font-medium mb-8 text-lg">Sua turma já tem alunos cadastrados. Que tal lançar o seu primeiro desafio ou atividade para eles?</p>
@@ -361,7 +427,7 @@ export default function Dashboard() {
 
         <>
           {/* BARRA PRETA DE PONTO DE SITUAÇÃO */}
-          <div className="bg-[#1f2937] text-white rounded-2xl p-5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800">
+          <div className="bg-[#1f2937] text-white rounded-2xl p-5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800 mt-6">
             <div className="flex gap-4 items-center w-full">
               <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner">
                 <Calendar size={24} className="text-blue-400" />
