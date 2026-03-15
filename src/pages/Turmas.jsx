@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Users, Plus, ArrowRight, Pencil, Trash2, X, Check, FileText, School, Star, Copy, RefreshCw } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { BookOpen, Users, Plus, ArrowRight, Pencil, Trash2, X, Check, FileText, School, Star, Copy, RefreshCw, Building2 } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Turmas() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,17 +28,27 @@ export default function Turmas() {
   const [editandoId, setEditandoId] = useState(null);
   const [nomeEdicao, setNomeEdicao] = useState('');
 
-  // ESTADOS DO ONBOARDING
+  // ESTADOS DO ONBOARDING / NOVA INSTITUIÇÃO
   const [precisaCriarEscola, setPrecisaCriarEscola] = useState(false);
   const [novaEscolaNome, setNovaEscolaNome] = useState('');
   const [salvandoEscola, setSalvandoEscola] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
-  // 1. VERIFICA INSTITUIÇÃO (ONBOARDING)
+  // 1. VERIFICA INSTITUIÇÃO OU COMANDO DE ROTA
   useEffect(() => {
     async function checkInstituicao() {
       if (!currentUser) return;
+      
+      // NOVO: Escuta a "ordem" enviada pelo Dashboard para forçar a tela de criação
+      if (location.state?.abrirModalInstituicao) {
+         setPrecisaCriarEscola(true);
+         setLoading(false);
+         // Limpa o state para não ficar preso na tela de criação se atualizar a página
+         window.history.replaceState({}, document.title) 
+         return;
+      }
+
       try {
         const instRef = collection(db, 'instituicoes');
         const q = isAdmin ? instRef : query(instRef, where('professorUid', '==', currentUser.uid));
@@ -55,12 +67,15 @@ export default function Turmas() {
       }
     }
     checkInstituicao();
-  }, [currentUser, isAdmin, escolaSelecionada, setEscolaSelecionada]);
+  }, [currentUser, isAdmin, escolaSelecionada, setEscolaSelecionada, location.state]);
 
   // 2. BUSCA TURMAS DO USUÁRIO E TURMAS MODELO DA INSTITUIÇÃO
   useEffect(() => {
     async function fetchTurmas() {
-      if (!currentUser || !escolaSelecionada?.id || precisaCriarEscola) return;
+      if (!currentUser || !escolaSelecionada?.id || precisaCriarEscola) {
+         if (!precisaCriarEscola) setLoading(false);
+         return;
+      }
       
       try {
         // Busca turmas do professor (ou todas se for admin)
@@ -102,8 +117,17 @@ export default function Turmas() {
       const docRef = await addDoc(collection(db, 'instituicoes'), novaEscolaObj);
       setEscolaSelecionada({ id: docRef.id, ...novaEscolaObj });
       setPrecisaCriarEscola(false);
+      setNovaEscolaNome(''); // Limpa o campo para a próxima
+      navigate('/turmas'); // Garante que a rota fica limpa no topo
     } catch (error) { console.error("Erro criar inst:", error); } 
     finally { setSalvandoEscola(false); }
+  }
+
+  // Permite ao usuário cancelar a criação se ele clicou no atalho mas desistiu
+  function cancelarCriacaoEscola() {
+     setPrecisaCriarEscola(false);
+     setNovaEscolaNome('');
+     if (!escolaSelecionada) navigate('/'); // Se não tinha escola, volta pro Dashboard
   }
 
   async function handleCriarTurma(e) {
@@ -224,11 +248,11 @@ export default function Turmas() {
   if (loading) return <div className="p-20 text-center text-gray-400 font-bold animate-pulse">Carregando painel...</div>;
 
   // =========================================================================
-  // TELA 1: ONBOARDING
+  // TELA 1: ONBOARDING / NOVA INSTITUIÇÃO (ATALHO)
   // =========================================================================
   if (precisaCriarEscola) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center animate-in zoom-in-95 duration-500">
         <div className="bg-blue-100 text-blue-600 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 shadow-sm">
           <School size={48} />
         </div>
@@ -240,12 +264,19 @@ export default function Turmas() {
         <form onSubmit={handleCriarInstituicao} className="max-w-md mx-auto flex flex-col gap-4">
           <input
             type="text" required autoFocus placeholder="Nome da Instituição..."
-            className="w-full px-5 py-4 bg-white border-2 border-gray-200 text-gray-800 rounded-2xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 font-bold outline-none text-lg transition-all text-center placeholder:font-medium"
+            className="w-full px-5 py-4 bg-white border-2 border-gray-200 text-gray-800 rounded-2xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 font-bold outline-none text-lg transition-all text-center placeholder:font-medium shadow-sm"
             value={novaEscolaNome} onChange={(e) => setNovaEscolaNome(e.target.value)}
           />
           <button type="submit" disabled={salvandoEscola} className="w-full bg-blue-600 text-white font-black py-4 px-8 rounded-2xl shadow-lg hover:bg-blue-700 disabled:opacity-50 transition-all text-lg flex justify-center items-center gap-2">
             {salvandoEscola ? 'Criando Instituição...' : 'Salvar e Continuar'} <ArrowRight size={20}/>
           </button>
+          
+          {/* NOVO: Botão de Cancelar (Caso tenha entrado por engano via atalho) */}
+          {escolaSelecionada && (
+            <button type="button" onClick={cancelarCriacaoEscola} className="mt-2 text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors">
+               Cancelar e voltar
+            </button>
+          )}
         </form>
       </div>
     );
@@ -258,16 +289,26 @@ export default function Turmas() {
     <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
       <Breadcrumb items={[{ label: 'Turmas' }]} />
 
-      <div className="flex items-center gap-3 mb-8 mt-3">
-        <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm">
-          <BookOpen size={28} />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 mt-3 border-b border-gray-200 pb-6">
+        <div className="flex items-center gap-3">
+            <div className="bg-blue-100 text-blue-700 p-3 rounded-xl shadow-sm">
+            <BookOpen size={28} />
+            </div>
+            <div>
+            <h1 className="text-2xl font-black text-gray-800 leading-tight">Gestão de Turmas</h1>
+            <p className="text-sm font-medium text-gray-500 mt-0.5">
+                Agrupamentos em: <strong className="text-gray-700">{escolaSelecionada?.nome}</strong>
+            </p>
+            </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-black text-gray-800 leading-tight">Gestão de Turmas</h1>
-          <p className="text-sm font-medium text-gray-500 mt-0.5">
-            Agrupamentos em: <strong className="text-gray-700">{escolaSelecionada?.nome}</strong>
-          </p>
-        </div>
+        
+        {/* NOVO: ATALHO PARA NOVA INSTITUIÇÃO NO TOPO DA TELA */}
+        <button 
+          onClick={() => setPrecisaCriarEscola(true)}
+          className="flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all text-sm"
+        >
+          <Building2 size={16} /> Nova Instituição
+        </button>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">
