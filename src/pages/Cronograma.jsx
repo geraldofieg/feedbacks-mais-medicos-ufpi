@@ -6,8 +6,9 @@ import { ArrowLeft, CalendarDays, Clock, CheckCircle2, GraduationCap, Calendar, 
 import { useAuth } from '../contexts/AuthContext';
 import Breadcrumb from '../components/Breadcrumb';
 
-// IMPORTAMOS O ARQUIVO EXTERNO (Limpa o código principal)
+// IMPORTAÇÃO DAS EMENTAS ESTÁTICAS
 import { ementaMaisMedicos } from '../data/ementaMaisMedicos';
+import { ementaUFPA } from '../data/ementaUFPA';
 
 export default function Cronograma() {
   const { currentUser, userProfile, escolaSelecionada } = useAuth();
@@ -20,7 +21,7 @@ export default function Cronograma() {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
   const [tarefas, setTarefas] = useState([]);
-  const [progressoTarefas, setProgressoTarefas] = useState({}); // NOVO: Guarda quais tarefas já começaram
+  const [progressoTarefas, setProgressoTarefas] = useState({});
   const [loading, setLoading] = useState(true);
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
@@ -58,37 +59,32 @@ export default function Cronograma() {
       } catch (error) { console.error("Erro buscar turmas:", error); }
     }
     fetchTurmas();
-  }, [currentUser, escolaSelecionada, isAdmin, location.state?.turmaIdSelecionada, turmaAtiva]);
+  }, [currentUser, escolaSelecionada, isAdmin, turmaAtiva]);
 
   useEffect(() => {
     async function fetchTarefasEProgresso() {
       if (!turmaAtiva) { setTarefas([]); setProgressoTarefas({}); setLoading(false); return; }
       setLoading(true);
       try {
-        // 1. Busca as Tarefas
         const qA = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapA = await getDocs(qA);
         const tarefasData = snapA.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTarefas(tarefasData);
 
-        // 2. Busca as Atividades para saber se a tarefa já começou (Lógica do Botão Inteligente)
         const qAtiv = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
         const snapAtiv = await getDocs(qAtiv);
         
         let progressoLocal = {};
         snapAtiv.docs.forEach(doc => {
           const ativ = doc.data();
-          const temResposta = ativ.resposta && String(ativ.resposta).trim() !== '';
+          const temResposta = (ativ.resposta && String(ativ.resposta).trim() !== '') || !!ativ.arquivoUrl;
           const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
           const jaPostado = ativ.postado === true || ativ.status === 'finalizado';
-
           if (temResposta || jaAprovado || jaPostado) {
             progressoLocal[ativ.tarefaId] = true;
           }
         });
-        
         setProgressoTarefas(progressoLocal);
-
       } catch (error) { console.error("Erro buscar tarefas:", error); } 
       finally { setLoading(false); }
     }
@@ -101,10 +97,8 @@ export default function Cronograma() {
     const dataInicio = tsInicio ? (tsInicio.toDate ? tsInicio.toDate() : new Date(tsInicio)) : null;
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
-
     const fimDia = new Date(dataFim);
     fimDia.setHours(0, 0, 0, 0);
-
     const diff = fimDia.getTime() - hoje.getTime();
     const dias = Math.ceil(diff / (1000 * 3600 * 24));
 
@@ -125,13 +119,17 @@ export default function Cronograma() {
     .filter(t => t.dataFim)
     .map(t => ({ ...t, statusObj: getStatusPrazo(t.dataInicio, t.dataFim) }))
     .filter(t => !esconderPassados || t.statusObj.status !== 'passado')
-    .sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal); 
-
+    .sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal);
+  
   const itensSemPrazo = tarefas.filter(t => !t.dataFim);
 
-  // SEGURANÇA BLINDADA: Só abre a aba premium para a dupla exata.
+  [span_4](start_span)// LOGICA PREMIUM: UFPI ou UFPA[span_4](end_span)
   const turmaObj = turmas.find(t => t.id === turmaAtiva);
-  const isTurmaMaisMedicos = escolaSelecionada?.nome?.trim() === 'UFPI' && turmaObj?.nome?.trim() === 'Facilitador Mais Médico';
+  const faculdadeNome = escolaSelecionada?.nome?.trim().toUpperCase();
+  const isTurmaMaisMedicos = (faculdadeNome === 'UFPI' || faculdadeNome === 'UFPA') && 
+                             turmaObj?.nome?.trim().includes('Facilitador');
+
+  const ementaParaExibir = faculdadeNome === 'UFPA' ? ementaUFPA : ementaMaisMedicos;
 
   if (!escolaSelecionada?.id) {
     return (
@@ -140,7 +138,6 @@ export default function Cronograma() {
         <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10 shadow-sm">
           <GraduationCap className="mx-auto text-blue-400 mb-4" size={56} />
           <h2 className="text-2xl font-black text-blue-800 mb-2">Instituição não selecionada</h2>
-          <p className="text-blue-600 mb-8 font-medium text-lg">Selecione uma instituição para ver o cronograma.</p>
           <Link to="/" className="bg-blue-600 text-white font-black py-4 px-10 rounded-xl shadow-lg">Ir para Início</Link>
         </div>
       </div>
@@ -169,25 +166,17 @@ export default function Cronograma() {
           </div>
         </div>
 
-        {/* TABS SÓ APARECEM SE FOR MAIS MÉDICOS (Pacote Premium) */}
         {isTurmaMaisMedicos && (
           <div className="flex bg-gray-200/50 p-1.5 rounded-2xl mb-8">
-            <button 
-              onClick={() => setAbaAtiva('agenda')} 
-              className={`flex-1 py-3 rounded-xl font-black text-sm flex justify-center items-center gap-2 transition-all ${abaAtiva === 'agenda' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <LayoutList size={18} /> Agenda de Entregas (Turma)
+            <button onClick={() => setAbaAtiva('agenda')} className={`flex-1 py-3 rounded-xl font-black text-sm flex justify-center items-center gap-2 transition-all ${abaAtiva === 'agenda' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              <LayoutList size={18} /> Agenda de Entregas
             </button>
-            <button 
-              onClick={() => setAbaAtiva('guia')} 
-              className={`flex-1 py-3 rounded-xl font-black text-sm flex justify-center items-center gap-2 transition-all ${abaAtiva === 'guia' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <BookOpen size={18} /> Cronograma Assíncrono (PDF)
+            <button onClick={() => setAbaAtiva('guia')} className={`flex-1 py-3 rounded-xl font-black text-sm flex justify-center items-center gap-2 transition-all ${abaAtiva === 'guia' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              <BookOpen size={18} /> Ficha Técnica (PDF)
             </button>
           </div>
         )}
 
-        {/* CONTEÚDO DA ABA 1: AGENDA DE ENTREGAS (Sempre visível por padrão) */}
         {(!isTurmaMaisMedicos || abaAtiva === 'agenda') && (
           <div>
             <div className="flex justify-end mb-6">
@@ -202,7 +191,6 @@ export default function Cronograma() {
               <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-200 shadow-sm">
                 <CalendarDays className="mx-auto text-gray-300 mb-6" size={48} />
                 <h3 className="text-2xl font-black text-gray-800 mb-2">Cronograma Vazio!</h3>
-                <p className="text-gray-500 font-medium text-lg">Nenhum evento programado para esta turma.</p>
               </div>
             ) : (
               <div className="space-y-10">
@@ -212,50 +200,22 @@ export default function Cronograma() {
                       const { status, diasRestantes, dataFormatada } = item.statusObj;
                       const isAtual = status === 'atual';
                       const isPassado = status === 'passado';
-                      
-                      // AJUSTE: O texto do botão muda se já tiver progresso!
                       const textoAcao = progressoTarefas[item.id] ? "Continuar correções" : "Iniciar correções";
 
                       return (
                         <div key={item.id} className="relative group">
-                          <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 transition-all ${isAtual ? 'bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.6)] scale-110' : isPassado ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
+                          <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 border-gray-50 z-10 transition-all ${isAtual ? 'bg-blue-500 shadow-lg scale-110' : isPassado ? 'bg-gray-300' : 'bg-gray-200'}`}></div>
+                          {isAtual && <span className="absolute -top-3 left-6 bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md z-20"><Clock size={12}/> EM ANDAMENTO ({diasRestantes} d)</span>}
+                          {isPassado && <span className="absolute -top-3 left-6 bg-gray-200 text-gray-500 px-3 py-1 rounded-full text-[10px] font-bold z-20"><CheckCircle2 size={12}/> CONCLUÍDO</span>}
 
-                          {isAtual && (
-                            <span className="absolute -top-3 left-6 bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md z-20">
-                              <Clock size={12}/> EM ANDAMENTO (Faltam {diasRestantes} dias)
-                            </span>
-                          )}
-                          
-                          {isPassado && <span className="absolute -top-3 left-6 bg-gray-200 text-gray-500 px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 z-20"><CheckCircle2 size={12}/> CONCLUÍDO</span>}
-
-                          <div className={`block p-6 rounded-2xl border transition-all ${isAtual ? 'bg-blue-50 border-blue-300 shadow-lg transform scale-[1.01]' : 'bg-white border-gray-200 hover:border-blue-200'} ${isPassado ? 'opacity-60' : ''}`}>
+                          <div className={`block p-6 rounded-2xl border transition-all ${isAtual ? 'bg-blue-50 border-blue-300 shadow-lg' : 'bg-white border-gray-200 hover:border-blue-200'} ${isPassado ? 'opacity-60' : ''}`}>
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-1">
                               <div>
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                                  {item.tipo === 'entrega' ? 'ATIVIDADE ACADÊMICA' : item.tipo?.toUpperCase() || 'ATIVIDADE'}
-                                </p>
-                                <h3 className={`text-xl font-black mb-3 ${isAtual ? 'text-blue-900' : 'text-gray-800'}`}>
-                                  {item.nomeTarefa || item.titulo}
-                                </h3>
-                                <div className="flex items-center gap-2 text-sm font-bold text-gray-500 bg-white/50 inline-flex px-3 py-1.5 rounded-lg border border-gray-100">
-                                  <Calendar size={16} className={isAtual ? 'text-blue-500' : 'text-gray-400'} />
-                                  {dataFormatada}
-                                </div>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{item.tipo?.toUpperCase() || 'ATIVIDADE'}</p>
+                                <h3 className={`text-xl font-black mb-3 ${isAtual ? 'text-blue-900' : 'text-gray-800'}`}>{item.nomeTarefa || item.titulo}</h3>
+                                <div className="flex items-center gap-2 text-sm font-bold text-gray-500 bg-white/50 inline-flex px-3 py-1.5 rounded-lg border border-gray-100"><Calendar size={16} /> {dataFormatada}</div>
                               </div>
-                              
-                              {/* NOVO: Botão de ação rápida refeito */}
-                              {item.tipo === 'entrega' && (
-                                <Link 
-                                  to={`/revisar/${item.id}`} 
-                                  className={`shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl font-black text-sm transition-all shadow-sm ${
-                                    isAtual 
-                                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/30' 
-                                      : 'bg-white border-2 border-gray-200 text-gray-600 hover:border-blue-500 hover:text-blue-600'
-                                  }`}
-                                >
-                                  <PlayCircle size={18}/> {textoAcao}
-                                </Link>
-                              )}
+                              <Link to={`/revisar/${item.id}`} className={`shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl font-black text-sm transition-all shadow-sm ${isAtual ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-white border-2 border-gray-200 text-gray-600 hover:text-blue-600'}`}><PlayCircle size={18}/> {textoAcao}</Link>
                             </div>
                           </div>
                         </div>
@@ -263,43 +223,23 @@ export default function Cronograma() {
                     })}
                   </div>
                 )}
-
-                {itensSemPrazo.length > 0 && (
-                  <div className="bg-gray-100/50 p-6 rounded-3xl border border-gray-200 mt-20">
-                    <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <AlertCircle size={18}/> Lembretes e Post-its (Sem Prazo)
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {itensSemPrazo.map(item => (
-                        <div key={item.id} className="p-5 rounded-2xl border bg-white border-gray-200">
-                          <h4 className="font-bold text-gray-800 text-lg mb-1">{item.nomeTarefa || item.titulo}</h4>
-                          <p className="text-sm text-gray-500 line-clamp-3">{item.enunciado}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
         )}
 
-        {/* CONTEÚDO DA ABA 2: CRONOGRAMA ASSÍNCRONO (SÓ P/ MAIS MÉDICOS) */}
         {isTurmaMaisMedicos && abaAtiva === 'guia' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
             <div className="bg-purple-50 border border-purple-200 p-5 rounded-2xl flex items-start gap-4 mb-8">
               <BookOpen className="text-purple-500 shrink-0 mt-1" size={24} />
               <div>
-                <h3 className="font-black text-purple-900 text-lg">Ficha Técnica Oficial (Mais Médicos)</h3>
-                <p className="text-purple-700 text-sm font-medium mt-1">Benefício exclusivo do seu pacote. Este é o documento oficial de referência com eixos, horas e créditos.</p>
+                <h3 className="font-black text-purple-900 text-lg">Ficha Técnica Oficial</h3>
+                <p className="text-purple-700 text-sm font-medium mt-1">Documento oficial de referência com eixos e créditos.</p>
               </div>
             </div>
-
-            {ementaMaisMedicos.map((eixoObj, idx) => (
+            {ementaParaExibir.map((eixoObj, idx) => (
               <div key={idx} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
-                <div className="bg-slate-800 p-4 border-b border-slate-700">
-                  <h3 className="text-white font-black text-lg tracking-wide">{eixoObj.eixo}</h3>
-                </div>
+                <div className="bg-slate-800 p-4 border-b border-slate-700"><h3 className="text-white font-black text-lg">{eixoObj.eixo}</h3></div>
                 <div className="divide-y divide-gray-100">
                   {eixoObj.modulos.map((mod, i) => (
                     <div key={i} className="p-5 hover:bg-gray-50 transition-colors">
@@ -317,10 +257,6 @@ export default function Cronograma() {
                             <span className="block text-[10px] font-black text-gray-400 uppercase">Créditos</span>
                             <span className="font-black text-gray-700">{mod.creditos}</span>
                           </div>
-                          <div className="text-center bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm">
-                            <span className="block text-[10px] font-black text-gray-400 uppercase">Semanas</span>
-                            <span className="font-black text-gray-700">{mod.semanas}</span>
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -330,7 +266,6 @@ export default function Cronograma() {
             ))}
           </div>
         )}
-
       </div>
     </div>
   );
