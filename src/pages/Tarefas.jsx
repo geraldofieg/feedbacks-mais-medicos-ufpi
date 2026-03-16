@@ -25,7 +25,6 @@ const ordenarTarefas = (lista) => {
 export default function Tarefas() {
   const { currentUser, escolaSelecionada } = useAuth();
   const location = useLocation();
-  
   const [turmas, setTurmas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
   const [alunosTurma, setAlunosTurma] = useState([]); 
@@ -35,7 +34,6 @@ export default function Tarefas() {
   const [turmaAtiva, setTurmaAtiva] = useState(() => {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
-
   const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataInicio: '', horaInicio: '', dataFim: '', horaFim: '', tipo: 'entrega' });
   const [atribuicaoEspecifica, setAtribuicaoEspecifica] = useState(false); 
   const [alunosSelecionados, setAlunosSelecionados] = useState([]); 
@@ -49,7 +47,6 @@ export default function Tarefas() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sucessoMsg, setSucessoMsg] = useState('');
   const tituloInputRef = useRef(null);
-
   const [editandoId, setEditandoId] = useState(null);
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
@@ -195,7 +192,6 @@ export default function Tarefas() {
     try {
       const prazoInicial = dataInicioEdicao ? Timestamp.fromDate(criarDataSegura(dataInicioEdicao, horaInicioEdicao, false)) : null;
       const prazoFinal = dataFimEdicao ? Timestamp.fromDate(criarDataSegura(dataFimEdicao, horaFimEdicao, true)) : null;
-      
       await updateDoc(doc(db, 'tarefas', id), { 
         nomeTarefa: tituloEdicao.trim(), 
         enunciado: enunciadoEdicao.trim(),
@@ -203,7 +199,6 @@ export default function Tarefas() {
         dataFim: prazoFinal, 
         tipo: tipoEdicao
       });
-      
       const listaAtualizada = tarefas.map(t => t.id === id ? { ...t, nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(), dataInicio: prazoInicial, dataFim: prazoFinal, tipo: tipoEdicao } : t);
       setTarefas(ordenarTarefas(listaAtualizada));
       setEditandoId(null);
@@ -213,7 +208,6 @@ export default function Tarefas() {
   async function handleCriar(e) {
     e.preventDefault();
     if (!novaTarefa.titulo || !turmaAtiva) return;
-    
     if (novaTarefa.tipo === 'entrega' && atribuicaoEspecifica && alunosSelecionados.length === 0) {
       alert("Selecione pelo menos um aluno para receber a tarefa.");
       return;
@@ -238,16 +232,19 @@ export default function Tarefas() {
         instituicaoId: escolaSelecionada.id, 
         professorUid: currentUser.uid,
         status: 'ativa', 
-        dataCriacao: serverTimestamp()
+        dataCriacao: serverTimestamp(),
+        // 🔥 A TRAVA DE SEGURANÇA: Salva no banco quem são os alunos alvo
+        atribuicaoEspecifica: atribuicaoEspecifica,
+        alunosSelecionados: atribuicaoEspecifica ? alunosSelecionados : []
       };
-      
+
       const docRef = await addDoc(collection(db, 'tarefas'), tData);
       const novaId = docRef.id;
 
       if (novaTarefa.tipo === 'entrega' && alunosTurma.length > 0) {
-        const batch = writeBatch(db); 
+        const batch = writeBatch(db);
         const listaAlvo = atribuicaoEspecifica ? alunosTurma.filter(a => alunosSelecionados.includes(a.id)) : alunosTurma;
-
+        
         listaAlvo.forEach(aluno => {
           const ativRef = doc(collection(db, 'atividades'));
           batch.set(ativRef, {
@@ -277,7 +274,6 @@ export default function Tarefas() {
 
       const listaComNovo = [{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas];
       setTarefas(ordenarTarefas(listaComNovo));
-      
       setSucessoMsg(`"${tituloSalvo}" salvo com sucesso!`);
       
       setTimeout(() => {
@@ -289,7 +285,6 @@ export default function Tarefas() {
         setAtribuicaoEspecifica(false);
         setAlunosSelecionados([]);
       }, 1500);
-
     } catch (error) { console.error("Erro criar:", error); } 
     finally { setSalvando(false); }
   }
