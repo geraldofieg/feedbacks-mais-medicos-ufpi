@@ -109,4 +109,4 @@ Automatização de cobranças baseada no cruzamento de alunos x tarefas pendente
 
 ## 17. Acelerador de Fluxo: Botão Global (FAB)
 * **Atalho Flutuante:** Acesso rápido à criação de Turmas, Tarefas e Alunos.
-* **O "Espião" Inteligente (Omnipresente):** Avalia a base de dados e injeta dinamicamente o sub-botão VIP **"Corrigir tarefa atual"** se houver uma tarefa ativa hoje.
+* **O "Espião" Inteligente (Omnipresente):** Avalia a base de dados e injeta dinamicamente o sub-botão VIP **"Corrigir tarefa atual"** se houver uma tarefa ativa hoje. 
