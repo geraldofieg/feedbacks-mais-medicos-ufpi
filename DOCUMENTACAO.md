@@ -28,15 +28,16 @@ O sistema opera em uma hierarquia plana de 3 níveis protegida por Tenant ID:
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
 * **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role`, `plano`, `promptPersonalizado`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`.
-* **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` ('pendente'|'aprovado'), `nota`, `feedbackSugerido`, `feedbackFinal`, `postado` (Booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`. 
+* **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` ('pendente'|'aprovado'), `nota`, `feedbackSugerido`, `feedbackFinal`, `postado` (Booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`, `arquivoUrl`, `nomeArquivo`. 
 * **Campos de Retrocompatibilidade V1/V3 (Estratégia Poliglota/Dupla Etiqueta):** Salva simultaneamente `nomeAluno` (V3) e `aluno` (V1), `nomeTarefa` (V3) e `tarefa`/`modulo` (V1), `revisadoPor` (Nome do revisor). 
 * **Regra Crítica de Sincronia (Prevenção de Falsos Positivos na V1):** Em rascunhos (`status: 'pendente'`) ou ao devolver para revisão, o campo `dataAprovacao` não pode ser salvo como `null`. Ele deve ser fisicamente arrancado do banco de dados utilizando a diretriz `deleteField()` do Firestore. Isso impede que a V1 (que valida a mera existência da chave para mudar de funil) jogue o aluno acidentalmente para a caixa de "Falta Postar".
+* **Regra de Validação de Entrega (Texto ou Arquivo):** Para fins de contagem em dashboards, mapas e listas de pendências, uma atividade só é considerada "entregue/em revisão" se possuir texto no campo `resposta` **OU** se possuir um link de anexo no campo `arquivoUrl`. Ambas as condições devem ser verificadas simultaneamente para evitar a invisibilidade de alunos nas listagens.
 
 ## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
 * **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada, o Dashboard exibe a interface de criação de Nível 1.
 * **Atalho VIP de Ação Rápida (Card Multi-Tarefas):** O Dashboard avalia se existem tarefas em andamento cruzando a data atual. Se houver múltiplas tarefas ativas, o card central se adapta transformando-se em uma lista rolável (Cardápio Completo). O texto do botão de cada tarefa possui inteligência: se não houver progresso, exibe **"Iniciar correções"**; se pelo menos uma resposta já foi colada, atualiza para **"Continuar correções"**.
 * **A Esteira de Produção (Kanban Matemático Blindado):** Os alunos só entram no funil a partir do momento em que o professor **cola a resposta deles** no sistema (ou anexa arquivo):
-    * **Caixa 1: Aguardando Revisão (`/aguardandorevisao`):** Resposta colada, mas feedback não aprovado. (Ordenado: Mais recente no topo).
+    * **Caixa 1: Aguardando Revisão (`/aguardandorevisao`):** Resposta colada ou arquivo anexado, mas feedback não aprovado. (Ordenado: Mais recente no topo).
     * **Caixa 2: Aguardando Postar (`/faltapostar`):** Feedback aprovado, mas `postado` é `false`. (Oculta para o Tier 2).
     * **Caixa 3: Histórico Finalizado (`/historico`):** `postado` é `true`. Ciclo encerrado.
 * **Termômetro da IA:** Mede a eficiência do prompt. Regra: Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Visível para Tier Premium e Admin.
@@ -63,7 +64,7 @@ A página de Revisar Atividade (`/revisar/id`) é o HUB principal do sistema.
 ## 10. Semáforo Acadêmico e Fluxo de Trabalho (Linha de Chegada)
 O sistema orienta o professor através de Ícones Tricolores no buscador de alunos:
 * 🔴 **Aguardando:** O aluno está na turma, mas a resposta ainda não foi trazida para a plataforma.
-* 🟡 **Em Revisão:** A resposta já está aqui, mas o feedback não foi aprovado ou a atividade não foi marcada como lançada no portal oficial.
+* 🟡 **Em Revisão:** A resposta (texto ou arquivo) já está aqui, mas o feedback não foi aprovado ou a atividade não foi marcada como lançada no portal oficial.
 * ✅ **Lançado:** Trabalho concluído! O feedback e a nota já foram lançados para o portal oficial da instituição. Status blindado no histórico.
 
 ## 11. Gestão de Tarefas, Automação e Motor de Clonagem
