@@ -46,6 +46,9 @@ export default function RevisarAtividade() {
 
   const respostaEstaVazia = novaResposta.trim().length === 0 && !arquivoUrl;
 
+  // 🔥 NOVO: Estado para o prompt ser sincronizado em tempo real entre abas
+  const [promptVivo, setPromptVivo] = useState(userProfile?.promptPersonalizado || localStorage.getItem('@SaaS_PromptVivo') || '');
+
   useEffect(() => {
     if (location.state?.alunoId) {
       setAlunoSelecionadoId(location.state.alunoId);
@@ -77,6 +80,23 @@ export default function RevisarAtividade() {
     }
     buscarDadosDaEstacao();
   }, [id, navigate]);
+
+  // 🔥 NOVO: Monitor de Sincronização do Prompt
+  useEffect(() => {
+    if (userProfile?.promptPersonalizado) {
+      setPromptVivo(userProfile.promptPersonalizado);
+      localStorage.setItem('@SaaS_PromptVivo', userProfile.promptPersonalizado);
+    }
+
+    const sincronizarPrompt = (e) => {
+      if (e.key === '@SaaS_PromptVivo' && e.newValue) {
+        setPromptVivo(e.newValue);
+      }
+    };
+
+    window.addEventListener('storage', sincronizarPrompt);
+    return () => window.removeEventListener('storage', sincronizarPrompt);
+  }, [userProfile]);
 
   const alunoAtual = alunoSelecionadoId ? alunos.find(a => a.id === alunoSelecionadoId) : null;
   const atividadeAtual = alunoAtual ? atividadesMap[alunoAtual.id] : null;
@@ -137,7 +157,8 @@ export default function RevisarAtividade() {
       if (window.confirm("🔒 Deseja conhecer o Plano Premium para usar IA?")) navigate('/planos');
       return;
     }
-    if (!userProfile?.promptPersonalizado) {
+    // 🔥 Agora usa o promptVivo (Sincronizado)
+    if (!promptVivo) {
       if (window.confirm("Configure suas instruções de correção antes.")) navigate('/configuracoes');
       return;
     }
@@ -147,10 +168,9 @@ export default function RevisarAtividade() {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
       
-      // 🔥 O ID TÉCNICO EXATO para usar o motor lite e evitar o erro 404:
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
       
-      const promptCompleto = `Aja como um preceptor médico. Estilo: ${userProfile?.promptPersonalizado}. QUESTÃO: ${tarefa?.enunciado}. RESPOSTA: "${novaResposta}". Gere um feedback pedagógico direto.`;
+      const promptCompleto = `Aja como um preceptor médico. Estilo: ${promptVivo}. QUESTÃO: ${tarefa?.enunciado}. RESPOSTA: "${novaResposta}". Gere um feedback pedagógico direto.`;
       const result = await model.generateContent(promptCompleto);
       setFeedbackEditado(result.response.text());
     } catch (e) { 
@@ -359,7 +379,7 @@ export default function RevisarAtividade() {
                       <h4 className="text-xs font-black text-slate-900 uppercase flex-1">2. Resposta do Aluno</h4>
                       <div className="flex items-center gap-4">
                         {arquivoUrl ? (
-                          <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200">
+                          <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 shadow-sm">
                             <a href={arquivoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:underline cursor-pointer" title="Clique para visualizar/baixar o arquivo">
                               <FileCheck size={14}/>
                               <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{nomeArquivo || "Arquivo Anexado"}</span>
@@ -379,19 +399,20 @@ export default function RevisarAtividade() {
                     
                     <textarea rows="14" placeholder="Cole a resposta aqui..." className="w-full p-6 md:p-8 rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-lg" value={novaResposta} onChange={(e) => setNovaResposta(e.target.value)}/>
                     
-                    {/* 🔥 RADAR DE LINKS (Aparece se houver algum link colado na resposta) */}
+                    {/* 🔥 RADAR DE LINKS (Agora com mais destaque visual para você clicar fácil) */}
                     {linksNaResposta.length > 0 && (
-                      <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-xl flex flex-col gap-3">
-                        <span className="text-xs font-black text-blue-800 uppercase tracking-widest flex items-center gap-1">
+                      <div className="mt-4 p-5 bg-indigo-50 border border-indigo-100 rounded-2xl flex flex-col gap-3 shadow-inner">
+                        <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-2">
                           <ExternalLink size={14} /> Links detectados na resposta do aluno:
                         </span>
                         <div className="flex flex-wrap gap-2">
                           {linksNaResposta.map((link, idx) => (
-                            <a key={idx} href={link} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-blue-600 hover:underline bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm truncate max-w-full">
-                              {link}
+                            <a key={idx} href={link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-white hover:bg-indigo-600 bg-white px-4 py-2 rounded-xl border border-indigo-200 shadow-sm transition-all truncate max-w-full">
+                              Abrir Link {linksNaResposta.length > 1 ? idx + 1 : ''} <ArrowLeft size={14} className="rotate-180"/>
                             </a>
                           ))}
                         </div>
+                        <p className="text-[9px] text-indigo-400 font-bold italic">Nota: Caixas de texto não permitem cliques diretos. Use os botões acima para abrir os arquivos do aluno.</p>
                       </div>
                     )}
                   </section>
@@ -402,32 +423,32 @@ export default function RevisarAtividade() {
               <div className="bg-slate-900 rounded-[32px] p-6 md:p-8 text-white shadow-2xl">
                 <div className="mb-6">
                   <h3 className="text-xl font-black flex items-center gap-3 mb-6"><CheckCircle className="text-green-400" size={24}/>Avaliação</h3>
-                  <button onClick={handleGerarIA} disabled={gerandoIA || respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-600 to-blue-600 mb-4 flex items-center justify-center gap-3">
+                  <button onClick={handleGerarIA} disabled={gerandoIA || respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-600 to-blue-600 mb-4 flex items-center justify-center gap-3 shadow-lg shadow-indigo-500/20 active:scale-95 transition-transform">
                     {gerandoIA ? <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>} Gerar Feedback IA
                   </button>
                 </div>
                 <div className="space-y-6">
-                  <textarea rows="10" placeholder="Feedback aparecerá aqui..." className="w-full bg-slate-800 rounded-2xl p-5 text-sm text-slate-100 outline-none resize-none" value={feedbackEditado} onChange={e => setFeedbackEditado(e.target.value)}/>
-                  <input type="text" placeholder="Nota" className="bg-slate-800 p-4 rounded-2xl font-black text-white w-full outline-none" value={notaAluno} onChange={e => setNotaAluno(e.target.value)}/>
+                  <textarea rows="10" placeholder="Feedback aparecerá aqui..." className="w-full bg-slate-800 rounded-2xl p-5 text-sm text-slate-100 outline-none resize-none focus:ring-2 focus:ring-indigo-500 transition-all" value={feedbackEditado} onChange={e => setFeedbackEditado(e.target.value)}/>
+                  <input type="text" placeholder="Nota" className="bg-slate-800 p-4 rounded-2xl font-black text-white w-full outline-none focus:ring-2 focus:ring-indigo-500 transition-all" value={notaAluno} onChange={e => setNotaAluno(e.target.value)}/>
                   
                   {atividadeAtual?.postado ? (
-                      <div className="w-full bg-green-500/20 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2"><CheckCheck size={18}/> LANÇADO OFICIALMENTE</div>
+                      <div className="w-full bg-green-500/20 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2 border border-green-500/30"><CheckCheck size={18}/> LANÇADO OFICIALMENTE</div>
                   ) : atividadeAtual?.status === 'aprovado' ? (
                         <div className="pt-2 border-t border-slate-800 space-y-3">
-                          <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2"><Copy size={18}/> {copiado ? 'Copiado!' : '1. Copiar Feedback'}</button>
-                          <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl"><Send size={18}/> 2. Confirmar Lançamento</button>
+                          <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"><Copy size={18}/> {copiado ? 'Copiado!' : '1. Copiar Feedback'}</button>
+                          <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl hover:bg-indigo-700 transition-colors"><Send size={18}/> 2. Confirmar Lançamento</button>
                         </div>
                   ) : (
                         <div className="grid grid-cols-2 gap-3">
-                          <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700">💾 Rascunho</button>
-                          <button onClick={() => handleAprovar(true)} disabled={salvando || !feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black">🚀 Aprovar</button>
+                          <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700 hover:bg-slate-700 transition-colors">💾 Rascunho</button>
+                          <button onClick={() => handleAprovar(true)} disabled={salvando || !feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black hover:bg-blue-700 transition-colors">🚀 Aprovar</button>
                         </div>
                   )}
 
                   {atividadeAtual && (
                     <div className="mt-8 border-t border-slate-800 pt-8 space-y-3">
-                        <button onClick={handleDevolverRevisao} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-[10px] font-bold text-amber-500 py-2 hover:bg-amber-500/10 rounded-lg"><RotateCcw size={14}/> Devolver p/ Revisão</button>
-                        <button onClick={handleExcluirAtividade} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-[10px] font-bold text-red-500 py-2 hover:bg-red-500/10 rounded-lg"><Trash2 size={14}/> Excluir Resposta</button>
+                        <button onClick={handleDevolverRevisao} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-[10px] font-bold text-amber-500 py-2 hover:bg-amber-500/10 rounded-lg transition-colors"><RotateCcw size={14}/> Devolver p/ Revisão</button>
+                        <button onClick={handleExcluirAtividade} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-[10px] font-bold text-red-500 py-2 hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 size={14}/> Excluir Resposta</button>
                     </div>
                   )}
                 </div>
