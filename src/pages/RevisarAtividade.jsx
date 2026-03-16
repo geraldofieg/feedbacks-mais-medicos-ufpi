@@ -146,11 +146,17 @@ export default function RevisarAtividade() {
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      
+      // 🔥 O ID TÉCNICO EXATO para usar o motor lite e evitar o erro 404:
+      const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+      
       const promptCompleto = `Aja como um preceptor médico. Estilo: ${userProfile?.promptPersonalizado}. QUESTÃO: ${tarefa?.enunciado}. RESPOSTA: "${novaResposta}". Gere um feedback pedagógico direto.`;
       const result = await model.generateContent(promptCompleto);
       setFeedbackEditado(result.response.text());
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error(e);
+      alert("Erro ao conectar com a IA da Google. Tenta novamente.");
+    }
     finally { setGerandoIA(false); }
   }
 
