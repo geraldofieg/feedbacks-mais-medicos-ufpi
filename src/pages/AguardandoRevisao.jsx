@@ -67,7 +67,9 @@ export default function AguardandoRevisao() {
           if (turmasIds.includes(ativ.turmaId)) {
             const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
             const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
-            const temResposta = ativ.resposta && String(ativ.resposta).trim() !== '';
+            
+            // 🔥 CIRURGIA V3: Agora considera resposta SE tiver texto OU arquivo anexado
+            const temResposta = (ativ.resposta && String(ativ.resposta).trim() !== '') || !!ativ.arquivoUrl;
 
             if (!jaPostado && !jaAprovado && temResposta) {
               const nomeOriginalTarefa = ativ.nomeTarefa || ativ.tarefa || ativ.modulo || 'Tarefa Importada';
