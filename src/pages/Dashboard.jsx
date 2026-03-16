@@ -163,6 +163,13 @@ export default function Dashboard() {
              
              alunosDaTurma.forEach(alunoDoc => {
                 const alunoId = alunoDoc.id;
+                
+                // 🔥 A TRAVA DE TAREFA ESPECÍFICA (Anti-Falso Positivo)
+                const tarefaRestrita = t.alunosSelecionados && t.alunosSelecionados.length > 0;
+                if (tarefaRestrita && !t.alunosSelecionados.includes(alunoId)) {
+                    return; // Ignora o aluno se ele não for o alvo
+                }
+
                 const nomeAluno = alunoDoc.data().nome;
                 const ativDoAluno = ativMap[`${t.id}_${alunoId}`];
                 
@@ -263,6 +270,7 @@ export default function Dashboard() {
     }
     fetchDados();
   }, [escolaSelecionada]);
+
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   let passoAtual = 5; 
@@ -586,9 +594,9 @@ export default function Dashboard() {
                           {t.pendentes.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
                               {t.pendentes.map((nome, idx) => (
-                                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-bold text-gray-500 shadow-sm hover:border-gray-300 transition-colors cursor-default">
+                                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-bold text-gray-600 shadow-sm hover:border-orange-300 transition-colors cursor-default">
                                   <User size={12} className="text-gray-400"/> {nome}
-                                </span>
+                               </span>
                               ))}
                             </div>
                           ) : (
