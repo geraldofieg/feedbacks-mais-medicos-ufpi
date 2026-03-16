@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ClipboardList, Check, X, BookOpen, Users, User, FileText, RefreshCw, GraduationCap } from 'lucide-react';
+import { ClipboardList, Check, X, Minus, BookOpen, Users, User, FileText, RefreshCw, GraduationCap } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function MapaEntregas() {
@@ -41,7 +41,7 @@ export default function MapaEntregas() {
   async function fetchTurmas() {
     if (!currentUser || !escolaSelecionada?.id) {
       setLoadingTurmas(false);
-      return; 
+      return;
     }
     setErro(null);
     setLoadingTurmas(true);
@@ -50,7 +50,7 @@ export default function MapaEntregas() {
       const qT = isAdmin
         ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
         : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
-        
+      
       const snapT = await getDocs(qT);
       const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
       setTurmas(turmasData);
@@ -95,10 +95,12 @@ export default function MapaEntregas() {
           .filter(t => {
             if (t.status === 'lixeira') return false;
             if (t.tipo && t.tipo !== 'entrega') return false;
+            
             const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
             const startObj = startRaw ? (startRaw.toDate ? startRaw.toDate() : new Date(startRaw)) : new Date();
             const startNormal = new Date(startObj);
             startNormal.setHours(0, 0, 0, 0);
+            
             return startNormal.getTime() <= hojeTime;
           })
           .sort((a, b) => {
@@ -121,10 +123,20 @@ export default function MapaEntregas() {
     fetchMatriz();
   }, [turmaAtiva]);
 
+  // Função para verificar se a tarefa foi entregue (Normal)
   const verificarEntrega = (alunoId, tarefaId) => {
     const ativ = atividades.find(a => a.alunoId === alunoId && a.tarefaId === tarefaId);
     if (!ativ) return false;
     return (ativ.resposta && String(ativ.resposta).trim() !== '') || !!ativ.arquivoUrl;
+  };
+
+  // 🔥 A TRAVA DE FALSOS POSITIVOS: Verifica se o aluno está isento desta tarefa
+  const verificarIsencao = (alunoId, tarefa) => {
+    const tarefaRestrita = tarefa.alunosSelecionados && tarefa.alunosSelecionados.length > 0;
+    if (tarefaRestrita && !tarefa.alunosSelecionados.includes(alunoId)) {
+        return true; 
+    }
+    return false;
   };
 
   // 🔥 A CORTINA DE TEMPO: Filtra as tarefas ANTES de desenhar a tela (Data de Corte Exata)
@@ -132,7 +144,6 @@ export default function MapaEntregas() {
     if (!ocultarAntigas) return true; // Se o botão tiver desligado, mostra tudo
 
     // Define a linha de corte EXATA pedida: 05 de Janeiro de 2026
-    // Mês começa em 0 no JS (0 = Jan, 1 = Fev...)
     const dataCorte = new Date(2026, 0, 5); 
     
     // Pega a data de início da tarefa
@@ -148,6 +159,7 @@ export default function MapaEntregas() {
   });
 
   const isCarregando = loadingTurmas || loadingMatriz;
+
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8 text-center">
@@ -207,6 +219,7 @@ export default function MapaEntregas() {
               <div className="flex gap-4 text-[10px] font-black uppercase text-gray-500">
                 <span className="flex items-center gap-1"><Check className="text-green-500" size={14}/> Entregue</span>
                 <span className="flex items-center gap-1"><X className="text-red-400" size={14}/> Pendente</span>
+                <span className="flex items-center gap-1"><Minus className="text-gray-400" size={14}/> Isento</span>
               </div>
             </div>
 
@@ -229,9 +242,13 @@ export default function MapaEntregas() {
                       <td className="px-4 py-4 md:pl-6 font-bold text-gray-800 text-sm sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 shadow-md">{aluno.nome}</td>
                       {tarefasVisiveis.map(tarefa => {
                         const entregou = verificarEntrega(aluno.id, tarefa.id);
+                        const isento = verificarIsencao(aluno.id, tarefa);
+                        
                         return (
                           <td key={tarefa.id} className="px-3 py-3 text-center border-l border-gray-100">
-                            {entregou ? (
+                            {isento ? (
+                              <div className="inline-flex bg-gray-100 text-gray-400 p-1.5 rounded-full shadow-sm" title="Não atribuída"><Minus size={14} strokeWidth={4}/></div>
+                            ) : entregou ? (
                               <div className="inline-flex bg-green-100 text-green-600 p-1.5 rounded-full shadow-sm" title="Entrega Identificada"><Check size={14} strokeWidth={4}/></div>
                             ) : (
                               <div className="inline-flex bg-red-50 text-red-300 p-1.5 rounded-full" title="Pendente"><X size={14} strokeWidth={4}/></div>
@@ -258,12 +275,16 @@ export default function MapaEntregas() {
               <div className="flex gap-3 text-[10px] font-black uppercase text-gray-500">
                 <span className="flex items-center gap-1"><Check className="text-green-500" size={14}/> Ok</span>
                 <span className="flex items-center gap-1"><X className="text-red-400" size={14}/> Pend</span>
+                <span className="flex items-center gap-1"><Minus className="text-gray-400" size={14}/> Isento</span>
               </div>
             </div>
 
             {alunos.map((aluno) => {
-              const totalTarefas = tarefasVisiveis.length;
-              const tarefasEntregues = tarefasVisiveis.filter(t => verificarEntrega(aluno.id, t.id)).length;
+              // 🔥 A MATEMÁTICA JUSTA: Só conta as tarefas que o aluno é obrigado a fazer
+              const tarefasDoAluno = tarefasVisiveis.filter(t => !verificarIsencao(aluno.id, t));
+              const totalTarefas = tarefasDoAluno.length;
+              const tarefasEntregues = tarefasDoAluno.filter(t => verificarEntrega(aluno.id, t.id)).length;
+              
               const statusCard = tarefasEntregues === totalTarefas && totalTarefas > 0 ? 'border-green-200 bg-green-50/30' : 'border-gray-200 bg-white';
 
               return (
@@ -281,14 +302,18 @@ export default function MapaEntregas() {
                   <div className="p-4 divide-y divide-gray-50">
                     {tarefasVisiveis.map((tarefa) => {
                       const entregou = verificarEntrega(aluno.id, tarefa.id);
+                      const isento = verificarIsencao(aluno.id, tarefa);
+                      
                       return (
                         <div key={tarefa.id} className="py-2.5 flex justify-between items-center gap-4">
                           <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Tarefa</p>
-                            <p className="text-xs font-bold text-gray-700 truncate" title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</p>
+                            <p className={`text-xs font-bold truncate ${isento ? 'text-gray-400 line-through' : 'text-gray-700'}`} title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</p>
                           </div>
                           <div className="shrink-0">
-                            {entregou ? (
+                            {isento ? (
+                              <span className="inline-flex bg-gray-100 text-gray-400 p-1.5 rounded-full" title="Não atribuída"><Minus size={14} strokeWidth={3}/></span>
+                            ) : entregou ? (
                               <span className="inline-flex bg-green-100 text-green-600 p-1.5 rounded-full"><Check size={14} strokeWidth={3}/></span>
                             ) : (
                               <span className="inline-flex bg-red-50 text-red-400 p-1.5 rounded-full"><X size={14} strokeWidth={3}/></span>
