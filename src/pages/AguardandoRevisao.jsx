@@ -36,15 +36,13 @@ export default function AguardandoRevisao() {
         // 1. Puxa as tarefas da V3 para checagem
         const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapTarefas = await getDocs(qTarefas);
-        
         const tarefasPorId = {};
         const tarefasPorNomeLimpo = {}; 
         
         snapTarefas.docs.forEach(d => { 
           const data = d.data();
-          tarefasPorId[d.id] = true; // Guarda os IDs válidos
+          tarefasPorId[d.id] = true; 
           
-          // Normalização agressiva (tira espaços, hifens e deixa minúsculo)
           const nomeOriginal = data.nomeTarefa || data.titulo || '';
           const nomeLimpo = nomeOriginal.toLowerCase().replace(/[\s-]/g, '');
           if (nomeLimpo) tarefasPorNomeLimpo[nomeLimpo] = d.id;
@@ -57,66 +55,75 @@ export default function AguardandoRevisao() {
 
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
-        
         const pendencias = [];
         
-        // Usando um loop 'for...of' para podermos usar 'await' na auto-criação sem engasgar o sistema
+        // 🔥 O DESFRAGMENTADOR ANTICLONES (V3)
+        const mapaDocsValidos = {};
+        
         for (const docSnap of snapAtividades.docs) {
           const ativ = docSnap.data();
+          if (!turmasIds.includes(ativ.turmaId)) continue;
+
+          const nomeOriginalTarefa = ativ.nomeTarefa || ativ.tarefa || ativ.modulo || 'Tarefa Importada';
+          const nomeLimpoAtividade = nomeOriginalTarefa.toLowerCase().replace(/[\s-]/g, '');
           
-          if (turmasIds.includes(ativ.turmaId)) {
-            const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
-            const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+          // Chave única para caçar clones do mesmo aluno na mesma tarefa
+          const chaveUnica = `${nomeLimpoAtividade}_${ativ.alunoId}`;
+          
+          const timeAtual = ativ.dataModificacao?.toMillis() || ativ.dataAprovacao?.toMillis() || ativ.dataCriacao?.toMillis() || 0;
+
+          if (!mapaDocsValidos[chaveUnica] || timeAtual > mapaDocsValidos[chaveUnica].time) {
+            mapaDocsValidos[chaveUnica] = { snap: docSnap, ativ: ativ, time: timeAtual, nomeLimpo: nomeLimpoAtividade, nomeOriginal: nomeOriginalTarefa };
+          }
+        }
+
+        // 2. Agora processamos APENAS os sobreviventes da desfragmentação
+        for (const item of Object.values(mapaDocsValidos)) {
+          const ativ = item.ativ;
+          const docSnap = item.snap;
+          const nomeLimpoAtividade = item.nomeLimpo;
+          const nomeOriginalTarefa = item.nomeOriginal;
+
+          const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
+          const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+          
+          const temResposta = (ativ.resposta && String(ativ.resposta).trim() !== '') || !!ativ.arquivoUrl;
+
+          if (!jaPostado && !jaAprovado && temResposta) {
+            let idVerdadeiro = ativ.tarefaId;
             
-            // 🔥 CIRURGIA V3: Agora considera resposta SE tiver texto OU arquivo anexado
-            const temResposta = (ativ.resposta && String(ativ.resposta).trim() !== '') || !!ativ.arquivoUrl;
-
-            if (!jaPostado && !jaAprovado && temResposta) {
-              const nomeOriginalTarefa = ativ.nomeTarefa || ativ.tarefa || ativ.modulo || 'Tarefa Importada';
-              const nomeLimpoAtividade = nomeOriginalTarefa.toLowerCase().replace(/[\s-]/g, '');
-              
-              let idVerdadeiro = ativ.tarefaId;
-
-              // SE A TAREFA ESTÁ COM LINK QUEBRADO OU HERANÇA DA V1:
-              if (!idVerdadeiro || !tarefasPorId[idVerdadeiro]) {
-                  
-                  if (tarefasPorNomeLimpo[nomeLimpoAtividade]) {
-                      // CASO 1: Achou a tarefa no banco da V3. Só amarra os IDs.
-                      idVerdadeiro = tarefasPorNomeLimpo[nomeLimpoAtividade];
-                      updateDoc(doc(db, 'atividades', docSnap.id), { tarefaId: idVerdadeiro }).catch(e => console.log('Erro silencioso DB', e));
-                  } else {
-                      // CASO 2: Tarefa não existe na V3. O sistema CRIA ELA AGORA MESMO!
-                      const novaTarefa = {
-                          nomeTarefa: nomeOriginalTarefa,
-                          titulo: nomeOriginalTarefa,
-                          instituicaoId: escolaSelecionada.id,
-                          turmaId: ativ.turmaId,
-                          tipo: 'entrega',
-                          enunciado: 'Tarefa migrada/gerada automaticamente do cronograma V1.',
-                          dataCriacao: new Date() // Data atual local
-                      };
-                      
-                      const docRef = await addDoc(collection(db, 'tarefas'), novaTarefa);
-                      idVerdadeiro = docRef.id;
-                      
-                      // Adiciona ao mapa local para não criar duplicatas se houver outro aluno na mesma tarefa
-                      tarefasPorId[idVerdadeiro] = true;
-                      tarefasPorNomeLimpo[nomeLimpoAtividade] = idVerdadeiro;
-                      
-                      // Amarra a atividade à tarefa recém-criada
-                      updateDoc(doc(db, 'atividades', docSnap.id), { tarefaId: idVerdadeiro }).catch(e => console.log('Erro silencioso DB', e));
-                  }
-              }
-
-              pendencias.push({
-                id: docSnap.id,
-                tarefaId: idVerdadeiro, 
-                alunoId: ativ.alunoId,
-                nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || ativ.aluno || 'Aluno Removido',
-                nomeTarefa: nomeOriginalTarefa,
-                dataCriacao: ativ.dataCriacao
-              });
+            // SE A TAREFA ESTÁ COM LINK QUEBRADO OU HERANÇA DA V1:
+            if (!idVerdadeiro || !tarefasPorId[idVerdadeiro]) {
+                if (tarefasPorNomeLimpo[nomeLimpoAtividade]) {
+                    idVerdadeiro = tarefasPorNomeLimpo[nomeLimpoAtividade];
+                    updateDoc(doc(db, 'atividades', docSnap.id), { tarefaId: idVerdadeiro }).catch(e => console.log('Erro silencioso DB', e));
+                } else {
+                    const novaTarefa = {
+                        nomeTarefa: nomeOriginalTarefa,
+                        titulo: nomeOriginalTarefa,
+                        instituicaoId: escolaSelecionada.id,
+                        turmaId: ativ.turmaId,
+                        tipo: 'entrega',
+                        enunciado: 'Tarefa migrada/gerada automaticamente do cronograma V1.',
+                        dataCriacao: new Date() 
+                    };
+                    const docRef = await addDoc(collection(db, 'tarefas'), novaTarefa);
+                    idVerdadeiro = docRef.id;
+                    tarefasPorId[idVerdadeiro] = true;
+                    tarefasPorNomeLimpo[nomeLimpoAtividade] = idVerdadeiro;
+                    
+                    updateDoc(doc(db, 'atividades', docSnap.id), { tarefaId: idVerdadeiro }).catch(e => console.log('Erro silencioso DB', e));
+                }
             }
+
+            pendencias.push({
+              id: docSnap.id,
+              tarefaId: idVerdadeiro, 
+              alunoId: ativ.alunoId,
+              nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || ativ.aluno || 'Aluno Removido',
+              nomeTarefa: nomeOriginalTarefa,
+              dataCriacao: ativ.dataCriacao
+            });
           }
         }
 
@@ -125,7 +132,7 @@ export default function AguardandoRevisao() {
           const tempoB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
           return tempoB - tempoA;
         });
-
+        
         setListaPendencias(pendencias);
       } catch (error) {
         console.error("Erro ao buscar pendências:", error);
