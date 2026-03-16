@@ -68,11 +68,10 @@ export default function Pendencias() {
         atividadesSnap.docs.forEach(doc => {
           const a = doc.data();
           
-          // Inteligência de Conteúdo: Ignora registros vazios da V3
-          const temRespostaReal = a.resposta && String(a.resposta).trim() !== '';
-          const temArquivo = !!a.arquivoUrl;
+          // 🔥 CIRURGIA V1: Verifica se tem texto na resposta OU se tem um arquivo anexado
+          const temRespostaReal = (a.resposta && String(a.resposta).trim() !== '') || !!a.arquivoUrl;
 
-          if (temRespostaReal || temArquivo) {
+          if (temRespostaReal) {
             let nomeAluno = a.aluno || a.nomeAluno; // Aceita os dois padrões
             let nomeTarefa = a.tarefa || a.nomeTarefa; // Aceita os dois padrões
 
