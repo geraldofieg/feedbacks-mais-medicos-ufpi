@@ -65,12 +65,10 @@ export default function Dashboard() {
 
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
-
           const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAlunos = await getDocs(qAlunos);
           const alunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira');
           setTemAlunos(alunosVivos.length > 0);
-
           const alunosMap = {};
           alunosVivos.forEach(d => { alunosMap[d.id] = d.data().nome; });
           
@@ -81,8 +79,7 @@ export default function Dashboard() {
 
           const hoje = new Date();
           const hojeTime = hoje.getTime();
-          
-          const limiteInferior = new Date(2026, 0, 5).getTime(); // 05/Jan/2026
+          const limiteInferior = new Date(2026, 0, 5).getTime();
 
           const docRefUser = doc(db, 'usuarios', currentUser.uid);
           const docSnapUser = await getDoc(docRefUser);
@@ -91,23 +88,18 @@ export default function Dashboard() {
 
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
-          
           let p = 0, f = 0, ok = 0;
           let iaTotal = 0, iaOriginais = 0;
           let progressoLocal = {};
           
           const mapaDocsValidos = {};
-
           snapAtiv.docs.forEach(doc => {
             const ativ = doc.data();
             if (!tIds.includes(ativ.turmaId)) return;
-            
             const nomeOriginalTarefa = ativ.nomeTarefa || ativ.tarefa || ativ.modulo || 'Tarefa';
             const nomeLimpoAtividade = nomeOriginalTarefa.toLowerCase().replace(/[\s-]/g, '');
             const chaveUnica = `${nomeLimpoAtividade}_${ativ.alunoId}`;
-            
             const timeAtual = ativ.dataModificacao?.toMillis() || ativ.dataAprovacao?.toMillis() || ativ.dataCriacao?.toMillis() || 0;
-
             if (!mapaDocsValidos[chaveUnica] || timeAtual > mapaDocsValidos[chaveUnica].time) {
               mapaDocsValidos[chaveUnica] = { ativ: ativ, time: timeAtual };
             }
@@ -116,34 +108,23 @@ export default function Dashboard() {
           const ativMap = {};
           Object.values(mapaDocsValidos).forEach(item => {
             const d = item.ativ;
-            
             const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
             const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
             const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
 
-            if (jaPostado) {
-              ok++; 
-              progressoLocal[d.tarefaId] = true;
-            } else if (jaAprovado) {
-              f++;  
-              progressoLocal[d.tarefaId] = true;
-            } else if (temResposta) {
-              p++;  
-              progressoLocal[d.tarefaId] = true;
-            }
+            if (jaPostado) { ok++; progressoLocal[d.tarefaId] = true; }
+            else if (jaAprovado) { f++; progressoLocal[d.tarefaId] = true; }
+            else if (temResposta) { p++; progressoLocal[d.tarefaId] = true; }
 
             const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
             const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
             const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
-
             const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
             const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
-            
             if ((jaAprovado || jaPostado) && fSugerido !== '' && ehDessaTemporada) {
               iaTotal++;
               if (fFinal === fSugerido) iaOriginais++;
             }
-
             ativMap[`${d.tarefaId}_${d.alunoId}`] = { jaPostado, jaAprovado, temResposta };
           });
 
@@ -155,52 +136,30 @@ export default function Dashboard() {
           tarefasVivas.forEach(t => {
              if (!tIds.includes(t.turmaId)) return;
              pendenciasPorTarefa[t.id] = [];
-             
              const alunosDaTurma = alunosVivos.filter(a => a.data().turmaId === t.turmaId);
-             
              alunosDaTurma.forEach(alunoDoc => {
                 const alunoId = alunoDoc.id;
-                
                 const tarefaRestrita = t.alunosSelecionados && t.alunosSelecionados.length > 0;
-                if (tarefaRestrita && !t.alunosSelecionados.includes(alunoId)) {
-                    return; 
-                }
-
+                if (tarefaRestrita && !t.alunosSelecionados.includes(alunoId)) return; 
                 const nomeAluno = alunoDoc.data().nome;
                 const ativDoAluno = ativMap[`${t.id}_${alunoId}`];
-                
-                if (!ativDoAluno) {
+                if (!ativDoAluno || (!ativDoAluno.jaPostado && !ativDoAluno.jaAprovado && !ativDoAluno.temResposta)) {
                     pendenciasPorTarefa[t.id].push(nomeAluno);
-                } else {
-                    const faltaAteTrazerResposta = !ativDoAluno.jaPostado && !ativDoAluno.jaAprovado && !ativDoAluno.temResposta;
-                    if (faltaAteTrazerResposta) {
-                        pendenciasPorTarefa[t.id].push(nomeAluno);
-                    }
                 }
              });
           });
 
           let tarefasEntregas = tarefasVivas.filter(t => {
-             if (!tIds.includes(t.turmaId)) return false;
-             if (!t.dataFim) return false;
+             if (!tIds.includes(t.turmaId) || !t.dataFim) return false;
              if (t.tipo && t.tipo !== 'entrega' && t.tipo !== 'forum') return false; 
              return true;
           });
-
           tarefasEntregas = tarefasEntregas.map(t => {
             const endObj = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
             const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
             const startObj = startRaw ? (startRaw.toDate ? startRaw.toDate() : new Date(startRaw)) : new Date();
-
-            return { 
-              ...t, 
-              timeInicio: startObj.getTime(), 
-              timeFim: endObj.getTime(),
-              dataFimStr: endObj.toLocaleDateString('pt-BR')
-            };
-          }).filter(t => {
-             return t.timeInicio >= limiteInferior && t.timeInicio <= hojeTime;
-          });
+            return { ...t, timeInicio: startObj.getTime(), timeFim: endObj.getTime(), dataFimStr: endObj.toLocaleDateString('pt-BR') };
+          }).filter(t => t.timeInicio >= limiteInferior && t.timeInicio <= hojeTime);
 
           const atuais = tarefasEntregas.filter(t => t.timeInicio <= hojeTime && t.timeFim >= hojeTime);
           const passadas = tarefasEntregas.filter(t => t.timeFim < hojeTime).sort((a, b) => b.timeFim - a.timeFim);
@@ -209,54 +168,27 @@ export default function Dashboard() {
             if (!rawGroup || rawGroup.length === 0) return null;
             let theme = 'gray'; 
             let blockTitle = `Encerradas Recentemente (Anteriores)`;
-
-            if (type === 'atual') {
-              theme = 'orange';
-              blockTitle = `Tarefas Vigentes (Atuais)`; 
-            } 
-
+            if (type === 'atual') { theme = 'orange'; blockTitle = `Tarefas Vigentes (Atuais)`; } 
             let totalPendencias = 0;
             const tarefasComAlunos = rawGroup.map(t => {
               const pendentes = pendenciasPorTarefa[t.id] || [];
               totalPendencias += pendentes.length;
-              return { 
-                ...t, 
-                nomeExibicao: t.nomeTarefa || t.titulo,
-                pendentes: pendentes.sort((a,b) => a.localeCompare(b)) 
-              };
+              return { ...t, nomeExibicao: t.nomeTarefa || t.titulo, pendentes: pendentes.sort((a,b) => a.localeCompare(b)) };
             });
-
             return { blockTitle, theme, totalPendencias, tarefas: tarefasComAlunos };
           };
 
-          let blocoDestaque = null;
-          if (atuais.length > 0) {
-            atuais.sort((a, b) => a.timeFim - b.timeFim);
-            blocoDestaque = buildGroup(atuais, 'atual');
-          } 
-
-          let blocoAnterior = null;
-          if (passadas.length > 0) {
-            const dataPassadaAlvo = passadas[0].timeFim;
-            blocoAnterior = buildGroup(passadas.filter(t => t.timeFim === dataPassadaAlvo), 'passado');
-          }
-
+          let blocoDestaque = atuais.length > 0 ? buildGroup(atuais.sort((a, b) => a.timeFim - b.timeFim), 'atual') : null;
+          let blocoAnterior = passadas.length > 0 ? buildGroup(passadas.filter(t => t.timeFim === passadas[0].timeFim), 'passado') : null;
           setGestaoVista({ atual: blocoDestaque, anterior: blocoAnterior });
 
           const agendaCompleta = [...atuais, ...tarefasEntregas.filter(t => t.timeInicio > hojeTime)].map(t => {
             const referenceTime = t.timeInicio > hojeTime ? t.timeInicio : t.timeFim;
             const diasRestantes = Math.ceil((referenceTime - hojeTime) / (1000 * 3600 * 24));
-            return {
-              id: t.id,
-              nomeTarefa: t.nomeTarefa || t.titulo,
-              diasRestantes: diasRestantes,
-              isFutura: t.timeInicio > hojeTime
-            };
+            return { id: t.id, nomeTarefa: t.nomeTarefa || t.titulo, diasRestantes, isFutura: t.timeInicio > hojeTime };
           });
-
           agendaCompleta.sort((a, b) => (a.isFutura === b.isFutura) ? (a.diasRestantes - b.diasRestantes) : (a.isFutura ? 1 : -1));
           setTarefasEmAndamento(agendaCompleta);
-
         }
       } catch (e) { console.error("Erro ao carregar dados", e); }
     }
@@ -264,7 +196,6 @@ export default function Dashboard() {
   }, [escolaSelecionada]);
 
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
-
   let passoAtual = 5; 
   if (!escolaSelecionada) passoAtual = 1;
   else if (minhasTurmas.length === 0) passoAtual = 2;
@@ -272,55 +203,21 @@ export default function Dashboard() {
   else if (!temTarefasGeral) passoAtual = 4;
 
   const renderBarraProgresso = () => {
-    const passos = [
-      { id: 1, titulo: 'Instituição', icone: <School size={18} /> },
-      { id: 2, titulo: 'Turma', icone: <Building2 size={18} /> },
-      { id: 3, titulo: 'Alunos', icone: <UserPlus size={18} /> },
-      { id: 4, titulo: 'Tarefas', icone: <FileText size={18} /> }
-    ];
-
+    const passos = [{ id: 1, titulo: 'Instituição', icone: <School size={18} /> }, { id: 2, titulo: 'Turma', icone: <Building2 size={18} /> }, { id: 3, titulo: 'Alunos', icone: <UserPlus size={18} /> }, { id: 4, titulo: 'Tarefas', icone: <FileText size={18} /> }];
     const porcentagem = ((passoAtual - 1) / 3) * 100;
-
     return (
       <div className="max-w-3xl mx-auto mb-10 w-full px-4 pt-6">
         <div className="relative flex items-center justify-between">
           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1.5 bg-gray-200 rounded-full z-0"></div>
-          <div 
-            className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full z-0 transition-all duration-700 ease-out" 
-            style={{ width: `${porcentagem}%` }}
-          ></div>
-          {passos.map(passo => {
-            const concluido = passo.id < passoAtual;
-            const ativo = passo.id === passoAtual;
-            
-            let bgCircle = "bg-white";
-            let borderCircle = "border-gray-200";
-            let textIcon = "text-gray-400";
-            let textLabel = "text-gray-400 font-medium";
-
-            if (concluido) {
-              bgCircle = "bg-green-500";
-              borderCircle = "border-green-500";
-              textIcon = "text-white";
-              textLabel = "text-green-600 font-bold";
-            } else if (ativo) {
-              bgCircle = "bg-blue-600 shadow-lg shadow-blue-600/30";
-              borderCircle = "border-blue-600";
-              textIcon = "text-white";
-              textLabel = "text-blue-700 font-black";
-            }
-
-            return (
-              <div key={passo.id} className="relative z-10 flex flex-col items-center group">
-                <div className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${bgCircle} ${borderCircle} ${textIcon}`}>
-                  {concluido ? <CheckCheck size={20} className="animate-in zoom-in" /> : passo.icone}
-                </div>
-                <span className={`absolute -bottom-7 text-[10px] sm:text-xs uppercase tracking-widest whitespace-nowrap transition-colors ${textLabel}`}>
-                  {passo.titulo}
-                </span>
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full z-0 transition-all duration-700 ease-out" style={{ width: `${porcentagem}%` }}></div>
+          {passos.map(passo => (
+            <div key={passo.id} className="relative z-10 flex flex-col items-center group">
+              <div className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${passo.id < passoAtual ? "bg-green-500 border-green-500 text-white" : passo.id === passoAtual ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/30" : "bg-white border-gray-200 text-gray-400"}`}>
+                {passo.id < passoAtual ? <CheckCheck size={20} className="animate-in zoom-in" /> : passo.icone}
               </div>
-            );
-          })}
+              <span className={`absolute -bottom-7 text-[10px] sm:text-xs uppercase tracking-widest whitespace-nowrap transition-colors ${passo.id < passoAtual ? "text-green-600 font-bold" : passo.id === passoAtual ? "text-blue-700 font-black" : "text-gray-400 font-medium"}`}>{passo.titulo}</span>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -328,56 +225,29 @@ export default function Dashboard() {
 
   const tarefasAtuais = tarefasEmAndamento.filter(t => !t.isFutura);
   const temTarefaAtual = tarefasAtuais.length > 0;
-
-  let numCards = 1; 
-  if (temTarefaAtual) numCards++;
-  if (mostrarRevisao) numCards++;
-  if (mostrarFaltaPostar) numCards++;
-
-  let gridClass = "grid grid-cols-1 gap-5 mb-10 ";
-  if (numCards === 4) gridClass += "md:grid-cols-2 lg:grid-cols-4";
-  else if (numCards === 3) gridClass += "md:grid-cols-3";
-  else if (numCards === 2) gridClass += "md:grid-cols-2 max-w-3xl";
-  else gridClass += "max-w-md mx-auto";
+  let numCards = (temTarefaAtual ? 1 : 0) + (mostrarRevisao ? 1 : 0) + (mostrarFaltaPostar ? 1 : 0) + 1;
+  let gridClass = `grid grid-cols-1 gap-5 mb-10 ${numCards === 4 ? "md:grid-cols-2 lg:grid-cols-4" : numCards === 3 ? "md:grid-cols-3" : numCards === 2 ? "md:grid-cols-2 max-w-3xl" : "max-w-md mx-auto"}`;
 
   if (loading) return <div className="p-20 text-center font-bold">Carregando Estação...</div>;
 
-  if (!escolaSelecionada) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-        {renderBarraProgresso()}
-        <div className="bg-blue-600 text-white w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 mt-16 shadow-2xl shadow-blue-600/30">
-          <School size={48} />
-        </div>
-        <h1 className="text-4xl font-black text-gray-800 tracking-tight mb-4">Bem-vindo(a) ao seu novo painel!</h1>
-        <p className="text-gray-500 text-lg mb-10 max-w-lg mx-auto font-medium">Para começarmos a organizar sua vida acadêmica, o primeiro passo é nos dizer onde você ensina.</p>
-        <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl shadow-blue-600/20 hover:bg-blue-700 hover:-translate-y-1 transition-all text-lg">
-          Passo 1: Criar Instituição <ChevronRight size={20}/>
-        </Link>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8 overflow-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-sm font-bold text-gray-500">Instituição:</span>
-            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner" 
+          <div className="flex items-center gap-2 mt-2 max-w-full">
+            <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
+            {/* CORREÇÃO: Limite de largura e truncagem aplicada aqui */}
+            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner truncate max-w-[220px] sm:max-w-md" 
               value={escolaSelecionada?.id || ''} 
               onChange={e => {
-                if (e.target.value === 'nova_instituicao') {
-                  navigate('/turmas', { state: { abrirModalInstituicao: true } });
-                } else {
-                  setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value));
-                }
+                if (e.target.value === 'nova_instituicao') navigate('/turmas', { state: { abrirModalInstituicao: true } });
+                else setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value));
               }}
             >
               <option value="" disabled>Selecione...</option>
               {instituicoes.map(i => (
-                <option key={i.id} value={i.id}>
+                <option key={i.id} value={i.id} className="truncate">
                   {i.nome} {isAdmin && i.professorUid === currentUser.uid ? '(Sua conta)' : isAdmin ? '(De outro prof.)' : ''}
                 </option>
               ))}
@@ -399,9 +269,7 @@ export default function Dashboard() {
             Passo 2: Criar Turma <ChevronRight size={18}/>
           </Link>
         </div>
-      ) : 
-
-      !temAlunos ? (
+      ) : !temAlunos ? (
         <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12">
           <div className="bg-orange-50 text-orange-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><UserPlus size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Turma criada! Mas e os alunos?</h2>
@@ -410,9 +278,7 @@ export default function Dashboard() {
             Passo 3: Cadastrar Alunos <ChevronRight size={18}/>
           </Link>
         </div>
-      ) : 
-
-      !temTarefasGeral ? (
+      ) : !temTarefasGeral ? (
         <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12">
           <div className="bg-purple-50 text-purple-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><FileText size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Tudo pronto! Vamos ao trabalho.</h2>
@@ -422,11 +288,9 @@ export default function Dashboard() {
           </Link>
         </div>
       ) : (
-
         <>
-          {/* BARRA PRETA DE PONTO DE SITUAÇÃO - GESTÃO À VISTA FOCO TOTAL */}
           <div className="bg-[#1f2937] text-white rounded-2xl p-5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800 mt-6 overflow-hidden">
-            <div className="flex gap-4 items-start w-full">
+            <div className="flex gap-4 items-start w-full min-w-0">
               <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner mt-1">
                 <Calendar size={24} className="text-blue-400" />
               </div>
@@ -511,16 +375,14 @@ export default function Dashboard() {
               </div>
             )}
 
-            {mostrarRevisao && (
-              <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-[11px] font-black text-yellow-600 uppercase tracking-widest mt-1">Aguardando Revisão</h3>
-                  <div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div>
-                </div>
-                <span className="text-4xl font-black text-gray-800">{kanban.pendentes}</span>
-                <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
+            <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-[11px] font-black text-yellow-600 uppercase tracking-widest mt-1">Aguardando Revisão</h3>
+                <div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div>
               </div>
-            )}
+              <span className="text-4xl font-black text-gray-800">{kanban.pendentes}</span>
+              <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
+            </div>
               
             {mostrarFaltaPostar && (
               <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
