@@ -123,7 +123,6 @@ export default function Cronograma() {
   
   const itensSemPrazo = tarefas.filter(t => !t.dataFim);
 
-  [span_4](start_span)// LOGICA PREMIUM: UFPI ou UFPA[span_4](end_span)
   const turmaObj = turmas.find(t => t.id === turmaAtiva);
   const faculdadeNome = escolaSelecionada?.nome?.trim().toUpperCase();
   const isTurmaMaisMedicos = (faculdadeNome === 'UFPI' || faculdadeNome === 'UFPA') && 
@@ -138,7 +137,7 @@ export default function Cronograma() {
         <div className="bg-blue-50 border-2 border-dashed border-blue-200 p-12 rounded-3xl text-center max-w-2xl mx-auto mt-10 shadow-sm">
           <GraduationCap className="mx-auto text-blue-400 mb-4" size={56} />
           <h2 className="text-2xl font-black text-blue-800 mb-2">Instituição não selecionada</h2>
-          <Link to="/" className="bg-blue-600 text-white font-black py-4 px-10 rounded-xl shadow-lg">Ir para Início</Link>
+          <Link to="/" className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-xl hover:bg-blue-700 shadow-lg">Ir para Início</Link>
         </div>
       </div>
     );
@@ -237,7 +236,7 @@ export default function Cronograma() {
                 <p className="text-purple-700 text-sm font-medium mt-1">Documento oficial de referência com eixos e créditos.</p>
               </div>
             </div>
-            {ementaParaExibir.map((eixoObj, idx) => (
+            {ementaParaExibir && ementaParaExibir.map((eixoObj, idx) => (
               <div key={idx} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
                 <div className="bg-slate-800 p-4 border-b border-slate-700"><h3 className="text-white font-black text-lg">{eixoObj.eixo}</h3></div>
                 <div className="divide-y divide-gray-100">
