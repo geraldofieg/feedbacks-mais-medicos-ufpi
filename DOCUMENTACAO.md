@@ -28,6 +28,7 @@ O sistema opera em uma hierarquia plana de 3 níveis protegida por Tenant ID:
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
 * **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role`, `plano`, `promptPersonalizado`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`.
+* **`tarefas`:** Agora possuem **Atribuição Específica** (`atribuicaoEspecifica: boolean`, `alunosSelecionados: array`). Tarefas podem ser exclusivas para certos alunos, prevenindo cobranças indevidas (Falsos Positivos).
 * **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` ('pendente'|'aprovado'), `nota`, `feedbackSugerido`, `feedbackFinal`, `postado` (Booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`, `arquivoUrl`, `nomeArquivo`. 
 * **Campos de Retrocompatibilidade V1/V3 (Estratégia Poliglota/Dupla Etiqueta):** Salva simultaneamente `nomeAluno` (V3) e `aluno` (V1), `nomeTarefa` (V3) e `tarefa`/`modulo` (V1), `revisadoPor` (Nome do revisor). 
 * **Regra Crítica de Sincronia (Prevenção de Falsos Positivos na V1):** Em rascunhos (`status: 'pendente'`) ou ao devolver para revisão, o campo `dataAprovacao` não pode ser salvo como `null`. Ele deve ser fisicamente arrancado do banco de dados utilizando a diretriz `deleteField()` do Firestore. Isso impede que a V1 (que valida a mera existência da chave para mudar de funil) jogue o aluno acidentalmente para a caixa de "Falta Postar".
@@ -36,11 +37,12 @@ Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '=='
 ## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
 * **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada, o Dashboard exibe a interface de criação de Nível 1.
 * **Atalho VIP de Ação Rápida (Card Multi-Tarefas):** O Dashboard avalia se existem tarefas em andamento cruzando a data atual. Se houver múltiplas tarefas ativas, o card central se adapta transformando-se em uma lista rolável (Cardápio Completo). O texto do botão de cada tarefa possui inteligência: se não houver progresso, exibe **"Iniciar correções"**; se pelo menos uma resposta já foi colada, atualiza para **"Continuar correções"**.
-* **A Esteira de Produção (Kanban Matemático Blindado):** Os alunos só entram no funil a partir do momento em que o professor **cola a resposta deles** no sistema (ou anexa arquivo):
+* **A Esteira de Produção (Kanban Matemático Blindado):** Os alunos só entram no funil a partir do momento em que o professor **cola a resposta deles** no sistema (ou anexa arquivo).
+    * **Desfragmentador Anti-Clones (Deduplicação Client-Side):** As listagens ignoram versões antigas/fantasmas na memória, agrupando pela chave `Tarefa + Aluno` e processando sempre apenas o documento mais recente.
     * **Caixa 1: Aguardando Revisão (`/aguardandorevisao`):** Resposta colada ou arquivo anexado, mas feedback não aprovado. (Ordenado: Mais recente no topo).
     * **Caixa 2: Aguardando Postar (`/faltapostar`):** Feedback aprovado, mas `postado` é `false`. (Oculta para o Tier 2).
     * **Caixa 3: Histórico Finalizado (`/historico`):** `postado` é `true`. Ciclo encerrado.
-* **Termômetro da IA:** Mede a eficiência do prompt. Regra: Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Visível para Tier Premium e Admin.
+* **Termômetro da IA:** Mede a eficiência do prompt. Regra: A avaliação entra na conta verificando a exata `dataAprovacao` contra o `timestampPrompt`. Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Visível para Tier Premium e Admin.
 
 ## 7. Perfis de Acesso (RBAC SaaS) e Painel Admin
 * **Perfil Professor:** Só enxerga dados onde seu `uid` conste como criador.
@@ -56,6 +58,7 @@ Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '=='
 ## 9. A Nova Estação de Correção (Fluxo "Ficha Médica" e IA)
 A página de Revisar Atividade (`/revisar/id`) é o HUB principal do sistema.
 * **Barra de Progresso (UX E-commerce):** Exibe os 3 passos: `1. Trazer Resposta` ➔ `2. Revisar Feedback` ➔ `3. Lançar Oficial`.
+* **Prevenção de Tap-Through (Anti-Clique Fantasma):** Todos os modais de sucesso (`alert`) nativos foram substituídos por micro-interações visuais inline (ex: botões mudando para '✅ Salvo!'), evitando redirecionamentos indesejados em dispositivos móveis.
 * **Assinatura e Log:** Toda atividade aprovada exibe a hora exata e o nome de quem revisou (Log de Auditoria visível na tela).
 * **Gerenciamento Gestor (Opções de Emergência):** Botões para **Devolver p/ Revisão** (volta para Amarelo limpando a data) ou **Excluir Atividade** (apaga a resposta e volta o aluno para Vermelho).
 * **IA Gemini 3.1 Flash Lite:** Integra modelo avançado com *Search Grounding* ativo.
@@ -68,18 +71,15 @@ O sistema orienta o professor através de Ícones Tricolores no buscador de alun
 * ✅ **Lançado:** Trabalho concluído! O feedback e a nota já foram lançados para o portal oficial da instituição. Status blindado no histórico.
 
 ## 11. Gestão de Tarefas, Automação e Motor de Clonagem
-* **Batch Write:** Ao criar uma "Tarefa do Aluno", o sistema distribui automaticamente o registro para todos os alunos.
+* **Batch Write:** Ao criar uma "Tarefa do Aluno", o sistema distribui automaticamente o registro para todos os alunos (ou apenas para os alvos).
+* **Atribuição Específica:** O sistema permite a criação de tarefas restritas a um grupo seleto de alunos, isolando-os da matemática global de inadimplência da turma.
 * **O Motor de Clonagem (Turma Modelo):** Professores podem "Criar Turma a partir de Modelo", replicando 100% das tarefas e enunciados de uma turma master, sem copiar os alunos.
 
 ## 12. Módulo de Comunicação e Cobrança
-Automatização de cobranças baseada no cruzamento de alunos x tarefas pendentes, dividida em duas "Mesas de Trabalho" (Colunas Visuais):
+Automatização de cobranças baseada no cruzamento de alunos x tarefas pendentes, protegida por um **Filtro Temporal V3** (Oculta o passado) e **Trava de Atribuição** (Isenta não-participantes). Dividida em duas "Mesas de Trabalho":
 
 ### Redação de Mentoria e Apoio (Regras de Data):
-* **Grupo Geral da Turma (Coluna Esquerda):**
-    * **Vencido (< 0 dias):** "Olá, pessoal! O prazo oficial de {tarefa} foi encerrado. Notei algumas pendências no sistema. Por favor, regularizem as entregas imediatamente..."
-    * **Início (>= 20 dias):** "Olá, pessoal! 🌟 Passando para avisar que a etapa de {tarefa} já está em andamento. Faltam {dias} dias..."
-    * **Meio (>= 8 dias):** "Olá, pessoal! Nosso lembrete de acompanhamento sobre {tarefa}. Entramos na fase intermediária e faltam {dias} dias..."
-    * **Reta Final (< 8 dias):** "Olá, colegas! 🚨 Passando para alertar que entramos na reta final de {tarefa}. Faltam apenas {dias} dias..."
+* **Grupo Geral da Turma (Coluna Esquerda):** Mensagens contextuais com base nos dias restantes (Vencido, Início, Meio, Reta Final).
 * **Templates Individuais:** Utilizam o primeiro nome do aluno e listam nominalmente as tarefas em atraso.
 
 ### Ações de Disparo:
@@ -87,8 +87,8 @@ Automatização de cobranças baseada no cruzamento de alunos x tarefas pendente
 * **Zap Direto (Coluna Esquerda):** Abre link direto do `wa.me` utilizando o telefone cadastrado. Oculta devedores sem telefone válido.
 
 ## 13. Mapa de Entregas e Pendências
-* **Mapa:** Tabela dinâmica (Check/X) com rolagem horizontal e coluna de nomes fixada.
-* **Relatório de Pendências:** Organiza a inadimplência utilizando a mesma taxonomia visual do Cronograma. Possui atalho de redirecionamento focado (`alunoAlvo`) para a página de Comunicação.
+* **Mapa de Entregas:** Tabela dinâmica indicando o status através de ícones (✅ Entregue, ❌ Pendente, ⚪ Isento/Traço). Possui uma **Cortina de Tempo V3** controlada via Toggle, permitindo ao professor esconder legado antigo (tarefas anteriores a Jan/2026). No mobile, o contador X/Y não penaliza alunos isentos de atividades específicas.
+* **Relatório de Pendências:** Organiza a inadimplência utilizando a mesma taxonomia visual do Cronograma, cruzando estritamente devedores reais e tarefas ativas da V3. Possui atalho de redirecionamento focado (`alunoAlvo`) para a página de Comunicação.
 
 ## 14. Gestão de Alunos e Matrículas Inteligentes
 * **Matrícula Vapt-Vupt:** Modal de cadastro único que, ao salvar, limpa os campos e devolve o foco ao primeiro input.
