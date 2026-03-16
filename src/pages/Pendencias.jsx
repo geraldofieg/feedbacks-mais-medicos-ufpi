@@ -131,10 +131,10 @@ export default function Pendencias() {
         const resultado = [];
         
         tarefasOrdenadas.forEach(tarefa => {
-          // AJUSTE DE OURO: Um aluno só "entregou" se houver um registro E a resposta não estiver em branco
+          // 🔥 CIRURGIA V3: Um aluno só "entregou" se houver um registro E a resposta não estiver em branco (OU houver arquivo)
           const idsComEntregaReal = new Set(
             atividadesData
-              .filter(a => a.tarefaId === tarefa.id && a.resposta && String(a.resposta).trim() !== '')
+              .filter(a => a.tarefaId === tarefa.id && ((a.resposta && String(a.resposta).trim() !== '') || !!a.arquivoUrl))
               .map(a => a.alunoId)
           );
 
