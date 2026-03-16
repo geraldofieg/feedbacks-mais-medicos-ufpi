@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ClipboardList, Check, X, BookOpen, Users, FileText, RefreshCw, GraduationCap } from 'lucide-react';
+import { ClipboardList, Check, X, BookOpen, Users, User, FileText, RefreshCw, GraduationCap } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function MapaEntregas() {
@@ -118,7 +118,6 @@ export default function MapaEntregas() {
       </div>
     );
   }
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="mb-6">
@@ -138,50 +137,114 @@ export default function MapaEntregas() {
       {isCarregando ? (
         <div className="p-20 text-center animate-pulse flex flex-col items-center gap-3"><ClipboardList className="text-blue-300" size={48} /><p className="font-bold text-blue-400">Sincronizando entregas...</p></div>
       ) : (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-2">
-          <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-            <h3 className="font-black text-gray-700 text-sm">Status da Matriz</h3>
-            <div className="flex gap-4 text-[10px] font-black uppercase text-gray-500">
-              <span className="flex items-center gap-1"><Check className="text-green-500" size={14}/> Entregue</span>
-              <span className="flex items-center gap-1"><X className="text-red-400" size={14}/> Pendente</span>
+        <>
+          {/* ========================================================
+              VISÃO DESKTOP/TABLET (Tabela Matriz)
+              Visível apenas em telas médias e grandes (md:block)
+          ======================================================== */}
+          <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-2">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <h3 className="font-black text-gray-700 text-sm">Status da Matriz</h3>
+              <div className="flex gap-4 text-[10px] font-black uppercase text-gray-500">
+                <span className="flex items-center gap-1"><Check className="text-green-500" size={14}/> Entregue</span>
+                <span className="flex items-center gap-1"><X className="text-red-400" size={14}/> Pendente</span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse whitespace-nowrap">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-4 py-4 md:pl-6 border-b border-gray-200 text-[10px] uppercase font-black text-gray-400 tracking-wider sticky left-0 bg-gray-50 z-10 shadow-md">Aluno</th>
+                    {tarefas.map(tarefa => (
+                      <th key={tarefa.id} className="px-3 py-4 text-center border-b border-l border-gray-200 min-w-[120px] max-w-[180px]">
+                        <div className="text-[9px] uppercase font-black text-orange-500 tracking-widest mb-1">Tarefa</div>
+                        <div className="font-bold text-gray-700 text-xs truncate" title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {alunos.map(aluno => (
+                    <tr key={aluno.id} className="hover:bg-blue-50/30 transition-colors group">
+                      <td className="px-4 py-4 md:pl-6 font-bold text-gray-800 text-sm sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 shadow-md">{aluno.nome}</td>
+                      {tarefas.map(tarefa => {
+                        const entregou = verificarEntrega(aluno.id, tarefa.id);
+                        return (
+                          <td key={tarefa.id} className="px-3 py-3 text-center border-l border-gray-100">
+                            {entregou ? (
+                              <div className="inline-flex bg-green-100 text-green-600 p-1.5 rounded-full shadow-sm" title="Entrega Identificada"><Check size={14} strokeWidth={4}/></div>
+                            ) : (
+                              <div className="inline-flex bg-red-50 text-red-300 p-1.5 rounded-full" title="Pendente"><X size={14} strokeWidth={4}/></div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse whitespace-nowrap">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="px-4 py-4 md:pl-6 border-b border-gray-200 text-[10px] uppercase font-black text-gray-400 tracking-wider sticky left-0 bg-gray-50 z-10 shadow-md">Aluno</th>
-                  {tarefas.map(tarefa => (
-                    <th key={tarefa.id} className="px-3 py-4 text-center border-b border-l border-gray-200 min-w-[120px] max-w-[180px]">
-                      <div className="text-[9px] uppercase font-black text-orange-500 tracking-widest mb-1">Tarefa</div>
-                      <div className="font-bold text-gray-700 text-xs truncate" title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {alunos.map(aluno => (
-                  <tr key={aluno.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="px-4 py-4 md:pl-6 font-bold text-gray-800 text-sm sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 shadow-md">{aluno.nome}</td>
-                    {tarefas.map(tarefa => {
+          {/* ========================================================
+              VISÃO MOBILE (Cards de Alunos)
+              Visível apenas em telas pequenas (block md:hidden)
+          ======================================================== */}
+          <div className="block md:hidden space-y-4 mt-4">
+            <div className="bg-white p-4 border border-gray-200 rounded-2xl flex justify-between items-center shadow-sm">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Resumo Mobile</span>
+              <div className="flex gap-3 text-[10px] font-black uppercase text-gray-500">
+                <span className="flex items-center gap-1"><Check className="text-green-500" size={14}/> Ok</span>
+                <span className="flex items-center gap-1"><X className="text-red-400" size={14}/> Pend</span>
+              </div>
+            </div>
+
+            {alunos.map((aluno) => {
+              const totalTarefas = tarefas.length;
+              const tarefasEntregues = tarefas.filter(t => verificarEntrega(aluno.id, t.id)).length;
+              const statusCard = tarefasEntregues === totalTarefas && totalTarefas > 0 ? 'border-green-200 bg-green-50/30' : 'border-gray-200 bg-white';
+
+              return (
+                <div key={aluno.id} className={`rounded-2xl shadow-sm border overflow-hidden ${statusCard}`}>
+                  <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center gap-3">
+                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2 truncate">
+                      <User size={16} className="text-blue-500 shrink-0"/>
+                      <span className="truncate">{aluno.nome}</span>
+                    </h3>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-full shrink-0 ${tarefasEntregues === totalTarefas && totalTarefas > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                      {tarefasEntregues}/{totalTarefas}
+                    </span>
+                  </div>
+                  
+                  <div className="p-4 divide-y divide-gray-50">
+                    {tarefas.map((tarefa) => {
                       const entregou = verificarEntrega(aluno.id, tarefa.id);
                       return (
-                        <td key={tarefa.id} className="px-3 py-3 text-center border-l border-gray-100">
-                          {entregou ? (
-                            <div className="inline-flex bg-green-100 text-green-600 p-1.5 rounded-full shadow-sm" title="Entrega Identificada"><Check size={14} strokeWidth={4}/></div>
-                          ) : (
-                            <div className="inline-flex bg-red-50 text-red-300 p-1.5 rounded-full" title="Pendente"><X size={14} strokeWidth={4}/></div>
-                          )}
-                        </td>
+                        <div key={tarefa.id} className="py-2.5 flex justify-between items-center gap-4">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Tarefa</p>
+                            <p className="text-xs font-bold text-gray-700 truncate" title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</p>
+                          </div>
+                          <div className="shrink-0">
+                            {entregou ? (
+                              <span className="inline-flex bg-green-100 text-green-600 p-1.5 rounded-full"><Check size={14} strokeWidth={3}/></span>
+                            ) : (
+                              <span className="inline-flex bg-red-50 text-red-400 p-1.5 rounded-full"><X size={14} strokeWidth={3}/></span>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    {tarefas.length === 0 && (
+                       <p className="text-xs text-gray-400 text-center py-2 font-medium">Nenhuma tarefa cadastrada nesta turma.</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
