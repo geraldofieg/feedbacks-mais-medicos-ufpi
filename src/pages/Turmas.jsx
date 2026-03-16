@@ -51,7 +51,11 @@ export default function Turmas() {
           return;
         }
         if (!escolaSelecionada) setEscolaSelecionada(lista[0]);
-      } catch (e) { console.error(e); } finally { setLoading(false); }
+      } catch (e) { 
+        console.error("Erro ao verificar instituição:", e); 
+      } finally {
+        setLoading(false);
+      }
     }
     checkInstituicao();
   }, [currentUser, isAdmin, escolaSelecionada, setEscolaSelecionada, location.state]);
@@ -99,8 +103,14 @@ export default function Turmas() {
   }
 
   async function handleLixeiraEscola() {
-    if (!window.confirm(`Lixeira instituicao "${escolaSelecionada.nome}"?`)) return;
-    try { await updateDoc(doc(db, 'instituicoes', escolaSelecionada.id), { status: 'lixeira' }); window.location.href = '/'; } catch (e) { console.error(e); }
+    if (!window.confirm(`Tem certeza que deseja enviar a instituição "${escolaSelecionada.nome}" para a lixeira?`)) return;
+    try { 
+      await updateDoc(doc(db, 'instituicoes', escolaSelecionada.id), { status: 'lixeira' }); 
+      // 🔥 CORREÇÃO: Limpa o rastro no localStorage para resetar o Dashboard
+      localStorage.removeItem('@SaaS_EscolaSelecionada');
+      setEscolaSelecionada(null);
+      window.location.href = '/'; 
+    } catch (e) { console.error(e); }
   }
 
   async function handleCriarTurma(e) {
@@ -142,11 +152,12 @@ export default function Turmas() {
 
   if (precisaCriarEscola) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center animate-in zoom-in-95">
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center animate-in zoom-in-95 duration-500">
         <School size={48} className="mx-auto mb-8 text-blue-600" />
-        <h1 className="text-3xl font-black mb-4 tracking-tight">Onde você ensina?</h1>
+        <h1 className="text-3xl font-black mb-4 tracking-tight text-gray-800">Onde você ensina?</h1>
+        <p className="text-gray-500 text-lg mb-10 max-w-lg mx-auto font-medium">Digite o nome da sua escola ou ambiente de ensino para começarmos.</p>
         <form onSubmit={handleCriarInstituicao} className="max-w-md mx-auto flex flex-col gap-4">
-          <input type="text" required autoFocus placeholder="Nome da Instituição..." className="w-full px-5 py-4 border-2 rounded-2xl text-center font-bold outline-none shadow-sm focus:border-blue-500" value={novaEscolaNome} onChange={e => setNovaEscolaNome(e.target.value)} />
+          <input type="text" required autoFocus placeholder="Nome da Instituição..." className="w-full px-5 py-4 border-2 rounded-2xl text-center font-bold outline-none shadow-sm focus:border-blue-500 text-gray-800" value={novaEscolaNome} onChange={e => setNovaEscolaNome(e.target.value)} />
           <button type="submit" disabled={salvandoEscola} className="bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">Salvar e Continuar</button>
         </form>
       </div>
