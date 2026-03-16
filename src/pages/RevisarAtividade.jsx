@@ -1,9 +1,27 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, limit } from 'firebase/firestore'; // IMPORTANTE: Adicionado 'limit'
+import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, limit } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, CheckCircle, FileText, ExternalLink, User, Copy, Trash2, CheckCheck, Send, RotateCcw, Sparkles, Edit3, CalendarDays } from 'lucide-react';
+
+// 🔥 FUNÇÃO INTELIGENTE: Transforma URLs em texto em links clicáveis automaticamente
+const renderTextoComLinks = (texto) => {
+  if (!texto) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const partes = texto.split(urlRegex);
+  
+  return partes.map((parte, index) => {
+    if (parte.match(urlRegex)) {
+      return (
+        <a key={index} href={parte} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline break-all">
+          {parte}
+        </a>
+      );
+    }
+    return <span key={index}>{parte}</span>;
+  });
+};
 
 export default function RevisarAtividade() {
   const { id } = useParams();
@@ -37,7 +55,25 @@ export default function RevisarAtividade() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const dados = docSnap.data();
-          setAtividade({ id: docSnap.id, ...dados });
+
+          // 🔥 PONTE V1/V3: Busca a tarefa mãe para resgatar o Enunciado
+          let tarefaData = {};
+          if (dados.tarefaId) {
+            const snapTarefa = await getDoc(doc(db, 'tarefas', dados.tarefaId));
+            if (snapTarefa.exists()) {
+              tarefaData = snapTarefa.data();
+            }
+          }
+
+          setAtividade({ 
+            id: docSnap.id, 
+            ...dados,
+            // Tradução de variáveis
+            enunciadoReal: dados.enunciado || tarefaData.enunciado || '',
+            urlEnunciadoReal: dados.urlEnunciado || tarefaData.enunciadoArquivoUrl || '',
+            urlRespostaReal: dados.urlResposta || dados.arquivoUrl || '',
+            nomeArquivoReal: dados.nomeArquivo || 'Ver Anexo'
+          });
           setFeedbackEditado(dados.feedbackSugerido || '');
         } else {
           setAtividade(null);
@@ -176,7 +212,6 @@ export default function RevisarAtividade() {
 
   const linkVoltar = isPendente ? '/lista/pendente' : isFaltaPostar ? (isAdmin ? '/lista/falta-postar' : '/lista/finalizados') : '/lista/finalizados';
   const foiEditado = atividade.feedbackFinal?.trim() !== atividade.feedbackSugerido?.trim();
-
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
@@ -203,14 +238,26 @@ export default function RevisarAtividade() {
 
               <div className="mt-4">
                 <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">1. Enunciado</h4>
-                {atividade.enunciado && <p className="text-gray-700 bg-gray-50 p-4 rounded-xl text-sm border border-gray-100">{atividade.enunciado}</p>}
-                {atividade.urlEnunciado && <a href={atividade.urlEnunciado} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-blue-100 border border-blue-200"><FileText size={20} /> Ver Arquivo <ExternalLink size={16} /></a>}
+                {atividade.enunciadoReal ? (
+                  <p className="text-gray-700 bg-gray-50 p-4 rounded-xl text-sm border border-gray-100 whitespace-pre-wrap">
+                    {renderTextoComLinks(atividade.enunciadoReal)}
+                  </p>
+                ) : (
+                  <p className="text-gray-400 italic text-sm">Sem enunciado cadastrado.</p>
+                )}
+                {atividade.urlEnunciadoReal && <a href={atividade.urlEnunciadoReal} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-blue-100 border border-blue-200"><FileText size={20} /> Ver Arquivo <ExternalLink size={16} /></a>}
               </div>
 
               <div className="mt-6 border-t border-gray-100 pt-6">
                 <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">2. Resposta do Aluno</h4>
-                {atividade.resposta && <p className="text-gray-800 bg-green-50 p-4 rounded-xl text-sm border border-green-100 font-medium">{atividade.resposta}</p>}
-                {atividade.urlResposta && <a href={atividade.urlResposta} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-green-100 border border-green-200"><FileText size={20} /> Ver Arquivo <ExternalLink size={16} /></a>}
+                {atividade.resposta ? (
+                  <p className="text-gray-800 bg-green-50 p-4 rounded-xl text-sm border border-green-100 font-medium whitespace-pre-wrap">
+                    {renderTextoComLinks(atividade.resposta)}
+                  </p>
+                ) : (
+                  !atividade.urlRespostaReal && <p className="text-gray-400 italic text-sm">Nenhum texto digitado.</p>
+                )}
+                {atividade.urlRespostaReal && <a href={atividade.urlRespostaReal} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-green-100 border border-green-200"><FileText size={20} /> {atividade.nomeArquivoReal} <ExternalLink size={16} /></a>}
               </div>
             </div>
           </div>
@@ -235,7 +282,7 @@ export default function RevisarAtividade() {
                 </h3>
 
                 <div className="bg-white text-gray-800 p-4 rounded-xl text-sm mb-4 min-h-[150px] whitespace-pre-wrap font-medium shadow-inner">
-                  {atividade.feedbackFinal || atividade.feedbackSugerido}
+                  {renderTextoComLinks(atividade.feedbackFinal || atividade.feedbackSugerido)}
                 </div>
                 
                 <button onClick={handleCopiar} className="w-full bg-white text-gray-800 font-black text-lg py-4 rounded-xl hover:bg-gray-100 active:scale-95 transition-all shadow-lg flex justify-center items-center gap-2 mb-4">
@@ -291,5 +338,4 @@ export default function RevisarAtividade() {
       </div>
     </div>
   );
-                  }
-              
+}
