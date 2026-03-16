@@ -75,9 +75,23 @@ export default function Comunicacao() {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         
+        // 🔥 FILTRO TEMPORAL: Apenas de 05/Jan/2026 até Hoje
+        const limiteInferior = new Date(2026, 0, 5).getTime();
+        const hoje = new Date().getTime();
+
         const tarefasData = snapTarefas.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo));
+          .filter(t => {
+             if (t.status === 'lixeira') return false;
+             if (t.tipo && t.tipo !== 'entrega') return false;
+             
+             // Descobre quando a tarefa começou
+             const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
+             const timeInicio = startRaw ? (startRaw.toDate ? startRaw.toDate().getTime() : new Date(startRaw).getTime()) : 0;
+             
+             // Só deixa passar se começou de 05/01/26 pra frente E não for do futuro
+             return timeInicio >= limiteInferior && timeInicio <= hoje;
+          });
         
         tarefasData.sort((a, b) => (a.dataFim?.toMillis() || 0) - (b.dataFim?.toMillis() || 0));
         setTarefasDaTurma(tarefasData);
@@ -126,23 +140,23 @@ export default function Comunicacao() {
   const gerarMensagemGeral = () => {
     if (!tarefaAtualObj) return '';
     if (diasRestantesVisual !== null) {
-      if (diasRestantesVisual < 0) return `Olá, pessoal!\nO prazo oficial de *${nomeTarefa}* foi encerrado. Notei algumas pendências no sistema.\n\nPor favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
-      if (diasRestantesVisual >= 20) return `Olá, pessoal! 🌟 Passando para avisar que a etapa de *${nomeTarefa}* já está em andamento.\n\nFaltam ${diasRestantesVisual} dias para o encerramento. Quem já quiser ir adiantando as atividades, desejo excelentes estudos!\nQualquer coisa, podem contar comigo.`;
-      if (diasRestantesVisual >= 8) return `Olá, pessoal! Nosso lembrete de acompanhamento sobre *${nomeTarefa}*.\n\nEntramos na fase intermediária e faltam ${diasRestantesVisual} dias para o encerramento.\nVamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, estou à disposição.`;
-      return `Olá, colegas!\n🚨 Passando para alertar que entramos na reta final de *${nomeTarefa}*. Faltam apenas ${diasRestantesVisual} dias para o encerramento!\n\nPeço a regularização das tarefas pendentes o quanto antes para evitarmos problemas.`;
+      if (diasRestantesVisual < 0) return `Olá, pessoal!\nO prazo oficial de *${nomeTarefa}* foi encerrado.\nNotei algumas pendências no sistema.\n\nPor favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
+      if (diasRestantesVisual >= 20) return `Olá, pessoal! 🌟 Passando para avisar que a etapa de *${nomeTarefa}* já está em andamento.\n\nFaltam ${diasRestantesVisual} dias para o encerramento.\nQuem já quiser ir adiantando as atividades, desejo excelentes estudos!\nQualquer coisa, podem contar comigo.`;
+      if (diasRestantesVisual >= 8) return `Olá, pessoal! Nosso lembrete de acompanhamento sobre *${nomeTarefa}*.\n\nEntramos na fase intermediária e faltam ${diasRestantesVisual} dias para o encerramento.\nVamos aproveitar os próximos dias para colocar tudo em dia!\nQualquer dúvida, estou à disposição.`;
+      return `Olá, colegas!\n🚨 Passando para alertar que entramos na reta final de *${nomeTarefa}*.\nFaltam apenas ${diasRestantesVisual} dias para o encerramento!\n\nPeço a regularização das tarefas pendentes o quanto antes para evitarmos problemas.`;
     }
-    return `Olá, pessoal!\nPassando para lembrar do nosso acompanhamento sobre *${nomeTarefa}*. Peço a regularização das tarefas pendentes o quanto antes para não acumular.\nQualquer dúvida, estou por aqui!`;
+    return `Olá, pessoal!\nPassando para lembrar do nosso acompanhamento sobre *${nomeTarefa}*.\nPeço a regularização das tarefas pendentes o quanto antes para não acumular.\nQualquer dúvida, estou por aqui!`;
   };
 
   const gerarMensagemIndividual = (nomeAluno) => {
     const primeiroNome = getPrimeiroNome(nomeAluno);
     if (diasRestantesVisual !== null) {
-      if (diasRestantesVisual < 0) return `Olá, ${primeiroNome}! Tudo bem?\nO prazo oficial de *${nomeTarefa}* foi encerrado. Notei no sistema que ainda consta pendência para a entrega desta atividade.\n\nPor favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação. Fico no aguardo!`;
-      if (diasRestantesVisual >= 20) return `Olá, ${primeiroNome}! Tudo bem? 🌟\nPassando para avisar que a etapa de *${nomeTarefa}* já está em andamento. Faltam ${diasRestantesVisual} dias para o encerramento e notei pendência na sua entrega.\n\nRecomendo adiantar a execução, pra não ficar para a última hora. Qualquer coisa, pode contar comigo!`;
-      if (diasRestantesVisual >= 8) return `Olá, ${primeiroNome}! Tudo bem?\nNosso lembrete de acompanhamento sobre *${nomeTarefa}*. Faltam ${diasRestantesVisual} dias para o encerramento e notei pendência na sua entrega.\n\nVamos aproveitar os próximos dias para colocar tudo em dia! Qualquer dúvida, pode me chamar.`;
-      return `Olá, ${primeiroNome}! Tudo bem?\n🚨 Passando para alertar que entramos na reta final de *${nomeTarefa}*. Faltam apenas ${diasRestantesVisual} dias para o encerramento!\n\nNotei pendência para esta entrega. Recomendo que regularize o quanto antes para não acumular nem termos problemas. Qualquer coisa, me chame.`;
+      if (diasRestantesVisual < 0) return `Olá, ${primeiroNome}!\nTudo bem?\nO prazo oficial de *${nomeTarefa}* foi encerrado. Notei no sistema que ainda consta pendência para a entrega desta atividade.\n\nPor favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação.\nFico no aguardo!`;
+      if (diasRestantesVisual >= 20) return `Olá, ${primeiroNome}! Tudo bem?\n🌟\nPassando para avisar que a etapa de *${nomeTarefa}* já está em andamento.\nFaltam ${diasRestantesVisual} dias para o encerramento e notei pendência na sua entrega.\n\nRecomendo adiantar a execução, pra não ficar para a última hora.\nQualquer coisa, pode contar comigo!`;
+      if (diasRestantesVisual >= 8) return `Olá, ${primeiroNome}! Tudo bem?\nNosso lembrete de acompanhamento sobre *${nomeTarefa}*.\nFaltam ${diasRestantesVisual} dias para o encerramento e notei pendência na sua entrega.\n\nVamos aproveitar os próximos dias para colocar tudo em dia!\nQualquer dúvida, pode me chamar.`;
+      return `Olá, ${primeiroNome}! Tudo bem?\n🚨 Passando para alertar que entramos na reta final de *${nomeTarefa}*.\nFaltam apenas ${diasRestantesVisual} dias para o encerramento!\n\nNotei pendência para esta entrega.\nRecomendo que regularize o quanto antes para não acumular nem termos problemas. Qualquer coisa, me chame.`;
     }
-    return `Olá, ${primeiroNome}! Tudo bem?\nPassando para lembrar do nosso acompanhamento sobre *${nomeTarefa}*. Notei pendência para esta entrega.\n\nRecomendo a regularização o quanto antes para não acumular. Qualquer dúvida, pode contar comigo!`;
+    return `Olá, ${primeiroNome}! Tudo bem?\nPassando para lembrar do nosso acompanhamento sobre *${nomeTarefa}*.\nNotei pendência para esta entrega.\n\nRecomendo a regularização o quanto antes para não acumular. Qualquer dúvida, pode contar comigo!`;
   };
 
   const aplicarFeedback = (idCopia, acaoAposFeedback) => {
@@ -168,7 +182,6 @@ export default function Comunicacao() {
 
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
   const msgGeralPronta = gerarMensagemGeral();
-  
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -289,7 +302,7 @@ export default function Comunicacao() {
                   </button>
                 </div>
 
-                {/* CARD 2: ZAP DIRETO (RESTAURADO DA V1) */}
+                {/* CARD 2: ZAP DIRETO */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                   <h3 className="text-lg font-black text-gray-800 mb-1 flex items-center gap-2">
                     <User size={20} className="text-green-600"/> Zap Direto
@@ -312,7 +325,6 @@ export default function Comunicacao() {
                               onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
                               className={`w-full py-2.5 rounded-lg text-xs font-bold flex justify-center items-center gap-2 transition-all ${copiado === idCopiaZap ? 'bg-green-200 text-green-900' : 'bg-white border border-green-500 text-green-600 hover:bg-green-50 shadow-sm'}`}
                             >
-                              {/* CORREÇÃO DO BUG AQUI */}
                               {copiado === idCopiaZap ? <CheckCircle2 size={16}/> : <Send size={16}/>} {copiado === idCopiaZap ? 'Abrindo...' : 'Enviar Zap'}
                             </button>
                           </div>
@@ -398,4 +410,4 @@ export default function Comunicacao() {
       )}
     </div>
   );
-}
+                            }
