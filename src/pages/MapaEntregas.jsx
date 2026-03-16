@@ -82,9 +82,32 @@ export default function MapaEntregas() {
 
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
+        
+        // 🔥 REGRA DO TEMPO: Ocultar tarefas que ainda não começaram
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const hojeTime = hoje.getTime();
+
         const tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
-          .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo))
-          .sort((a, b) => a.dataCriacao?.toMillis() - b.dataCriacao?.toMillis());
+          .filter(t => {
+            if (t.status === 'lixeira') return false;
+            if (t.tipo && t.tipo !== 'entrega') return false;
+
+            // Pega a data de início e zera as horas
+            const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
+            const startObj = startRaw ? (startRaw.toDate ? startRaw.toDate() : new Date(startRaw)) : new Date();
+            const startNormal = new Date(startObj);
+            startNormal.setHours(0, 0, 0, 0);
+
+            // A Mágica: Só exibe se a data de início já chegou ou passou
+            return startNormal.getTime() <= hojeTime;
+          })
+          .sort((a, b) => {
+            const timeA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
+            const timeB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
+            return timeA - timeB;
+          });
+          
         setTarefas(tarefasData);
 
         const qAtividades = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
@@ -98,7 +121,6 @@ export default function MapaEntregas() {
     }
     fetchMatriz();
   }, [turmaAtiva]);
-
   // AJUSTE DE OURO: Verifica se existe entrega REAL (texto ou arquivo)
   const verificarEntrega = (alunoId, tarefaId) => {
     const ativ = atividades.find(a => a.alunoId === alunoId && a.tarefaId === tarefaId);
@@ -118,6 +140,7 @@ export default function MapaEntregas() {
       </div>
     );
   }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="mb-6">
@@ -237,7 +260,7 @@ export default function MapaEntregas() {
                       );
                     })}
                     {tarefas.length === 0 && (
-                       <p className="text-xs text-gray-400 text-center py-2 font-medium">Nenhuma tarefa cadastrada nesta turma.</p>
+                       <p className="text-xs text-gray-400 text-center py-2 font-medium">Nenhuma tarefa ativa cadastrada nesta turma.</p>
                     )}
                   </div>
                 </div>
