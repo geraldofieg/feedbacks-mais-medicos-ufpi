@@ -51,7 +51,11 @@ export default function Turmas() {
           return;
         }
         if (!escolaSelecionada) setEscolaSelecionada(lista[0]);
-      } catch (e) { console.error(e); }
+      } catch (e) { 
+        console.error("Erro ao verificar instituição:", e); 
+      } finally {
+        setLoading(false); // 🔥 Blindagem: garante que o loading pare se houver erro de permissão
+      }
     }
     checkInstituicao();
   }, [currentUser, isAdmin, escolaSelecionada, setEscolaSelecionada, location.state]);
@@ -80,7 +84,6 @@ export default function Turmas() {
     fetchTurmas();
   }, [currentUser, escolaSelecionada, isAdmin, precisaCriarEscola]);
 
-  [span_7](start_span)// SCRIPT ESPECIAL UFPA[span_7](end_span)
   async function importarModeloUFPA() {
     if (!isAdmin || !escolaSelecionada || escolaSelecionada.nome.toUpperCase() !== 'UFPA') return alert("Selecione a UFPA.");
     if (!window.confirm("Deseja criar a Turma Modelo e as 86 tarefas da UFPA?")) return;
@@ -109,8 +112,17 @@ export default function Turmas() {
             { n: "Módulo 27", i: [6,5,2027], f: [20,5,2027], t: "m" }, { n: "Módulo 28", i: [21,5,2027], f: [4,6,2027], t: "m" },
             { n: "Módulo 29", i: [20,6,2027], f: [13,7,2027], t: "m" }, { n: "Módulo 30", i: [14,7,2027], f: [6,8,2027], t: "m" },
             { n: "Módulo 31", i: [7,8,2027], f: [21,8,2027], t: "m" }, { n: "Módulo 32", i: [22,8,2027], f: [5,9,2027], t: "m" },
-            { n: "Semana 01", i: [6,10,2025], f: [12,10,2025], t: "s" }, { n: "Semana 22", i: [16,3,2026], f: [22,3,2026], t: "s" },
-            // ... (A lista acima pode ser expandida com todas as semanas e datas do PDF)
+            { n: "Semana 01", i: [6,10,2025], f: [12,10,2025], t: "s" }, { n: "Semana 02", i: [13,10,2025], f: [19,10,2025], t: "s" },
+            { n: "Semana 03", i: [20,10,2025], f: [26,10,2025], t: "s" }, { n: "Semana 04", i: [27,10,2025], f: [2,11,2025], t: "s" },
+            { n: "Semana 05", i: [3,11,2025], f: [9,11,2025], t: "s" }, { n: "Semana 06", i: [10,11,2025], f: [16,11,2025], t: "s" },
+            { n: "Semana 07", i: [17,11,2025], f: [23,11,2025], t: "s" }, { n: "Semana 08", i: [24,11,2025], f: [30,11,2025], t: "s" },
+            { n: "Semana 09", i: [1,12,2025], f: [7,12,2025], t: "s" }, { n: "Semana 10", i: [8,12,2025], f: [14,12,2025], t: "s" },
+            { n: "Semana 11", i: [15,12,2025], f: [21,12,2025], t: "s" }, { n: "Semana 12", i: [5,1,2026], f: [11,1,2026], t: "s" },
+            { n: "Semana 13", i: [12,1,2026], f: [18,1,2026], t: "s" }, { n: "Semana 14", i: [19,1,2026], f: [25,1,2026], t: "s" },
+            { n: "Semana 15", i: [26,1,2026], f: [1,2,2026], t: "s" }, { n: "Semana 16", i: [2,2,2026], f: [8,2,2026], t: "s" },
+            { n: "Semana 17", i: [9,2,2026], f: [15,2,2026], t: "s" }, { n: "Semana 18", i: [16,2,2026], f: [22,2,2026], t: "s" },
+            { n: "Semana 19", i: [23,2,2026], f: [1,3,2026], t: "s" }, { n: "Semana 20", i: [2,3,2026], f: [8,3,2026], t: "s" },
+            { n: "Semana 21", i: [9,3,2026], f: [15,3,2026], t: "s" }, { n: "Semana 22", i: [16,3,2026], f: [22,3,2026], t: "s" }
         ];
 
         for (const b of base) {
