@@ -23,6 +23,9 @@ export default function MapaEntregas() {
   const [loadingMatriz, setLoadingMatriz] = useState(false);
   const [erro, setErro] = useState(null);
 
+  // 🔥 NOVO ESTADO: Controla a cortina de tempo (Ocultar Legado da V1)
+  const [ocultarAntigas, setOcultarAntigas] = useState(true);
+
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   useEffect(() => {
@@ -83,7 +86,7 @@ export default function MapaEntregas() {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         
-        // 🔥 REGRA DO TEMPO: Ocultar tarefas que ainda não começaram
+        // Regra base: não pega lixo, nem tarefas do futuro
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
         const hojeTime = hoje.getTime();
@@ -92,14 +95,10 @@ export default function MapaEntregas() {
           .filter(t => {
             if (t.status === 'lixeira') return false;
             if (t.tipo && t.tipo !== 'entrega') return false;
-
-            // Pega a data de início e zera as horas
             const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
             const startObj = startRaw ? (startRaw.toDate ? startRaw.toDate() : new Date(startRaw)) : new Date();
             const startNormal = new Date(startObj);
             startNormal.setHours(0, 0, 0, 0);
-
-            // A Mágica: Só exibe se a data de início já chegou ou passou
             return startNormal.getTime() <= hojeTime;
           })
           .sort((a, b) => {
@@ -121,16 +120,34 @@ export default function MapaEntregas() {
     }
     fetchMatriz();
   }, [turmaAtiva]);
-  // AJUSTE DE OURO: Verifica se existe entrega REAL (texto ou arquivo)
+
   const verificarEntrega = (alunoId, tarefaId) => {
     const ativ = atividades.find(a => a.alunoId === alunoId && a.tarefaId === tarefaId);
     if (!ativ) return false;
-    // Consideramos entregue se tiver resposta escrita ou link de arquivo
     return (ativ.resposta && String(ativ.resposta).trim() !== '') || !!ativ.arquivoUrl;
   };
 
-  const isCarregando = loadingTurmas || loadingMatriz;
+  // 🔥 A CORTINA DE TEMPO: Filtra as tarefas ANTES de desenhar a tela (Data de Corte Exata)
+  const tarefasVisiveis = tarefas.filter(t => {
+    if (!ocultarAntigas) return true; // Se o botão tiver desligado, mostra tudo
 
+    // Define a linha de corte EXATA pedida: 05 de Janeiro de 2026
+    // Mês começa em 0 no JS (0 = Jan, 1 = Fev...)
+    const dataCorte = new Date(2026, 0, 5); 
+    
+    // Pega a data de início da tarefa
+    const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
+    if (!startRaw) return true; // Se a tarefa não tem data, mostra por precaução
+    
+    const startObj = startRaw.toDate ? startRaw.toDate() : new Date(startRaw);
+    const startNormal = new Date(startObj);
+    startNormal.setHours(0, 0, 0, 0);
+
+    // Retorna TRUE (visível) apenas se a data de início for igual ou maior que 05/01/2026
+    return startNormal.getTime() >= dataCorte.getTime();
+  });
+
+  const isCarregando = loadingTurmas || loadingMatriz;
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8 text-center">
@@ -146,11 +163,31 @@ export default function MapaEntregas() {
       <div className="mb-6">
         <Breadcrumb items={[{ label: `Mapa de Entregas (${escolaSelecionada.nome})` }]} />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-3">
-          <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 tracking-tight">
-            <ClipboardList className="text-blue-600" size={22} /> Mapa de Entregas
-          </h1>
+          <div className="flex flex-col">
+            <h1 className="text-xl font-black text-gray-800 flex items-center gap-2 tracking-tight">
+              <ClipboardList className="text-blue-600" size={22} /> Mapa de Entregas
+            </h1>
+            {/* 🔥 BOTÃO DA CORTINA DE TEMPO */}
+            {!isCarregando && tarefas.length > 0 && (
+              <label className="flex items-center gap-2 mt-2 cursor-pointer group w-fit">
+                <div className="relative">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={ocultarAntigas} 
+                    onChange={(e) => setOcultarAntigas(e.target.checked)} 
+                  />
+                  <div className="w-8 h-4 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+                </div>
+                <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors">
+                  Ocultar Tarefas Antigas (Antes de Jan/26)
+                </span>
+              </label>
+            )}
+          </div>
+          
           {!isCarregando && turmas.length > 0 && (
-            <select className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl py-2 px-3 font-bold shadow-sm outline-none" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
+            <select className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl py-2 px-3 font-bold shadow-sm outline-none shrink-0" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
               {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
             </select>
           )}
@@ -163,7 +200,6 @@ export default function MapaEntregas() {
         <>
           {/* ========================================================
               VISÃO DESKTOP/TABLET (Tabela Matriz)
-              Visível apenas em telas médias e grandes (md:block)
           ======================================================== */}
           <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-2">
             <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
@@ -179,7 +215,7 @@ export default function MapaEntregas() {
                 <thead>
                   <tr className="bg-gray-50">
                     <th className="px-4 py-4 md:pl-6 border-b border-gray-200 text-[10px] uppercase font-black text-gray-400 tracking-wider sticky left-0 bg-gray-50 z-10 shadow-md">Aluno</th>
-                    {tarefas.map(tarefa => (
+                    {tarefasVisiveis.map(tarefa => (
                       <th key={tarefa.id} className="px-3 py-4 text-center border-b border-l border-gray-200 min-w-[120px] max-w-[180px]">
                         <div className="text-[9px] uppercase font-black text-orange-500 tracking-widest mb-1">Tarefa</div>
                         <div className="font-bold text-gray-700 text-xs truncate" title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</div>
@@ -191,7 +227,7 @@ export default function MapaEntregas() {
                   {alunos.map(aluno => (
                     <tr key={aluno.id} className="hover:bg-blue-50/30 transition-colors group">
                       <td className="px-4 py-4 md:pl-6 font-bold text-gray-800 text-sm sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 shadow-md">{aluno.nome}</td>
-                      {tarefas.map(tarefa => {
+                      {tarefasVisiveis.map(tarefa => {
                         const entregou = verificarEntrega(aluno.id, tarefa.id);
                         return (
                           <td key={tarefa.id} className="px-3 py-3 text-center border-l border-gray-100">
@@ -207,12 +243,14 @@ export default function MapaEntregas() {
                   ))}
                 </tbody>
               </table>
+              {tarefasVisiveis.length === 0 && (
+                <div className="p-8 text-center text-gray-400 font-bold">Nenhuma tarefa recente encontrada no radar.</div>
+              )}
             </div>
           </div>
 
           {/* ========================================================
               VISÃO MOBILE (Cards de Alunos)
-              Visível apenas em telas pequenas (block md:hidden)
           ======================================================== */}
           <div className="block md:hidden space-y-4 mt-4">
             <div className="bg-white p-4 border border-gray-200 rounded-2xl flex justify-between items-center shadow-sm">
@@ -224,8 +262,8 @@ export default function MapaEntregas() {
             </div>
 
             {alunos.map((aluno) => {
-              const totalTarefas = tarefas.length;
-              const tarefasEntregues = tarefas.filter(t => verificarEntrega(aluno.id, t.id)).length;
+              const totalTarefas = tarefasVisiveis.length;
+              const tarefasEntregues = tarefasVisiveis.filter(t => verificarEntrega(aluno.id, t.id)).length;
               const statusCard = tarefasEntregues === totalTarefas && totalTarefas > 0 ? 'border-green-200 bg-green-50/30' : 'border-gray-200 bg-white';
 
               return (
@@ -241,7 +279,7 @@ export default function MapaEntregas() {
                   </div>
                   
                   <div className="p-4 divide-y divide-gray-50">
-                    {tarefas.map((tarefa) => {
+                    {tarefasVisiveis.map((tarefa) => {
                       const entregou = verificarEntrega(aluno.id, tarefa.id);
                       return (
                         <div key={tarefa.id} className="py-2.5 flex justify-between items-center gap-4">
@@ -259,8 +297,8 @@ export default function MapaEntregas() {
                         </div>
                       );
                     })}
-                    {tarefas.length === 0 && (
-                       <p className="text-xs text-gray-400 text-center py-2 font-medium">Nenhuma tarefa ativa cadastrada nesta turma.</p>
+                    {tarefasVisiveis.length === 0 && (
+                       <p className="text-xs text-gray-400 text-center py-2 font-medium">Nenhuma tarefa recente no radar.</p>
                     )}
                   </div>
                 </div>
