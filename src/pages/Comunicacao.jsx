@@ -75,7 +75,6 @@ export default function Comunicacao() {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         
-        // 🔥 FILTRO TEMPORAL: Apenas de 05/Jan/2026 até Hoje
         const limiteInferior = new Date(2026, 0, 5).getTime();
         const hoje = new Date().getTime();
 
@@ -85,11 +84,9 @@ export default function Comunicacao() {
              if (t.status === 'lixeira') return false;
              if (t.tipo && t.tipo !== 'entrega') return false;
              
-             // Descobre quando a tarefa começou
              const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
              const timeInicio = startRaw ? (startRaw.toDate ? startRaw.toDate().getTime() : new Date(startRaw).getTime()) : 0;
              
-             // Só deixa passar se começou de 05/01/26 pra frente E não for do futuro
              return timeInicio >= limiteInferior && timeInicio <= hoje;
           });
         
@@ -109,7 +106,17 @@ export default function Comunicacao() {
         const snapAtividades = await getDocs(qAtividades);
         const entregasFeitas = new Set(snapAtividades.docs.map(d => d.data().alunoId));
 
-        const listaDevedores = alunosData.filter(aluno => !entregasFeitas.has(aluno.id));
+        // 🔥 TRAVA ANTI-FALSOS POSITIVOS APLICADA AQUI
+        const tarefaAtualObjetoLocal = tarefasData.find(t => t.id === tarefaAtualId);
+        const tarefaRestrita = tarefaAtualObjetoLocal?.alunosSelecionados && tarefaAtualObjetoLocal.alunosSelecionados.length > 0;
+
+        const listaDevedores = alunosData.filter(aluno => {
+            if (tarefaRestrita && !tarefaAtualObjetoLocal.alunosSelecionados.includes(aluno.id)) {
+                return false; // Ignora o aluno se ele não for o alvo
+            }
+            return !entregasFeitas.has(aluno.id);
+        });
+
         listaDevedores.sort((a, b) => {
           if (a.nome === alunoAlvo) return -1;
           if (b.nome === alunoAlvo) return 1;
@@ -182,6 +189,7 @@ export default function Comunicacao() {
 
   const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
   const msgGeralPronta = gerarMensagemGeral();
+
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -410,4 +418,4 @@ export default function Comunicacao() {
       )}
     </div>
   );
-                            }
+}
