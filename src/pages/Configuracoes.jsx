@@ -93,7 +93,6 @@ export default function Configuracoes() {
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
 
-        // 🔥 INTELIGÊNCIA: Pega o Timestamp do Prompt para filtrar o Card Local
         const docRefUser = doc(db, 'usuarios', currentUser.uid);
         const docSnapUser = await getDoc(docRefUser);
         const dataUser = docSnapUser.data();
@@ -108,7 +107,6 @@ export default function Configuracoes() {
             const isAprovado = ativ.status === 'aprovado' || ativ.postado === true;
             const temSugestaoIA = ativ.feedbackSugerido && ativ.feedbackSugerido.trim() !== '';
 
-            // 🎯 O Filtro Temporal: Só conta se a data da atividade for MAIOR que a data do último salvamento do prompt
             const dataAtiv = ativ.dataModificacao || ativ.dataEnvio || ativ.dataCriacao;
             const timeAtiv = dataAtiv ? (dataAtiv.toDate ? dataAtiv.toDate().getTime() : new Date(dataAtiv).getTime()) : 0;
             const ehDessaTemporada = timeAtiv >= timestampPrompt;
@@ -135,17 +133,19 @@ export default function Configuracoes() {
     setSalvando(true);
     setSucessoVisual(false);
     try {
-      // 🔥 O GATILHO: Salva o momento exato em que o prompt mudou
       const novoTimestamp = new Date().getTime();
+      const promptLimpo = promptIA.trim();
       
       await updateDoc(doc(db, 'usuarios', currentUser.uid), {
         nome: nome.trim(),
         whatsapp: whatsapp.trim(),
-        promptPersonalizado: promptIA.trim(),
-        timestampPrompt: novoTimestamp // Grava a data de corte
+        promptPersonalizado: promptLimpo,
+        timestampPrompt: novoTimestamp
       });
+
+      // 🔥 A PONTE: Salva localmente para que outras abas abertas saibam da mudança instantaneamente
+      localStorage.setItem('@SaaS_PromptVivo', promptLimpo);
       
-      // Zera o placar local na hora, para dar a sensação de "recomeço"
       setMetricasIA({ total: 0, originais: 0, percentual: 0 });
 
       setSucessoVisual(true);
@@ -284,6 +284,7 @@ export default function Configuracoes() {
             </div>
           </div>
         ) : (
+          
           <div className="bg-slate-50 p-10 rounded-[32px] border border-slate-200 text-center shadow-sm">
             <Lock className="mx-auto text-slate-300 mb-4" size={48} />
             <h3 className="text-2xl font-black text-slate-800 mb-2">Motor de Inteligência Artificial Bloqueado</h3>
@@ -294,6 +295,7 @@ export default function Configuracoes() {
               Ver Planos de Assinatura <ChevronRight size={18}/>
             </Link>
           </div>
+
         )}
 
         <div className="pt-6 space-y-4">
