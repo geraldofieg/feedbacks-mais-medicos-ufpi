@@ -110,7 +110,7 @@ export default function Pendencias() {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
         
-        // 🔥 FILTRO TEMPORAL ADICIONADO AQUI
+        // 🔥 FILTRO TEMPORAL V3: Apenas a partir de 05/Jan/2026
         const limiteInferior = new Date(2026, 0, 5).getTime();
         const hoje = new Date().getTime();
 
@@ -119,11 +119,10 @@ export default function Pendencias() {
              if (t.status === 'lixeira') return false;
              if (t.tipo && t.tipo !== 'entrega') return false;
              
-             // Identifica a data de início real da tarefa
              const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
              const timeInicio = startRaw ? (startRaw.toDate ? startRaw.toDate().getTime() : new Date(startRaw).getTime()) : 0;
              
-             // Filtro: Apenas a partir de 05/Jan/2026 e que já tenham começado (ignora tarefas do futuro)
+             // Filtro: Ignora passado distante e tarefas que ainda não começaram
              return timeInicio >= limiteInferior && timeInicio <= hoje;
           });
 
@@ -151,7 +150,17 @@ export default function Pendencias() {
               .map(a => a.alunoId)
           );
 
-          const devedores = alunosData.filter(aluno => !idsComEntregaReal.has(aluno.id));
+          // 🔥 TRAVA ANTI-FALSOS POSITIVOS APLICADA AQUI
+          const tarefaRestrita = tarefa.alunosSelecionados && tarefa.alunosSelecionados.length > 0;
+
+          const devedores = alunosData.filter(aluno => {
+              // Se a tarefa é só para alguns e este aluno não está na lista, ele não deve nada!
+              if (tarefaRestrita && !tarefa.alunosSelecionados.includes(aluno.id)) {
+                  return false; 
+              }
+              // Caso contrário, checa se ele entregou
+              return !idsComEntregaReal.has(aluno.id);
+          });
           
           if (devedores.length > 0) {
             resultado.push({ tarefa: tarefa, devedores: devedores, status: tarefa.statusTemp });
@@ -168,6 +177,7 @@ export default function Pendencias() {
   }, [turmaAtiva]); 
 
   const isCarregando = loadingTurmas || loadingDados;
+
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -209,7 +219,7 @@ export default function Pendencias() {
         <div className="bg-green-50 p-16 rounded-3xl text-center border border-green-200 shadow-sm mt-8">
           <div className="text-6xl mb-6">🎉</div>
           <h2 className="text-3xl font-black text-green-700 mb-2">Turma em Dia!</h2>
-          <p className="text-green-600 font-bold text-lg">Todos os alunos entregaram as tarefas.</p>
+          <p className="text-green-600 font-bold text-lg">Todos os alunos entregaram as tarefas restritas e gerais.</p>
         </div>
       ) : (
         <div className="space-y-6 mt-8">
