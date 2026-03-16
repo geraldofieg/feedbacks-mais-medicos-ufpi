@@ -85,15 +85,16 @@ export default function Dashboard() {
         // Lógica de Funis (Seção 8 da Doc)
         const isFinalizado = !!d.dataPostagem || d.postado === true || d.status === 'postado';
         const isAprovado = !!d.dataAprovacao || d.status === 'aprovado';
-        // NOVO: Verifica se existe texto na resposta para evitar contagem de registros vazios da V3
-        const temRespostaReal = d.resposta && String(d.resposta).trim() !== '';
+        
+        // 🔥 CIRURGIA V1: Verifica se tem texto na resposta OU se tem um arquivo anexado
+        const temRespostaReal = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
 
         if (isFinalizado) { 
             contFinalizado++; atividadesProcessadas.push(d); 
         } else if (isAprovado) { 
             contPostar++; atividadesProcessadas.push(d); 
         } else if (temRespostaReal) { 
-            // SÓ CONTA REVISÃO SE TIVER TEXTO
+            // SÓ CONTA REVISÃO SE TIVER TEXTO OU ARQUIVO
             contRevisao++; 
         }
       });
