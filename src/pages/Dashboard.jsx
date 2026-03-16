@@ -96,8 +96,6 @@ export default function Dashboard() {
           let iaTotal = 0, iaOriginais = 0;
           let progressoLocal = {};
           
-          // 🔥 DESFRAGMENTADOR NO DASHBOARD (Para contar apenas os que importam)
-          const ativMap = {}; 
           const mapaDocsValidos = {};
 
           snapAtiv.docs.forEach(doc => {
@@ -110,13 +108,12 @@ export default function Dashboard() {
             
             const timeAtual = ativ.dataModificacao?.toMillis() || ativ.dataAprovacao?.toMillis() || ativ.dataCriacao?.toMillis() || 0;
 
-            // Fica apenas com a versão mais recente da atividade
             if (!mapaDocsValidos[chaveUnica] || timeAtual > mapaDocsValidos[chaveUnica].time) {
               mapaDocsValidos[chaveUnica] = { ativ: ativ, time: timeAtual };
             }
           });
 
-          // Agora a matemática acontece SÓ em cima dos documentos validados (ignorando clones/fantasmas)
+          const ativMap = {};
           Object.values(mapaDocsValidos).forEach(item => {
             const d = item.ativ;
             
@@ -164,10 +161,9 @@ export default function Dashboard() {
              alunosDaTurma.forEach(alunoDoc => {
                 const alunoId = alunoDoc.id;
                 
-                // 🔥 A TRAVA DE TAREFA ESPECÍFICA (Anti-Falso Positivo)
                 const tarefaRestrita = t.alunosSelecionados && t.alunosSelecionados.length > 0;
                 if (tarefaRestrita && !t.alunosSelecionados.includes(alunoId)) {
-                    return; // Ignora o aluno se ele não for o alvo
+                    return; 
                 }
 
                 const nomeAluno = alunoDoc.data().nome;
@@ -211,12 +207,10 @@ export default function Dashboard() {
 
           const buildGroup = (rawGroup, type) => {
             if (!rawGroup || rawGroup.length === 0) return null;
-            let label = 'Anterior';
             let theme = 'gray'; 
             let blockTitle = `Encerradas Recentemente (Anteriores)`;
 
             if (type === 'atual') {
-              label = 'Atual';
               theme = 'orange';
               blockTitle = `Tarefas Vigentes (Atuais)`; 
             } 
@@ -249,21 +243,19 @@ export default function Dashboard() {
 
           setGestaoVista({ atual: blocoDestaque, anterior: blocoAnterior });
 
-          if (atuais.length > 0) {
-            const andamentoList = atuais.map(t => {
-              const diasRestantes = Math.ceil((t.timeFim - hojeTime) / (1000 * 3600 * 24));
-              return {
-                id: t.id,
-                nomeTarefa: t.nomeTarefa || t.titulo,
-                diasRestantes: diasRestantes,
-                isFutura: false
-              };
-            });
-            andamentoList.sort((a, b) => a.diasRestantes - b.diasRestantes);
-            setTarefasEmAndamento(andamentoList);
-          } else {
-            setTarefasEmAndamento([]);
-          }
+          const agendaCompleta = [...atuais, ...tarefasEntregas.filter(t => t.timeInicio > hojeTime)].map(t => {
+            const referenceTime = t.timeInicio > hojeTime ? t.timeInicio : t.timeFim;
+            const diasRestantes = Math.ceil((referenceTime - hojeTime) / (1000 * 3600 * 24));
+            return {
+              id: t.id,
+              nomeTarefa: t.nomeTarefa || t.titulo,
+              diasRestantes: diasRestantes,
+              isFutura: t.timeInicio > hojeTime
+            };
+          });
+
+          agendaCompleta.sort((a, b) => (a.isFutura === b.isFutura) ? (a.diasRestantes - b.diasRestantes) : (a.isFutura ? 1 : -1));
+          setTarefasEmAndamento(agendaCompleta);
 
         }
       } catch (e) { console.error("Erro ao carregar dados", e); }
@@ -368,13 +360,11 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-sm font-bold text-gray-500">Instituição:</span>
-            
             <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner" 
               value={escolaSelecionada?.id || ''} 
               onChange={e => {
@@ -434,37 +424,29 @@ export default function Dashboard() {
       ) : (
 
         <>
-          {/* BARRA PRETA DE PONTO DE SITUAÇÃO */}
-          <div className="bg-[#1f2937] text-white rounded-2xl p-5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800 mt-6">
-            <div className="flex gap-4 items-center w-full">
-              <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner">
+          {/* BARRA PRETA DE PONTO DE SITUAÇÃO - GESTÃO À VISTA FOCO TOTAL */}
+          <div className="bg-[#1f2937] text-white rounded-2xl p-5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-slate-800 mt-6 overflow-hidden">
+            <div className="flex gap-4 items-start w-full">
+              <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 shrink-0 shadow-inner mt-1">
                 <Calendar size={24} className="text-blue-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-base font-black text-white mb-1.5 tracking-wide">Ponto de Situação do Curso</h2>
-                <div className="space-y-1 text-sm font-medium text-slate-300">
+                <div className="space-y-1.5 text-sm font-medium text-slate-300">
                   {tarefasEmAndamento.length > 0 ? (
-                    tarefasEmAndamento.length === 1 ? (
-                      <p className="flex items-center gap-2 truncate">
-                        <span className={`w-2 h-2 rounded-full animate-pulse shrink-0 ${tarefasEmAndamento[0].isFutura ? 'bg-blue-500' : 'bg-green-500'}`}></span>
-                        <span className="text-gray-400 shrink-0">Agenda:</span>
-                        <strong className="text-white truncate" title={tarefasEmAndamento[0].nomeTarefa}>{tarefasEmAndamento[0].nomeTarefa}</strong>
-                        <span className={`${tarefasEmAndamento[0].isFutura ? 'text-blue-400' : 'text-green-400'} text-xs font-bold shrink-0`}>
-                          ({tarefasEmAndamento[0].isFutura ? `Inicia em ${tarefasEmAndamento[0].diasRestantes} dias` : `Faltam ${tarefasEmAndamento[0].diasRestantes} dias`})
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="flex items-center gap-2 truncate">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>
-                        <span className="text-gray-400 shrink-0">Agenda:</span>
-                        <strong className="text-white truncate">{tarefasAtuais.length} tarefas ativas simultaneamente</strong>
-                        <span className="text-green-400 text-xs font-bold shrink-0">
-                          (Ver painel abaixo)
-                        </span>
-                      </p>
-                    )
+                    <div className="space-y-1">
+                      {tarefasEmAndamento.map((t) => (
+                        <p key={t.id} className="flex items-center gap-2 truncate">
+                          <span className={`w-2 h-2 rounded-full animate-pulse shrink-0 ${t.isFutura ? 'bg-blue-500' : 'bg-green-500'}`}></span>
+                          <strong className="text-white truncate max-w-[70%]" title={t.nomeTarefa}>{t.nomeTarefa}</strong>
+                          <span className={`${t.isFutura ? 'text-blue-400' : 'text-green-400'} text-[11px] font-black shrink-0`}>
+                            {t.isFutura ? `(Inicia em ${t.diasRestantes} dias)` : `(Faltam ${t.diasRestantes} dias)`}
+                          </span>
+                        </p>
+                      ))}
+                    </div>
                   ) : (
-                    <p className="flex items-center gap-2 text-gray-400">
+                    <p className="flex items-center gap-2 text-gray-400 italic">
                       <span className="w-2 h-2 rounded-full bg-gray-500 shrink-0"></span>
                       Nenhuma tarefa programada no cronograma.
                     </p>
@@ -472,19 +454,18 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-            <Link to="/tarefas" className="bg-blue-600 text-white font-bold px-6 py-2.5 rounded-xl text-sm shadow-md hover:bg-blue-700 transition-all shrink-0 whitespace-nowrap text-center">
-              Ver Cronograma Completo
+            <Link to="/tarefas" className="bg-blue-600 text-white font-bold px-6 py-2.5 rounded-xl text-sm shadow-md hover:bg-blue-700 transition-all shrink-0 whitespace-nowrap text-center self-center md:self-auto">
+              Cronograma
             </Link>
           </div>
 
-          {/* TERMÔMETRO DA IA */}
           {mostrarTermometroIA && metricasIA.total > 0 && (
             <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl p-5 shadow-lg mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="bg-white/20 p-3 rounded-xl shrink-0"><Sparkles size={24} className="text-purple-100" /></div>
                 <div>
                   <h2 className="text-lg font-black text-white tracking-wide">Termômetro do Prompt Atual</h2>
-                  <p className="text-purple-200 text-xs font-medium mt-0.5">Porcentagem de feedbacks aprovados sem NENHUMA alteração.</p>
+                  <p className="text-purple-200 text-xs font-medium mt-0.5">Feedbacks aprovados sem alteração.</p>
                 </div>
               </div>
               <div className="text-left md:text-right shrink-0">
@@ -494,23 +475,18 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* KANBAN E ATALHOS */}
           <div className={gridClass}>
-            
-            {/* CARD DE TAREFAS ATUAIS */}
             {temTarefaAtual && (
               <div className="bg-white border border-indigo-200 rounded-2xl shadow-sm flex flex-col hover:shadow-md transition-shadow relative overflow-hidden h-full">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full z-0 pointer-events-none"></div>
-                
                 <div className="p-5 pb-2 relative z-10 shrink-0 bg-white">
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest mt-1">
-                      {tarefasAtuais.length === 1 ? 'Tarefa Atual' : 'Tarefas em Andamento'}
+                      {tarefasAtuais.length === 1 ? 'Tarefa Atual' : 'Em Andamento'}
                     </h3>
                     <div className="text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"><PlayCircle size={20}/></div>
                   </div>
                 </div>
-
                 <div className="p-5 pt-0 relative z-10 flex-1 overflow-y-auto max-h-[140px]" style={{ scrollbarWidth: 'thin' }}>
                   <div className="space-y-4">
                     {tarefasAtuais.map((tarefa, idx) => (
@@ -518,14 +494,13 @@ export default function Dashboard() {
                         <span className={`block font-black text-gray-800 leading-tight line-clamp-2 ${tarefasAtuais.length === 1 ? 'text-2xl' : 'text-[17px]'}`} title={tarefa.nomeTarefa}>
                           {tarefa.nomeTarefa}
                         </span>
-                        
                         <div className="flex items-center justify-between mt-2">
                           <Link to={`/revisar/${tarefa.id}`} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline w-fit">
-                            {progressoTarefas[tarefa.id] ? "Continuar correções" : "Iniciar correções"} <ChevronRight size={14}/>
+                            {progressoTarefas[tarefa.id] ? "Continuar" : "Iniciar"} <ChevronRight size={14}/>
                           </Link>
                           {tarefasAtuais.length > 1 && (
                             <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full whitespace-nowrap">
-                              Faltam {tarefa.diasRestantes} dias
+                              {tarefa.diasRestantes} d
                             </span>
                           )}
                         </div>
@@ -536,7 +511,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* KANBAN TRADICIONAL */}
             {mostrarRevisao && (
               <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-2">
@@ -561,7 +535,7 @@ export default function Dashboard() {
             
             <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-2">
-                <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
+                <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Finalizado</h3>
                 <div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div>
               </div>
               <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
@@ -569,18 +543,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* =========================================================================
-                  MOTOR DE GESTÃO À VISTA POR DATA ESTRITA 
-              ========================================================================= */}
           {(gestaoVista.atual || gestaoVista.anterior) && (
             <div className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <h2 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
                 <AlertTriangle className="text-orange-500" size={24}/> Gestão à Vista: Foco Atual
               </h2>
-              
               <div className="space-y-6">
-                
-                {/* BLOCO ATUAL OU FUTURO */}
                 {gestaoVista.atual && (
                   <div className={`bg-white border rounded-2xl shadow-sm overflow-hidden ${gestaoVista.atual.theme === 'blue' ? 'border-blue-200' : 'border-orange-200'}`}>
                     <div className={`p-4 flex justify-between items-center border-b ${gestaoVista.atual.theme === 'blue' ? 'bg-blue-50/50 border-blue-100' : 'bg-orange-50/50 border-orange-100'}`}>
@@ -607,8 +575,6 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
-
-                {/* BLOCO ANTERIOR */}
                 {gestaoVista.anterior && (
                   <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
                     <div className="bg-gray-50 border-b border-gray-100 p-4 flex justify-between items-center">
@@ -635,7 +601,6 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
-
               </div>
             </div>
           )}
