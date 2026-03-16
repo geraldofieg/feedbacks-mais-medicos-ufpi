@@ -82,7 +82,6 @@ export default function Dashboard() {
           const hoje = new Date();
           const hojeTime = hoje.getTime();
           
-          // 🔥 LIMITES TEMPORAIS V3
           const limiteInferior = new Date(2026, 0, 5).getTime(); // 05/Jan/2026
 
           const docRefUser = doc(db, 'usuarios', currentUser.uid);
@@ -117,9 +116,12 @@ export default function Dashboard() {
                 progressoLocal[d.tarefaId] = true;
               }
 
-              const dataAtiv = d.dataModificacao || d.dataEnvio || d.dataCriacao;
-              const timeAtiv = dataAtiv ? (dataAtiv.toDate ? dataAtiv.toDate().getTime() : new Date(dataAtiv).getTime()) : 0;
-              const ehDessaTemporada = timeAtiv >= timestampPrompt;
+              // 🔥 CORREÇÃO: Pega o momento exato em que a atividade foi CORRIGIDA (e não a data que o aluno enviou)
+              const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
+              const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
+              
+              // A correção só entra na conta se o martelo foi batido DEPOIS que o prompt foi salvo
+              const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
 
               const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
               const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
@@ -160,7 +162,6 @@ export default function Dashboard() {
              });
           });
 
-          // 🔥 APLICAÇÃO DOS FILTROS (INCLUINDO FÓRUNS E MÓDULO 8)
           let tarefasEntregas = tarefasVivas.filter(t => {
              if (!tIds.includes(t.turmaId)) return false;
              if (!t.dataFim) return false;
@@ -180,7 +181,6 @@ export default function Dashboard() {
               dataFimStr: endObj.toLocaleDateString('pt-BR')
             };
           }).filter(t => {
-             // Corta o passado distante (antes de Jan/2026) e o futuro
              return t.timeInicio >= limiteInferior && t.timeInicio <= hojeTime;
           });
 
@@ -196,7 +196,7 @@ export default function Dashboard() {
             if (type === 'atual') {
               label = 'Atual';
               theme = 'orange';
-              blockTitle = `Tarefas Vigentes (Atuais)`; // Titulo genérico para comportar módulos diferentes
+              blockTitle = `Tarefas Vigentes (Atuais)`; 
             } 
 
             let totalPendencias = 0;
@@ -217,7 +217,6 @@ export default function Dashboard() {
 
           if (atuais.length > 0) {
             atuais.sort((a, b) => a.timeFim - b.timeFim);
-            // 🔥 CORREÇÃO DO MÓDULO 8: Passamos todas as atuais para a view, sem agrupar por data final exata
             blocoDestaque = buildGroup(atuais, 'atual');
           } 
 
@@ -373,7 +372,6 @@ export default function Dashboard() {
               <option disabled>──────────</option>
               <option value="nova_instituicao">+ Criar Nova Instituição</option>
             </select>
-
           </div>
         </div>
       </div>
