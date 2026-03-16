@@ -19,7 +19,7 @@ export default function Configuracoes() {
   
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
-  const [sucessoVisual, setSucessoVisual] = useState(false); // NOVO: Estado para a animação de sucesso do botão
+  const [sucessoVisual, setSucessoVisual] = useState(false);
 
   const isPremium = userProfile?.plano === 'premium';
   const isTier2 = userProfile?.plano === 'intermediario';
@@ -93,6 +93,12 @@ export default function Configuracoes() {
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
 
+        // 🔥 INTELIGÊNCIA: Pega o Timestamp do Prompt para filtrar o Card Local
+        const docRefUser = doc(db, 'usuarios', currentUser.uid);
+        const docSnapUser = await getDoc(docRefUser);
+        const dataUser = docSnapUser.data();
+        const timestampPrompt = dataUser?.timestampPrompt || 0;
+
         let iaTotal = 0;
         let iaOriginais = 0;
 
@@ -102,7 +108,12 @@ export default function Configuracoes() {
             const isAprovado = ativ.status === 'aprovado' || ativ.postado === true;
             const temSugestaoIA = ativ.feedbackSugerido && ativ.feedbackSugerido.trim() !== '';
 
-            if (isAprovado && temSugestaoIA) {
+            // 🎯 O Filtro Temporal: Só conta se a data da atividade for MAIOR que a data do último salvamento do prompt
+            const dataAtiv = ativ.dataModificacao || ativ.dataEnvio || ativ.dataCriacao;
+            const timeAtiv = dataAtiv ? (dataAtiv.toDate ? dataAtiv.toDate().getTime() : new Date(dataAtiv).getTime()) : 0;
+            const ehDessaTemporada = timeAtiv >= timestampPrompt;
+
+            if (isAprovado && temSugestaoIA && ehDessaTemporada) {
               iaTotal++;
               const feedbackFinal = ativ.feedbackFinal ? ativ.feedbackFinal.trim() : '';
               const feedbackSugerido = ativ.feedbackSugerido.trim();
@@ -122,18 +133,24 @@ export default function Configuracoes() {
   async function handleSalvar(e) {
     e.preventDefault();
     setSalvando(true);
-    setSucessoVisual(false); // Reseta caso estivesse verde
+    setSucessoVisual(false);
     try {
+      // 🔥 O GATILHO: Salva o momento exato em que o prompt mudou
+      const novoTimestamp = new Date().getTime();
+      
       await updateDoc(doc(db, 'usuarios', currentUser.uid), {
         nome: nome.trim(),
         whatsapp: whatsapp.trim(),
-        promptPersonalizado: promptIA.trim()
+        promptPersonalizado: promptIA.trim(),
+        timestampPrompt: novoTimestamp // Grava a data de corte
       });
       
-      // AJUSTE: Dispara a animação visual de Sucesso no próprio botão
+      // Zera o placar local na hora, para dar a sensação de "recomeço"
+      setMetricasIA({ total: 0, originais: 0, percentual: 0 });
+
       setSucessoVisual(true);
       setTimeout(() => {
-        setSucessoVisual(false); // Volta ao estado original após 3 segundos
+        setSucessoVisual(false);
       }, 3000);
 
     } catch (error) {
@@ -223,7 +240,6 @@ export default function Configuracoes() {
                     Instruções de Personalidade (Prompt)
                   </label>
                   
-                  {/* SEÇÃO DE TEMPLATES COM SEGURANÇA */}
                   <div className="flex flex-wrap gap-2 mb-4">
                     {templates.map((temp, i) => (
                       <button
@@ -238,7 +254,7 @@ export default function Configuracoes() {
                   </div>
 
                   <p className="text-sm text-slate-400 mb-5 leading-relaxed font-medium">
-                    Explique como a IA deve corrigir seus alunos. Ela seguirá esse estilo em todos os feedbacks automáticos.
+                    Explique como a IA deve corrigir seus alunos. Ela seguirá esse estilo em todos os feedbacks automáticos. Ao salvar, a contagem de eficiência recomeça.
                   </p>
                   <textarea 
                     rows="8" value={promptIA} onChange={e => setPromptIA(e.target.value)}
@@ -249,17 +265,17 @@ export default function Configuracoes() {
 
                 <div className="w-full lg:w-72 bg-slate-800/40 rounded-3xl p-6 flex flex-col items-center justify-center text-center border border-slate-700/50">
                   <Target size={32} className="text-yellow-400 mb-4 opacity-50" />
-                  <p className="text-indigo-300 text-[10px] font-black uppercase tracking-widest mb-2">Acurácia do Prompt</p>
+                  <p className="text-indigo-300 text-[10px] font-black uppercase tracking-widest mb-2">Acurácia do Prompt Atual</p>
                   
                   {loadingMetricas ? (
                     <div className="h-16 flex items-center"><RefreshCw className="animate-spin text-yellow-400" size={24}/></div>
                   ) : metricasIA.total === 0 ? (
-                    <p className="text-slate-500 font-bold text-sm italic leading-tight">Inicie as correções para ver os dados de assertividade</p>
+                    <p className="text-slate-500 font-bold text-sm italic leading-tight">Zero feedbacks revisados com esta nova instrução.</p>
                   ) : (
                     <>
                       <span className="text-6xl font-black text-white tracking-tighter mb-2">{metricasIA.percentual}%</span>
                       <p className="text-slate-400 text-xs font-bold leading-tight">
-                        {metricasIA.originais} de {metricasIA.total} feedbacks<br/>usados sem qualquer edição
+                        {metricasIA.originais} de {metricasIA.total} feedbacks<br/>usados sem edição
                       </p>
                     </>
                   )}
@@ -268,8 +284,6 @@ export default function Configuracoes() {
             </div>
           </div>
         ) : (
-          
-          /* VITRINE DE VENDAS PARA O TIER 1 */
           <div className="bg-slate-50 p-10 rounded-[32px] border border-slate-200 text-center shadow-sm">
             <Lock className="mx-auto text-slate-300 mb-4" size={48} />
             <h3 className="text-2xl font-black text-slate-800 mb-2">Motor de Inteligência Artificial Bloqueado</h3>
@@ -280,10 +294,8 @@ export default function Configuracoes() {
               Ver Planos de Assinatura <ChevronRight size={18}/>
             </Link>
           </div>
-
         )}
 
-        {/* AJUSTE: BOTÃO FINAL COM FEEDBACK VISUAL EMBUTIDO */}
         <div className="pt-6 space-y-4">
           <button 
             type="submit" 
