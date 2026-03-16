@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, CheckCircle, User, Copy, 
   Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck, Eraser,
-  Lock, Settings, CalendarDays, RotateCcw, Trash2, MousePointer2, Paperclip, FileUp, FileCheck
+  Lock, Settings, CalendarDays, RotateCcw, Trash2, MousePointer2, Paperclip, FileUp, FileCheck, ExternalLink
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -89,6 +89,32 @@ export default function RevisarAtividade() {
     setNomeArquivo(atividadeAtual?.nomeArquivo || '');
   }, [alunoSelecionadoId, atividadeAtual]);
 
+  // 🔥 CAÇADOR DE LINKS NO ENUNCIADO
+  const renderizarComLinks = (texto) => {
+    if (!texto) return "Sem enunciado.";
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const partes = texto.split(urlRegex);
+
+    return partes.map((parte, i) => {
+      if (parte.match(urlRegex)) {
+        return (
+          <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline break-all">
+            {parte}
+          </a>
+        );
+      }
+      return parte;
+    });
+  };
+
+  // 🔥 RADAR DE LINKS NA RESPOSTA
+  const extrairLinksDaResposta = (texto) => {
+    if (!texto) return [];
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return texto.match(urlRegex) || [];
+  };
+  const linksNaResposta = extrairLinksDaResposta(novaResposta);
+
   async function handleUploadArquivo(e) {
     const file = e.target.files[0];
     if (!file || !alunoAtual) return;
@@ -148,20 +174,16 @@ export default function RevisarAtividade() {
         revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
       };
 
-      // 🔥 CIRURGIA V1: Lida com a data de aprovação via deleteField() se for um UPDATE pendente
       if (atividadeAtual?.status === 'aprovado') {
           payload.dataAprovacao = atividadeAtual.dataAprovacao;
       } else {
-          // Se estamos atualizando um rascunho, arrancamos o campo do banco para não inflar a V1
           if (atividadeAtual) {
               payload.dataAprovacao = deleteField();
           }
-          // Se for uma atividade nova (addDoc), simplesmente não enviamos esse campo.
       }
 
       if (atividadeAtual) {
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
-        // Atualiza a memória visual (para a UI não quebrar com deleteField)
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload, dataAprovacao: null } }));
       } else {
         const novaAtiv = { alunoId: alunoAtual.id, turmaId: tarefa.turmaId, instituicaoId: tarefa.instituicaoId, tarefaId: tarefa.id, dataCriacao: serverTimestamp(), postado: false, ...payload };
@@ -207,7 +229,6 @@ export default function RevisarAtividade() {
     if (!window.confirm("Deseja devolver esta atividade para a fase de revisão?")) return;
     setSalvando(true);
     try {
-        // 🔥 CIRURGIA V1: Troca de 'null' para deleteField() na devolução
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: deleteField() });
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false, dataAprovacao: null } }));
     } catch (e) { console.error(e); } finally { setSalvando(false); }
@@ -321,8 +342,9 @@ export default function RevisarAtividade() {
               <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-6 md:p-10 space-y-12">
                   <section>
                     <h4 className="text-xs font-black text-slate-900 uppercase mb-4">1. Enunciado</h4>
-                    <div className="bg-slate-50 p-6 md:p-8 rounded-2xl text-slate-700 leading-relaxed font-medium text-lg">
-                      {tarefa?.enunciado || "Sem enunciado."}
+                    <div className="bg-slate-50 p-6 md:p-8 rounded-2xl text-slate-700 leading-relaxed font-medium text-lg whitespace-pre-wrap">
+                      {/* 🔥 APLICAÇÃO DO CAÇADOR DE LINKS NO ENUNCIADO */}
+                      {renderizarComLinks(tarefa?.enunciado)}
                     </div>
                   </section>
                   
@@ -330,7 +352,6 @@ export default function RevisarAtividade() {
                     <div className="flex items-center gap-3 mb-4">
                       <h4 className="text-xs font-black text-slate-900 uppercase flex-1">2. Resposta do Aluno</h4>
                       <div className="flex items-center gap-4">
-                        {/* 🔥 NOVO: Link clicável para baixar o arquivo */}
                         {arquivoUrl ? (
                           <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200">
                             <a href={arquivoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:underline cursor-pointer" title="Clique para visualizar/baixar o arquivo">
@@ -349,7 +370,24 @@ export default function RevisarAtividade() {
                         <button onClick={() => { setNovaResposta(''); setArquivoUrl(''); setNomeArquivo(''); }} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center gap-1"><Eraser size={14}/> Limpar</button>
                       </div>
                     </div>
+                    
                     <textarea rows="14" placeholder="Cole a resposta aqui..." className="w-full p-6 md:p-8 rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-lg" value={novaResposta} onChange={(e) => setNovaResposta(e.target.value)}/>
+                    
+                    {/* 🔥 RADAR DE LINKS (Aparece se houver algum link colado na resposta) */}
+                    {linksNaResposta.length > 0 && (
+                      <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-xl flex flex-col gap-3">
+                        <span className="text-xs font-black text-blue-800 uppercase tracking-widest flex items-center gap-1">
+                          <ExternalLink size={14} /> Links detectados na resposta do aluno:
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {linksNaResposta.map((link, idx) => (
+                            <a key={idx} href={link} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-blue-600 hover:underline bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm truncate max-w-full">
+                              {link}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </section>
               </div>
             </div>
