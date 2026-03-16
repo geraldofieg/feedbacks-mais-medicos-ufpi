@@ -36,8 +36,9 @@ export default function ListaAtividades() {
         lista = lista.filter(atv => {
           const isFinalizado = !!atv.dataPostagem || atv.postado === true || atv.status === 'postado';
           const isAprovado = !!atv.dataAprovacao || atv.status === 'aprovado';
-          // NOVO: Verifica se o registro da V3 tem conteúdo real
-          const temRespostaReal = atv.resposta && String(atv.resposta).trim() !== '';
+          
+          // 🔥 CIRURGIA V1: Verifica se tem texto na resposta OU se tem um arquivo anexado
+          const temRespostaReal = (atv.resposta && String(atv.resposta).trim() !== '') || !!atv.arquivoUrl;
 
           if (status === 'finalizado' || status === 'finalizados') {
             return isFinalizado;
