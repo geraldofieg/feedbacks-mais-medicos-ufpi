@@ -47,35 +47,53 @@ export default function FaltaPostar() {
         const mapaAlunos = {};
         snapAlunos.docs.forEach(d => { mapaAlunos[d.id] = d.data().nome; });
 
-        // 3. Busca as Atividades "Falta Postar" com a Nova Matemática (V3)
+        // 3. Busca as Atividades
         const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
         const snapAtividades = await getDocs(qAtividades);
         
         const pendencias = [];
         
+        // 🔥 O DESFRAGMENTADOR ANTICLONES (V3)
+        // Agrupa por (Nome da Tarefa + ID do Aluno) e mantém APENAS a versão mais recente!
+        const mapaDocsValidos = {};
+        
         snapAtividades.docs.forEach(doc => {
           const ativ = doc.data();
-          if (turmasIds.includes(ativ.turmaId)) {
-            // LÓGICA ESPELHADA DO DASHBOARD
-            const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
-            const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+          if (!turmasIds.includes(ativ.turmaId)) return;
+          
+          const nomeOriginalTarefa = ativ.nomeTarefa || ativ.tarefa || ativ.modulo || 'Tarefa';
+          const nomeLimpoAtividade = nomeOriginalTarefa.toLowerCase().replace(/[\s-]/g, '');
+          const chaveUnica = `${nomeLimpoAtividade}_${ativ.alunoId}`;
+          
+          const timeAtual = ativ.dataModificacao?.toMillis() || ativ.dataAprovacao?.toMillis() || ativ.dataCriacao?.toMillis() || 0;
 
-            // Só entra na lista se estiver aprovado E não tiver sido postado
-            if (!jaPostado && jaAprovado) {
-              pendencias.push({
-                id: doc.id,
-                tarefaId: ativ.tarefaId,
-                alunoId: ativ.alunoId, 
-                // AJUSTE: Fallback triplo para garantir que o nome apareça (Fim do bug do ".")
-                nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || 'Aluno Removido',
-                nomeTarefa: mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || 'Tarefa Removida',
-                dataAprovacao: ativ.dataAprovacao || ativ.dataCriacao
-              });
-            }
+          // Se a chave não existe OU se este documento é mais recente que o guardado, substitui
+          if (!mapaDocsValidos[chaveUnica] || timeAtual > mapaDocsValidos[chaveUnica].time) {
+            mapaDocsValidos[chaveUnica] = { id: doc.id, ativ: ativ, time: timeAtual };
           }
         });
 
-        // AJUSTE: Ordena da mais NOVA para a mais ANTIGA (O que foi aprovado por último, aparece primeiro no topo)
+        // 4. Agora sim, avaliamos apenas os documentos que sobreviveram (os reais e atualizados)
+        Object.values(mapaDocsValidos).forEach(item => {
+          const ativ = item.ativ;
+          
+          const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
+          const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
+
+          // Só entra na lista se estiver aprovado E NUNCA tiver sido postado
+          if (!jaPostado && jaAprovado) {
+            pendencias.push({
+              id: item.id,
+              tarefaId: ativ.tarefaId,
+              alunoId: ativ.alunoId, 
+              nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || 'Aluno Removido',
+              nomeTarefa: mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || 'Tarefa Removida',
+              dataAprovacao: ativ.dataAprovacao || ativ.dataCriacao
+            });
+          }
+        });
+
+        // AJUSTE: Ordena da mais NOVA para a mais ANTIGA
         pendencias.sort((a, b) => {
           const tempoA = a.dataAprovacao?.toMillis ? a.dataAprovacao.toMillis() : 0;
           const tempoB = b.dataAprovacao?.toMillis ? b.dataAprovacao.toMillis() : 0;
