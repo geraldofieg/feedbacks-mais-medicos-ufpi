@@ -22,6 +22,17 @@ const extractNum = (nome) => {
   return match ? parseInt(match[0], 10) : 0;
 };
 
+// 🔥 FUNÇÃO INTELIGENTE: Padroniza os nomes para evitar colunas duplicadas
+const normalizarNomeTarefa = (nome) => {
+  if (!nome) return '';
+  // Arruma o espaçamento ao redor do hífen
+  let n = nome.replace(/\s*-\s*/g, ' - ').trim();
+  // Padroniza maiúsculas/minúsculas para as palavras-chave (Desafio e Fórum)
+  if (n.toLowerCase().includes('desafio')) return n.split(' - ')[0].toUpperCase() + ' - Desafio';
+  if (n.toLowerCase().includes('fórum') || n.toLowerCase().includes('forum')) return n.split(' - ')[0].toUpperCase() + ' - Fórum';
+  return n;
+};
+
 export default function MapaEntregas() {
   const [alunos, setAlunos] = useState([]);
   const [tarefasMapeadas, setTarefasMapeadas] = useState([]);
@@ -50,11 +61,14 @@ export default function MapaEntregas() {
       ativs.forEach(a => {
         // AJUSTE: Resolve nomes V1 vs V3
         const alunoNome = a.aluno || a.nomeAluno;
-        const tarefaNome = a.tarefa || a.nomeTarefa;
+        const tarefaRaw = a.tarefa || a.nomeTarefa;
         const moduloNome = a.modulo || a.nomeModulo || '';
 
-        if (!alunoNome || !tarefaNome || alunoNome.toLowerCase() === 'enunciado') return;
+        if (!alunoNome || !tarefaRaw || alunoNome.toLowerCase() === 'enunciado') return;
         if (!isModuloValido(moduloNome)) return;
+
+        // 🔥 APLICA A VACINA: Normaliza a string para juntar colunas duplicadas
+        const tarefaNome = normalizarNomeTarefa(tarefaRaw);
 
         // INTELIGÊNCIA: Só conta como entrega se tiver conteúdo (Evita registros vazios da V3)
         const temConteudo = (a.resposta && String(a.resposta).trim() !== '') || !!a.arquivoUrl;
@@ -63,7 +77,7 @@ export default function MapaEntregas() {
         if (num > maxNumDB) maxNumDB = num;
 
         if (temConteudo) {
-          // Salva a chave de entrega real
+          // Salva a chave de entrega real perfeitamente normalizada
           setEntregasTemp.add(`${alunoNome}-${num}-${tarefaNome}`);
         }
         
@@ -86,8 +100,9 @@ export default function MapaEntregas() {
           modulosMap[numAlvo] = { nome: nomeLabel, numero: numAlvo, tarefas: new Set() };
         }
 
-        const tarefasOficiais = cronoMod?.tarefas || [`M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Desafio`, `M${numAlvo < 10 ? '0'+numAlvo : numAlvo}-Fórum`];
-        tarefasOficiais.forEach(t => modulosMap[numAlvo].tarefas.add(t));
+        const tarefasOficiais = cronoMod?.tarefas || [`M${numAlvo < 10 ? '0'+numAlvo : numAlvo} - Desafio`, `M${numAlvo < 10 ? '0'+numAlvo : numAlvo} - Fórum`];
+        // Passa o nome oficial pelo normalizador também para garantir match absoluto
+        tarefasOficiais.forEach(t => modulosMap[numAlvo].tarefas.add(normalizarNomeTarefa(t)));
       });
 
       const listaMod = Object.values(modulosMap).sort((a, b) => b.numero - a.numero);
