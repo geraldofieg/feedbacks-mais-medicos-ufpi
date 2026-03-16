@@ -101,7 +101,9 @@ export default function Dashboard() {
             if (tIds.includes(d.turmaId)) {
               const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
               const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
-              const temResposta = d.resposta && String(d.resposta).trim() !== '';
+              
+              // 🔥 CIRURGIA V3: Agora considera resposta SE tiver texto OU arquivo anexado
+              const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
 
               if (jaPostado) {
                 ok++; 
@@ -538,7 +540,7 @@ export default function Dashboard() {
                 <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
               </div>
             )}
-             
+              
             {mostrarFaltaPostar && (
               <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-2">
@@ -561,7 +563,7 @@ export default function Dashboard() {
           </div>
 
           {/* =========================================================================
-                 MOTOR DE GESTÃO À VISTA POR DATA ESTRITA 
+                  MOTOR DE GESTÃO À VISTA POR DATA ESTRITA 
               ========================================================================= */}
           {(gestaoVista.atual || gestaoVista.anterior) && (
             <div className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
