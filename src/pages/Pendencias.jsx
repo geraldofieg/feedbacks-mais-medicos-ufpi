@@ -66,7 +66,7 @@ export default function Pendencias() {
         setLoadingTurmas(false);
       }
     }
-    fetchTurmas(); 
+    fetchTurmas();
   }, [currentUser, escolaSelecionada, isAdmin]); 
 
   const getStatusPrazo = (t) => {
@@ -109,8 +109,23 @@ export default function Pendencias() {
 
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
         const snapTarefas = await getDocs(qTarefas);
+        
+        // 🔥 FILTRO TEMPORAL ADICIONADO AQUI
+        const limiteInferior = new Date(2026, 0, 5).getTime();
+        const hoje = new Date().getTime();
+
         let tarefasData = snapTarefas.docs.map(d => ({ id: d.id, ...d.data() }))
-          .filter(t => t.status !== 'lixeira' && (t.tipo === 'entrega' || !t.tipo));
+          .filter(t => {
+             if (t.status === 'lixeira') return false;
+             if (t.tipo && t.tipo !== 'entrega') return false;
+             
+             // Identifica a data de início real da tarefa
+             const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
+             const timeInicio = startRaw ? (startRaw.toDate ? startRaw.toDate().getTime() : new Date(startRaw).getTime()) : 0;
+             
+             // Filtro: Apenas a partir de 05/Jan/2026 e que já tenham começado (ignora tarefas do futuro)
+             return timeInicio >= limiteInferior && timeInicio <= hoje;
+          });
 
         tarefasData = tarefasData.map(t => ({ ...t, statusTemp: getStatusPrazo(t) }));
 
@@ -127,11 +142,9 @@ export default function Pendencias() {
         const qAtividades = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
         const snapAtividades = await getDocs(qAtividades);
         const atividadesData = snapAtividades.docs.map(d => d.data());
-
         const resultado = [];
         
         tarefasOrdenadas.forEach(tarefa => {
-          // 🔥 CIRURGIA V3: Um aluno só "entregou" se houver um registro E a resposta não estiver em branco (OU houver arquivo)
           const idsComEntregaReal = new Set(
             atividadesData
               .filter(a => a.tarefaId === tarefa.id && ((a.resposta && String(a.resposta).trim() !== '') || !!a.arquivoUrl))
@@ -144,7 +157,6 @@ export default function Pendencias() {
             resultado.push({ tarefa: tarefa, devedores: devedores, status: tarefa.statusTemp });
           }
         });
-
         setPendencias(resultado);
       } catch (error) {
         console.error("Erro ao buscar pendências:", error);
@@ -156,7 +168,6 @@ export default function Pendencias() {
   }, [turmaAtiva]); 
 
   const isCarregando = loadingTurmas || loadingDados;
-
   if (!escolaSelecionada?.id) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -218,6 +229,7 @@ export default function Pendencias() {
                       <p className="text-xs font-bold uppercase tracking-widest text-gray-500">{item.devedores.length} alunos aguardando resposta</p>
                     </div>
                   </div>
+          
                   <div className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border ${theme === 'red' ? 'bg-red-100 text-red-800 border-red-200' : theme === 'orange' ? 'bg-orange-100 text-orange-800 border-orange-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
                     {status.temPrazo ? (status.categoria === 'vencida' ? `Vencido em ${status.dataFormatada}` : `Prazo: ${status.diasRestantes} dias`) : 'Sem prazo'}
                   </div>
