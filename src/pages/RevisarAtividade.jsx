@@ -31,6 +31,7 @@ export default function RevisarAtividade() {
   
   const [salvando, setSalvando] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [salvoFeedback, setSalvoFeedback] = useState(false); // 🔥 Novo estado para feedback visual do rascunho
   const [gerandoIA, setGerandoIA] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
@@ -46,11 +47,13 @@ export default function RevisarAtividade() {
 
   // 🔥 NOVO: Estado para o prompt ser sincronizado em tempo real entre abas
   const [promptVivo, setPromptVivo] = useState(userProfile?.promptPersonalizado || localStorage.getItem('@SaaS_PromptVivo') || '');
+  
   useEffect(() => {
     if (location.state?.alunoId) {
       setAlunoSelecionadoId(location.state.alunoId);
     }
   }, [location.state?.alunoId]);
+
   useEffect(() => {
     async function buscarDadosDaEstacao() {
       setLoading(true);
@@ -62,7 +65,6 @@ export default function RevisarAtividade() {
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', snapTarefa.data().turmaId));
         const snapAlunos = await getDocs(qAlunos);
         const listaAlunos = snapAlunos.docs.map(d => ({ 
-
           id: d.id, ...d.data() 
         })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome));
         setAlunos(listaAlunos);
@@ -96,8 +98,10 @@ export default function RevisarAtividade() {
     window.addEventListener('storage', sincronizarPrompt);
     return () => window.removeEventListener('storage', sincronizarPrompt);
   }, [userProfile]);
+
   const alunoAtual = alunoSelecionadoId ? alunos.find(a => a.id === alunoSelecionadoId) : null;
   const atividadeAtual = alunoAtual ? atividadesMap[alunoAtual.id] : null;
+
   useEffect(() => {
     setNovaResposta(atividadeAtual?.resposta || '');
     setFeedbackEditado(atividadeAtual?.feedbackFinal || atividadeAtual?.feedbackSugerido || '');
@@ -105,6 +109,7 @@ export default function RevisarAtividade() {
     setArquivoUrl(atividadeAtual?.arquivoUrl || '');
     setNomeArquivo(atividadeAtual?.nomeArquivo || '');
   }, [alunoSelecionadoId, atividadeAtual]);
+
   // 🔥 CAÇADOR DE LINKS NO ENUNCIADO
   const renderizarComLinks = (texto) => {
     if (!texto) return "Sem enunciado.";
@@ -130,6 +135,7 @@ export default function RevisarAtividade() {
     return texto.match(urlRegex) || [];
   };
   const linksNaResposta = extrairLinksDaResposta(novaResposta);
+
   async function handleUploadArquivo(e) {
     const file = e.target.files[0];
     if (!file || !alunoAtual) return;
@@ -142,7 +148,6 @@ export default function RevisarAtividade() {
         setArquivoUrl(url);
         setNomeArquivo(file.name);
         setUploading(false);
-        alert("Arquivo anexado!");
       }
     );
   }
@@ -217,7 +222,9 @@ export default function RevisarAtividade() {
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
       }
-      alert("Rascunho salvo com sucesso!");
+      
+      setSalvoFeedback(true);
+      setTimeout(() => setSalvoFeedback(false), 2000);
     } catch (error) { console.error(error); } finally { setSalvando(false);
     }
   }
@@ -241,7 +248,6 @@ export default function RevisarAtividade() {
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
       if (copiarAoAprovar) { navigator.clipboard.writeText(feedbackEditado.trim()); setCopiado(true); setTimeout(() => setCopiado(false), 2000);
       }
-      alert("Feedback Aprovado e visível na V1!");
     } catch (error) { console.error(error);
     } finally { setSalvando(false); }
   }
@@ -252,7 +258,6 @@ export default function RevisarAtividade() {
     try {
       await updateDoc(doc(db, 'atividades', atividadeAtual.id), { postado: true, dataPostagem: serverTimestamp() });
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], postado: true } }));
-      alert("Tarefa Finalizada!");
     } catch (error) { console.error(error);
     } finally { setMarcandoPostado(false); }
   }
@@ -493,7 +498,9 @@ export default function RevisarAtividade() {
                   ) : (
                         <div className="grid grid-cols-2 gap-3">
      
-                           <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700 hover:bg-slate-700 transition-colors">💾 Rascunho</button>
+                           <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700 hover:bg-slate-700 transition-colors">
+                              {salvoFeedback ? '✅ Salvo!' : '💾 Rascunho'}
+                           </button>
                           <button onClick={() => handleAprovar(true)} disabled={salvando ||
                           !feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black hover:bg-blue-700 transition-colors">🚀 Aprovar</button>
                         </div>
