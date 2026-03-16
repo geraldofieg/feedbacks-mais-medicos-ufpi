@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, PlayCircle } from 'lucide-react';
@@ -50,7 +50,6 @@ export default function Dashboard() {
       setLoading(false);
     }
     fetchInst();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isAdmin, setEscolaSelecionada]);
 
   useEffect(() => {
@@ -87,6 +86,12 @@ export default function Dashboard() {
           const hoje = new Date();
           const hojeTime = hoje.getTime();
 
+          // 🔥 BURACO DA FECHADURA: Lê a data do último salvamento do prompt
+          const docRefUser = doc(db, 'usuarios', currentUser.uid);
+          const docSnapUser = await getDoc(docRefUser);
+          const dataUser = docSnapUser.data();
+          const timestampPrompt = dataUser?.timestampPrompt || 0;
+
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
           
@@ -102,7 +107,6 @@ export default function Dashboard() {
               const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
               const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
               
-              // 🔥 CIRURGIA V3: Agora considera resposta SE tiver texto OU arquivo anexado
               const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
 
               if (jaPostado) {
@@ -116,9 +120,15 @@ export default function Dashboard() {
                 progressoLocal[d.tarefaId] = true;
               }
 
+              // 🎯 O FILTRO TEMPORAL NO PAINEL PRINCIPAL
+              const dataAtiv = d.dataModificacao || d.dataEnvio || d.dataCriacao;
+              const timeAtiv = dataAtiv ? (dataAtiv.toDate ? dataAtiv.toDate().getTime() : new Date(dataAtiv).getTime()) : 0;
+              const ehDessaTemporada = timeAtiv >= timestampPrompt;
+
               const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
               const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
-              if ((jaAprovado || jaPostado) && fSugerido !== '') {
+              
+              if ((jaAprovado || jaPostado) && fSugerido !== '' && ehDessaTemporada) {
                 iaTotal++;
                 if (fFinal === fSugerido) iaOriginais++;
               }
@@ -224,8 +234,6 @@ export default function Dashboard() {
 
           setGestaoVista({ atual: blocoDestaque, anterior: blocoAnterior });
 
-          // NOVO: INTELIGÊNCIA DO PAINEL PRINCIPAL (CARD)
-          // Agora carrega TODAS as tarefas ativas, sem filtrar apenas a de prazo mais curto
           if (atuais.length > 0) {
             const andamentoList = atuais.map(t => {
               const diasRestantes = Math.ceil((t.timeFim - hojeTime) / (1000 * 3600 * 24));
@@ -236,7 +244,7 @@ export default function Dashboard() {
                 isFutura: false
               };
             });
-            andamentoList.sort((a, b) => a.diasRestantes - b.diasRestantes); // A mais urgente primeiro
+            andamentoList.sort((a, b) => a.diasRestantes - b.diasRestantes);
             setTarefasEmAndamento(andamentoList);
           } else if (futuras.length > 0) {
             const t = futuras[0];
@@ -259,7 +267,6 @@ export default function Dashboard() {
 
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
-  // --- INTELIGÊNCIA DO PASSO A PASSO (ONBOARDING) ---
   let passoAtual = 5; 
   if (!escolaSelecionada) passoAtual = 1;
   else if (minhasTurmas.length === 0) passoAtual = 2;
@@ -321,8 +328,6 @@ export default function Dashboard() {
     );
   };
 
-
-  // --- LÓGICA DE EXIBIÇÃO DO GRID E DO CARD MULTI-TAREFA ---
   const tarefasAtuais = tarefasEmAndamento.filter(t => !t.isFutura);
   const temTarefaAtual = tarefasAtuais.length > 0;
 
@@ -383,7 +388,6 @@ export default function Dashboard() {
               <option disabled>──────────</option>
               <option value="nova_instituicao">+ Criar Nova Instituição</option>
             </select>
-
           </div>
         </div>
       </div>
@@ -473,7 +477,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-4">
                 <div className="bg-white/20 p-3 rounded-xl shrink-0"><Sparkles size={24} className="text-purple-100" /></div>
                 <div>
-                  <h2 className="text-lg font-black text-white tracking-wide">Termômetro da IA</h2>
+                  <h2 className="text-lg font-black text-white tracking-wide">Termômetro do Prompt Atual</h2>
                   <p className="text-purple-200 text-xs font-medium mt-0.5">Porcentagem de feedbacks aprovados sem NENHUMA alteração.</p>
                 </div>
               </div>
@@ -487,13 +491,11 @@ export default function Dashboard() {
           {/* KANBAN E ATALHOS */}
           <div className={gridClass}>
             
-            {/* CARD DE TAREFAS ATUAIS (TELETRANSPORTE MUTANTE) */}
+            {/* CARD DE TAREFAS ATUAIS */}
             {temTarefaAtual && (
               <div className="bg-white border border-indigo-200 rounded-2xl shadow-sm flex flex-col hover:shadow-md transition-shadow relative overflow-hidden h-full">
-                {/* Background Decorativo Fixo */}
                 <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full z-0 pointer-events-none"></div>
                 
-                {/* Header fixo do card */}
                 <div className="p-5 pb-2 relative z-10 shrink-0 bg-white">
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest mt-1">
@@ -503,7 +505,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Área de conteúdo dinâmico (com scroll invisível se passar de 2 itens) */}
                 <div className="p-5 pt-0 relative z-10 flex-1 overflow-y-auto max-h-[140px]" style={{ scrollbarWidth: 'thin' }}>
                   <div className="space-y-4">
                     {tarefasAtuais.map((tarefa, idx) => (
