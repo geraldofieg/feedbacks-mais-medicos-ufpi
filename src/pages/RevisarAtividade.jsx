@@ -330,11 +330,14 @@ export default function RevisarAtividade() {
                     <div className="flex items-center gap-3 mb-4">
                       <h4 className="text-xs font-black text-slate-900 uppercase flex-1">2. Resposta do Aluno</h4>
                       <div className="flex items-center gap-4">
+                        {/* 🔥 NOVO: Link clicável para baixar o arquivo */}
                         {arquivoUrl ? (
                           <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200">
-                            <FileCheck size={14}/>
-                            <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{nomeArquivo}</span>
-                            <button onClick={() => { setArquivoUrl(''); setNomeArquivo(''); }} className="hover:text-red-500"><Trash2 size={14}/></button>
+                            <a href={arquivoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:underline cursor-pointer" title="Clique para visualizar/baixar o arquivo">
+                              <FileCheck size={14}/>
+                              <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{nomeArquivo || "Arquivo Anexado"}</span>
+                            </a>
+                            <button onClick={() => { setArquivoUrl(''); setNomeArquivo(''); }} className="hover:text-red-500 ml-1 border-l border-green-200 pl-2" title="Remover anexo"><Trash2 size={14}/></button>
                           </div>
                         ) : (
                           <label className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
@@ -372,7 +375,7 @@ export default function RevisarAtividade() {
                         </div>
                   ) : (
                         <div className="grid grid-cols-2 gap-3">
-                          <button onClick={handleSalvarRascunho} disabled={salvando || !feedbackEditado} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700">💾 Rascunho</button>
+                          <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700">💾 Rascunho</button>
                           <button onClick={() => handleAprovar(true)} disabled={salvando || !feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black">🚀 Aprovar</button>
                         </div>
                   )}
