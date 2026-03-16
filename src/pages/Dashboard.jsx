@@ -9,14 +9,12 @@ export default function Dashboard() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   const navigate = useNavigate(); 
   
-  // LEITURA DE CRACHÁ (RBAC)
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const planoUsuario = userProfile?.plano || 'basico';
   const isTier1 = planoUsuario === 'basico';
   const isTier2 = planoUsuario === 'intermediario';
   const isTier3 = planoUsuario === 'premium';
 
-  // VISIBILIDADE DAS CAIXAS
   const mostrarRevisao = true; 
   const mostrarFaltaPostar = isAdmin || isTier1 || isTier3; 
   const mostrarTermometroIA = isAdmin || isTier3;
@@ -26,12 +24,10 @@ export default function Dashboard() {
   const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]);
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
-  const [progressoTarefas, setProgressoTarefas] = useState({}); 
-  
+  const [progressoTarefas, setProgressoTarefas] = useState({});
   const [loading, setLoading] = useState(true);
   const [temAlunos, setTemAlunos] = useState(true); 
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
-
   const [gestaoVista, setGestaoVista] = useState({ atual: null, anterior: null });
 
   useEffect(() => {
@@ -85,8 +81,10 @@ export default function Dashboard() {
 
           const hoje = new Date();
           const hojeTime = hoje.getTime();
+          
+          // 🔥 LIMITES TEMPORAIS V3
+          const limiteInferior = new Date(2026, 0, 5).getTime(); // 05/Jan/2026
 
-          // 🔥 BURACO DA FECHADURA: Lê a data do último salvamento do prompt
           const docRefUser = doc(db, 'usuarios', currentUser.uid);
           const docSnapUser = await getDoc(docRefUser);
           const dataUser = docSnapUser.data();
@@ -106,7 +104,6 @@ export default function Dashboard() {
             if (tIds.includes(d.turmaId)) {
               const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
               const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
-              
               const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
 
               if (jaPostado) {
@@ -120,7 +117,6 @@ export default function Dashboard() {
                 progressoLocal[d.tarefaId] = true;
               }
 
-              // 🎯 O FILTRO TEMPORAL NO PAINEL PRINCIPAL
               const dataAtiv = d.dataModificacao || d.dataEnvio || d.dataCriacao;
               const timeAtiv = dataAtiv ? (dataAtiv.toDate ? dataAtiv.toDate().getTime() : new Date(dataAtiv).getTime()) : 0;
               const ehDessaTemporada = timeAtiv >= timestampPrompt;
@@ -164,7 +160,14 @@ export default function Dashboard() {
              });
           });
 
-          let tarefasEntregas = tarefasVivas.filter(t => tIds.includes(t.turmaId) && t.dataFim && t.tipo === 'entrega');
+          // 🔥 APLICAÇÃO DOS FILTROS (INCLUINDO FÓRUNS E MÓDULO 8)
+          let tarefasEntregas = tarefasVivas.filter(t => {
+             if (!tIds.includes(t.turmaId)) return false;
+             if (!t.dataFim) return false;
+             if (t.tipo && t.tipo !== 'entrega' && t.tipo !== 'forum') return false; 
+             return true;
+          });
+
           tarefasEntregas = tarefasEntregas.map(t => {
             const endObj = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
             const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
@@ -176,28 +179,25 @@ export default function Dashboard() {
               timeFim: endObj.getTime(),
               dataFimStr: endObj.toLocaleDateString('pt-BR')
             };
+          }).filter(t => {
+             // Corta o passado distante (antes de Jan/2026) e o futuro
+             return t.timeInicio >= limiteInferior && t.timeInicio <= hojeTime;
           });
 
           const atuais = tarefasEntregas.filter(t => t.timeInicio <= hojeTime && t.timeFim >= hojeTime);
-          const futuras = tarefasEntregas.filter(t => t.timeInicio > hojeTime).sort((a, b) => a.timeInicio - b.timeInicio);
           const passadas = tarefasEntregas.filter(t => t.timeFim < hojeTime).sort((a, b) => b.timeFim - a.timeFim);
 
           const buildGroup = (rawGroup, type) => {
             if (!rawGroup || rawGroup.length === 0) return null;
             let label = 'Anterior';
             let theme = 'gray'; 
-            let blockTitle = `Encerrado em ${rawGroup[0].dataFimStr} (Anterior)`;
+            let blockTitle = `Encerradas Recentemente (Anteriores)`;
 
             if (type === 'atual') {
               label = 'Atual';
               theme = 'orange';
-              blockTitle = `Prazo até ${rawGroup[0].dataFimStr} (Atual)`;
-            } else if (type === 'futuro') {
-              label = 'Em breve';
-              theme = 'blue';
-              const startStr = new Date(rawGroup[0].timeInicio).toLocaleDateString('pt-BR');
-              blockTitle = `Iniciará em ${startStr} (Em breve)`;
-            }
+              blockTitle = `Tarefas Vigentes (Atuais)`; // Titulo genérico para comportar módulos diferentes
+            } 
 
             let totalPendencias = 0;
             const tarefasComAlunos = rawGroup.map(t => {
@@ -217,14 +217,9 @@ export default function Dashboard() {
 
           if (atuais.length > 0) {
             atuais.sort((a, b) => a.timeFim - b.timeFim);
-            const dataFimAlvo = atuais[0].timeFim;
-            const grupoAtual = atuais.filter(t => t.timeFim === dataFimAlvo);
-            blocoDestaque = buildGroup(grupoAtual, 'atual');
-          } else if (futuras.length > 0) {
-            const dataInicioAlvo = futuras[0].timeInicio;
-            const grupoFuturo = futuras.filter(t => t.timeInicio === dataInicioAlvo);
-            blocoDestaque = buildGroup(grupoFuturo, 'futuro');
-          }
+            // 🔥 CORREÇÃO DO MÓDULO 8: Passamos todas as atuais para a view, sem agrupar por data final exata
+            blocoDestaque = buildGroup(atuais, 'atual');
+          } 
 
           let blocoAnterior = null;
           if (passadas.length > 0) {
@@ -246,15 +241,6 @@ export default function Dashboard() {
             });
             andamentoList.sort((a, b) => a.diasRestantes - b.diasRestantes);
             setTarefasEmAndamento(andamentoList);
-          } else if (futuras.length > 0) {
-            const t = futuras[0];
-            const diasRestantes = Math.ceil((t.timeInicio - hojeTime) / (1000 * 3600 * 24));
-            setTarefasEmAndamento([{
-              id: t.id,
-              nomeTarefa: t.nomeTarefa || t.titulo,
-              diasRestantes: diasRestantes,
-              isFutura: true
-            }]);
           } else {
             setTarefasEmAndamento([]);
           }
@@ -264,7 +250,6 @@ export default function Dashboard() {
     }
     fetchDados();
   }, [escolaSelecionada]);
-
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   let passoAtual = 5; 
@@ -388,6 +373,7 @@ export default function Dashboard() {
               <option disabled>──────────</option>
               <option value="nova_instituicao">+ Criar Nova Instituição</option>
             </select>
+
           </div>
         </div>
       </div>
