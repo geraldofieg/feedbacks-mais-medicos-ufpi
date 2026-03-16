@@ -96,43 +96,58 @@ export default function Dashboard() {
           let iaTotal = 0, iaOriginais = 0;
           let progressoLocal = {};
           
+          // 🔥 DESFRAGMENTADOR NO DASHBOARD (Para contar apenas os que importam)
           const ativMap = {}; 
+          const mapaDocsValidos = {};
 
           snapAtiv.docs.forEach(doc => {
-            const d = doc.data();
-            if (tIds.includes(d.turmaId)) {
-              const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
-              const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
-              const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
+            const ativ = doc.data();
+            if (!tIds.includes(ativ.turmaId)) return;
+            
+            const nomeOriginalTarefa = ativ.nomeTarefa || ativ.tarefa || ativ.modulo || 'Tarefa';
+            const nomeLimpoAtividade = nomeOriginalTarefa.toLowerCase().replace(/[\s-]/g, '');
+            const chaveUnica = `${nomeLimpoAtividade}_${ativ.alunoId}`;
+            
+            const timeAtual = ativ.dataModificacao?.toMillis() || ativ.dataAprovacao?.toMillis() || ativ.dataCriacao?.toMillis() || 0;
 
-              if (jaPostado) {
-                ok++; 
-                progressoLocal[d.tarefaId] = true;
-              } else if (jaAprovado) {
-                f++;  
-                progressoLocal[d.tarefaId] = true;
-              } else if (temResposta) {
-                p++;  
-                progressoLocal[d.tarefaId] = true;
-              }
-
-              // 🔥 CORREÇÃO: Pega o momento exato em que a atividade foi CORRIGIDA (e não a data que o aluno enviou)
-              const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
-              const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
-              
-              // A correção só entra na conta se o martelo foi batido DEPOIS que o prompt foi salvo
-              const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
-
-              const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
-              const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
-              
-              if ((jaAprovado || jaPostado) && fSugerido !== '' && ehDessaTemporada) {
-                iaTotal++;
-                if (fFinal === fSugerido) iaOriginais++;
-              }
-
-              ativMap[`${d.tarefaId}_${d.alunoId}`] = { jaPostado, jaAprovado, temResposta };
+            // Fica apenas com a versão mais recente da atividade
+            if (!mapaDocsValidos[chaveUnica] || timeAtual > mapaDocsValidos[chaveUnica].time) {
+              mapaDocsValidos[chaveUnica] = { ativ: ativ, time: timeAtual };
             }
+          });
+
+          // Agora a matemática acontece SÓ em cima dos documentos validados (ignorando clones/fantasmas)
+          Object.values(mapaDocsValidos).forEach(item => {
+            const d = item.ativ;
+            
+            const jaPostado = d.postado === true || d.enviado === true || d.status === 'finalizado' || d.status === 'postado';
+            const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
+            const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
+
+            if (jaPostado) {
+              ok++; 
+              progressoLocal[d.tarefaId] = true;
+            } else if (jaAprovado) {
+              f++;  
+              progressoLocal[d.tarefaId] = true;
+            } else if (temResposta) {
+              p++;  
+              progressoLocal[d.tarefaId] = true;
+            }
+
+            const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
+            const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
+            const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
+
+            const fFinal = d.feedbackFinal ? String(d.feedbackFinal).trim() : '';
+            const fSugerido = String(d.feedbackSugerido || d.feedbackIA || '').trim();
+            
+            if ((jaAprovado || jaPostado) && fSugerido !== '' && ehDessaTemporada) {
+              iaTotal++;
+              if (fFinal === fSugerido) iaOriginais++;
+            }
+
+            ativMap[`${d.tarefaId}_${d.alunoId}`] = { jaPostado, jaAprovado, temResposta };
           });
 
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
@@ -214,7 +229,6 @@ export default function Dashboard() {
           };
 
           let blocoDestaque = null;
-
           if (atuais.length > 0) {
             atuais.sort((a, b) => a.timeFim - b.timeFim);
             blocoDestaque = buildGroup(atuais, 'atual');
@@ -572,9 +586,9 @@ export default function Dashboard() {
                           {t.pendentes.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
                               {t.pendentes.map((nome, idx) => (
-                                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-bold text-gray-600 shadow-sm hover:border-orange-300 transition-colors cursor-default">
+                                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-bold text-gray-500 shadow-sm hover:border-gray-300 transition-colors cursor-default">
                                   <User size={12} className="text-gray-400"/> {nome}
-                               </span>
+                                </span>
                               ))}
                             </div>
                           ) : (
