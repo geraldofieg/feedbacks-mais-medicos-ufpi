@@ -13,9 +13,12 @@ export default function Turmas() {
   
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Estados de Criação
   const [novaTurma, setNovaTurma] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const [modoCriacao, setModoCriacao] = useState('nova');
+  
+  // Estados de Cópia
   const [turmasModelo, setTurmasModelo] = useState([]);
   const [modeloSelecionado, setModeloSelecionado] = useState('');
   const [nomeTurmaClonada, setNomeTurmaClonada] = useState('');
@@ -41,7 +44,6 @@ export default function Turmas() {
          return;
       }
 
-      // 🔥 CORREÇÃO AQUI: Se já existe uma escola selecionada vinda do Dashboard, confia nela!
       if (escolaSelecionada) {
          setPrecisaCriarEscola(false);
          setLoading(false);
@@ -50,7 +52,6 @@ export default function Turmas() {
 
       try {
         const instRef = collection(db, 'instituicoes');
-        // Removemos a trava de UID. Agora ele verifica se a faculdade existe globalmente.
         const snap = await getDocs(instRef);
         const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
         
@@ -153,7 +154,7 @@ export default function Turmas() {
         if (t.status !== 'lixeira') await addDoc(collection(db, 'tarefas'), { ...t, turmaId: tr.id, professorUid: currentUser.uid, dataCriacao: serverTimestamp() });
       }
       setTurmas([{ id: tr.id, ...nt, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]); setModeloSelecionado('');
-      setNomeTurmaClonada(''); setModoCriacao('nova');
+      setNomeTurmaClonada('');
     } catch (error) { console.error(error); } finally { setClonando(false);
     }
   }
@@ -191,103 +192,132 @@ export default function Turmas() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <Breadcrumb items={[{ label: 'Turmas' }]} />
-      <div className="flex flex-col md:flex-row justify-between gap-4 mb-8 mt-3 border-b pb-6">
+      
+      {/* HEADER MELHORADO (Instituição à esquerda, Ação de Nova Instituição Discreta à Direita) */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8 mt-3 border-b pb-6">
         <div>
-          <h1 className="text-2xl font-black text-gray-800">Gestão de Turmas</h1>
+          <h1 className="text-3xl font-black text-gray-800 tracking-tight mb-2">Gestão de Turmas</h1>
           {editandoEscola ? (
-            <div className="flex gap-2 mt-1">
-             
-              <input type="text" className="border rounded-lg px-2 py-1 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" value={nomeEscolaEdicao} onChange={e => setNomeEscolaEdicao(e.target.value)} autoFocus />
-              <button onClick={handleSalvarEdicaoEscola} className="bg-green-500 text-white p-1 rounded-md hover:bg-green-600"><Check size={14}/></button>
-              <button onClick={() => setEditandoEscola(false)} className="bg-gray-200 text-gray-600 p-1 rounded-md hover:bg-gray-300"><X size={14}/></button>
+            <div className="flex gap-2 mt-1 animate-in fade-in duration-200">
+              <input type="text" className="border-2 border-blue-200 rounded-lg px-3 py-1.5 font-bold text-gray-700 outline-none focus:border-blue-500" value={nomeEscolaEdicao} onChange={e => setNomeEscolaEdicao(e.target.value)} autoFocus />
+              <button onClick={handleSalvarEdicaoEscola} className="bg-green-500 text-white px-3 rounded-md hover:bg-green-600 shadow-sm"><Check size={16}/></button>
+              <button onClick={() => setEditandoEscola(false)} className="bg-gray-100 text-gray-500 px-3 rounded-md hover:bg-gray-200"><X size={16}/></button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-sm font-medium text-gray-500">Agrupamentos em: <strong className="text-gray-700">{escolaSelecionada?.nome}</strong></p>
-              <button onClick={() => { setEditandoEscola(true);
-              setNomeEscolaEdicao(escolaSelecionada.nome); }} className="text-gray-300 hover:text-blue-500 transition-colors"><Pencil size={14}/></button>
-              <button onClick={handleLixeiraEscola} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-500">Agrupamentos em: <strong className="text-gray-800 bg-gray-100 px-2 py-0.5 rounded-md ml-1">{escolaSelecionada?.nome}</strong></p>
+              <button onClick={() => { setEditandoEscola(true); setNomeEscolaEdicao(escolaSelecionada.nome); }} className="text-gray-400 hover:text-blue-500 transition-colors p-1" title="Renomear Instituição"><Pencil size={14}/></button>
+              <button onClick={handleLixeiraEscola} className="text-gray-400 hover:text-red-500 transition-colors p-1" title="Excluir Instituição"><Trash2 size={14}/></button>
             </div>
           )}
         </div>
-        <button onClick={() => setPrecisaCriarEscola(true)} className="flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-600 hover:text-blue-600 font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all text-sm"><Building2 size={16} /> Nova Instituição</button>
+        
+        {/* BOTÃO SECUNDÁRIO E DISCRETO PARA NOVA INSTITUIÇÃO */}
+        <button onClick={() => setPrecisaCriarEscola(true)} className="flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-blue-600 transition-colors bg-gray-50 hover:bg-blue-50 px-4 py-2 rounded-xl">
+          <Building2 size={14} /> Cadastrar outra Instituição
+        </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        <div className="w-full lg:w-2/3">
-          {turmas.length === 0 ?
-            <div className="p-10 text-center border-2 border-dashed rounded-2xl text-gray-400 font-bold bg-gray-50">Nenhuma sala de aula criada ainda.</div> : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {turmas.map(turma => (
-                <div key={turma.id} className="bg-white border rounded-2xl p-5 shadow-sm group hover:border-blue-300 transition-all">
-                  <div className="flex justify-between mb-3">
-       
-                    <div className={`p-2 rounded-lg ${turma.isModelo ? 'bg-yellow-50 text-yellow-600' : 'bg-blue-50 text-blue-600'}`}><BookOpen size={20}/></div>
-                    <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => { setEditandoId(turma.id); setNomeEdicao(turma.nome); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Pencil size={18}/></button>
-                 
-                      <button onClick={() => handleLixeira(turma.id, turma.nome)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
-                    </div>
-                  </div>
-                  {editandoId === turma.id ?
-                  (
-                    <div className="flex gap-2 mb-2">
-                      <input type="text" value={nomeEdicao} onChange={e => setNomeEdicao(e.target.value)} className="w-full border rounded-lg p-2 font-bold focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
-                      <button onClick={() => handleSalvarEdicao(turma.id)} className="bg-green-500 text-white px-2 rounded-lg hover:bg-green-600"><Check size={18}/></button>
-         
-                    </div>
-                  ) : <h3 className="font-black text-xl truncate mb-1 text-gray-800">{turma.nome}</h3>}
-                  <div className="mt-4 flex gap-2">
-                    <Link to="/alunos" state={{ turmaIdSelecionada: turma.id }} className="flex-1 text-center bg-gray-50 py-2 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors">Alunos</Link>
+      {/* BLOCO SUPERIOR: CARTÕES DE CRIAÇÃO LADO A LADO */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
         
-                    <Link to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="flex-1 text-center bg-blue-50 text-blue-600 py-2 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors">Tarefas</Link>
+        {/* CARTÃO 1: CRIAR DO ZERO */}
+        <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+           <div className="flex items-center gap-3 mb-5">
+              <div className="bg-blue-100 text-blue-600 p-3 rounded-xl"><Plus size={22}/></div>
+              <div>
+                 <h2 className="text-lg font-black text-gray-800 leading-tight">Criar turma do zero</h2>
+                 <p className="text-xs font-medium text-gray-500 mt-0.5">Inicie uma nova sala de aula limpa.</p>
+              </div>
+           </div>
+           <form onSubmit={handleCriarTurma} className="flex flex-col sm:flex-row gap-3">
+              <input type="text" required placeholder="Ex: Odontologia 3º Período..." className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all text-sm" value={novaTurma} onChange={e => setNovaTurma(e.target.value)} />
+              <button type="submit" disabled={salvando} className="bg-blue-600 text-white font-black px-6 py-3 rounded-xl shadow-md hover:bg-blue-700 transition-all whitespace-nowrap text-sm disabled:opacity-50">
+                {salvando ? 'Criando...' : 'Criar Turma'}
+              </button>
+           </form>
+        </div>
+
+        {/* CARTÃO 2: COPIAR EXISTENTE */}
+        <div className="bg-purple-50/30 border border-purple-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
+           <div className="absolute -right-6 -top-6 text-purple-100 opacity-50 pointer-events-none"><Copy size={100} /></div>
+           <div className="relative z-10">
+             <div className="flex items-center gap-3 mb-5">
+                <div className="bg-purple-100 text-purple-600 p-3 rounded-xl"><Copy size={22}/></div>
+                <div>
+                   <h2 className="text-lg font-black text-purple-900 leading-tight">Copiar turma existente</h2>
+                   <p className="text-xs font-medium text-purple-600/80 mt-0.5">Aproveite tarefas e estrutura já prontas.</p>
+                </div>
+             </div>
+             <form onSubmit={handleClonarTurma} className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <select required className="flex-1 px-4 py-3 bg-white border border-purple-200 rounded-xl font-bold outline-none cursor-pointer focus:ring-2 focus:ring-purple-500 text-sm text-gray-700 shadow-sm" value={modeloSelecionado} onChange={e => setModeloSelecionado(e.target.value)}>
+                    <option value="">Selecione a turma base...</option>
+                    {turmasModelo.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                  </select>
+                  <input type="text" required placeholder="Nome da nova turma..." className="flex-1 px-4 py-3 bg-white border border-purple-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-purple-500 text-sm text-gray-700 shadow-sm" value={nomeTurmaClonada} onChange={e => setNomeTurmaClonada(e.target.value)} />
+                </div>
+                <button type="submit" disabled={clonando || !modeloSelecionado} className="w-full bg-purple-600 text-white font-black py-3 rounded-xl shadow-md hover:bg-purple-700 transition-all text-sm disabled:opacity-50">
+                  {clonando ? 'Copiando...' : 'Copiar estrutura da turma'}
+                </button>
+             </form>
+           </div>
+        </div>
+
+      </div>
+
+      {/* BLOCO INFERIOR: GRELHA DE TURMAS ATIVAS */}
+      <div>
+        <h2 className="text-lg font-black text-gray-800 mb-4">Salas de Aula Ativas</h2>
+        
+        {turmas.length === 0 ? (
+          <div className="p-16 text-center border-2 border-dashed border-gray-200 rounded-3xl text-gray-400 font-bold bg-gray-50 flex flex-col items-center justify-center">
+             <BookOpen size={40} className="mb-4 text-gray-300" />
+             <p className="text-lg text-gray-500">Nenhuma sala de aula criada ainda.</p>
+             <p className="text-sm font-medium mt-2">Use um dos cartões acima para começar!</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {turmas.map(turma => (
+              <div key={turma.id} className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all group flex flex-col h-full">
+                
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`p-2.5 rounded-xl shrink-0 ${turma.isModelo ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                    <BookOpen size={20}/>
+                  </div>
+                  <div className="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => { setEditandoId(turma.id); setNomeEdicao(turma.nome); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Renomear"><Pencil size={16}/></button>
+                    <button onClick={() => handleLixeira(turma.id, turma.nome)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir"><Trash2 size={16}/></button>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-   
-        </div>
-        
-        <div className="w-full lg:w-1/3">
-          <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm sticky top-24">
-            <div className="flex bg-gray-50 p-1 rounded-2xl mb-4">
-              <button onClick={() => setModoCriacao('nova')} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${modoCriacao === 'nova' ?
-              'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}>Criar do Zero</button>
-              
-              {/* 🔥 BOTÃO RENOMEADO AQUI */}
-              <button onClick={() => setModoCriacao('clolar')} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${modoCriacao === 'clolar' ?
-              'bg-white text-purple-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}>Copiar turma existente</button>
-            </div>
-            
-            {modoCriacao === 'nova' ?
-            (
-              <form onSubmit={handleCriarTurma} className="flex flex-col gap-4 p-2">
-                <input type="text" required placeholder="Ex: Odontologia 3º Período..." className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" value={novaTurma} onChange={e => setNovaTurma(e.target.value)} />
-                <button type="submit" disabled={salvando} className="bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all">{salvando ? 'Criando...' : 'Criar Turma'}</button>
-            
-              </form>
-            ) : (
-              // 🔥 FORMULÁRIO DE CÓPIA COM SUBTÍTULO E TEXTOS ATUALIZADOS
-              <form onSubmit={handleClonarTurma} className="flex flex-col gap-4 p-4 bg-purple-50/50 rounded-2xl border border-purple-100 mt-2">
-                <p className="text-xs text-purple-700 text-center font-medium leading-relaxed px-2">
-               
-                  Aproveite a estrutura e as tarefas de uma turma já configurada na instituição.
-                </p>
-                <select required className="w-full p-4 bg-white border border-purple-200 rounded-xl font-bold outline-none cursor-pointer focus:ring-2 focus:ring-purple-500 text-gray-700" value={modeloSelecionado} onChange={e => setModeloSelecionado(e.target.value)}>
-                  <option value="">Selecione a turma base...</option>
-                  {turmasModelo.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
-       
-                <input type="text" required placeholder="Novo nome da sua turma..." className="w-full p-4 bg-white border border-purple-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-purple-500 text-gray-700" value={nomeTurmaClonada} onChange={e => setNomeTurmaClonada(e.target.value)} />
-                <button type="submit" disabled={clonando ||
-                !modeloSelecionado} className="bg-purple-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-purple-700 transition-all">{clonando ?
-                'Copiando...' : 'Copiar estrutura'}</button>
-              </form>
-            )}
+
+                <div className="mb-4 flex-1">
+                  {editandoId === turma.id ? (
+                    <div className="flex gap-2 animate-in fade-in duration-200">
+                      <input type="text" value={nomeEdicao} onChange={e => setNomeEdicao(e.target.value)} className="w-full border-2 border-blue-200 rounded-lg px-3 py-1.5 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none text-gray-800" autoFocus />
+                      <button onClick={() => handleSalvarEdicao(turma.id)} className="bg-green-500 text-white px-2 rounded-lg hover:bg-green-600 shadow-sm"><Check size={16}/></button>
+                    </div>
+                  ) : (
+                    <h3 className="font-black text-lg text-gray-800 leading-tight line-clamp-2" title={turma.nome}>{turma.nome}</h3>
+                  )}
+                  {turma.isModelo && <span className="inline-block mt-1 text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">Serve como Modelo</span>}
+                </div>
+
+                <div className="mt-auto pt-4 border-t border-gray-100 flex gap-3">
+                  <Link to="/alunos" state={{ turmaIdSelecionada: turma.id }} className="flex-1 flex items-center justify-center gap-1.5 bg-gray-50 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors">
+                    <Users size={14}/> Alunos
+                  </Link>
+                  <Link to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 py-2.5 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition-colors">
+                    <FileText size={14}/> Tarefas
+                  </Link>
+                </div>
+
+              </div>
+            ))}
           </div>
-        </div>
+        )}
       </div>
+
     </div>
   );
 }
