@@ -29,7 +29,9 @@ export default function Dashboard() {
   const [progressoTarefas, setProgressoTarefas] = useState({});
   const [temAlunos, setTemAlunos] = useState(true); 
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
-  const [gestaoVista, setGestaoVista] = useState({ atual: null, anterior: null });
+  
+  // 🔥 AJUSTE: Agora suporta múltiplas tarefas simultâneas
+  const [gestaoVista, setGestaoVista] = useState({ atuais: [], anteriores: [] });
 
   const [loadingInst, setLoadingInst] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
@@ -99,7 +101,6 @@ export default function Dashboard() {
         }
 
         // 🔥 A SEGUNDA TRAVA ANTI-LOOP 🔥
-        // Só chama a atualização global se a escola for realmente diferente!
         if (escolaSelecionada?.id !== escolaAlvo?.id) {
             setEscolaSelecionada(escolaAlvo);
         }
@@ -112,7 +113,7 @@ export default function Dashboard() {
     }
     setupRadarGlobal();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, isAdmin]); // removido setEscolaSelecionada da lista de dependências
+  }, [currentUser, isAdmin]);
 
   // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
   useEffect(() => {
@@ -156,40 +157,68 @@ export default function Dashboard() {
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
 
-          let p = 0, f = 0, ok = 0;
-          let iaTotal = 0, iaOriginais = 0;
-          let progressoLocal = {};
-
           const docRefUser = doc(db, 'usuarios', currentUser.uid);
           const docSnapUser = await getDoc(docRefUser);
           const timestampPrompt = docSnapUser.data()?.timestampPrompt || 0;
 
-          const atividadesGerais = snapAtiv.docs.map(d => d.data());
+          // 🔥 AJUSTE: DESFRAGMENTADOR ANTI-CLONES (Evita devedores falsos)
+          const atividadesGerais = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira');
+          const atividadesUnicas = {};
+          
+          atividadesGerais.forEach(ativ => {
+            if (!tIds.includes(ativ.turmaId)) return; 
 
-          atividadesGerais.forEach(d => {
-            if (tIds.includes(d.turmaId)) {
-              const tarefaPai = tarefasVivas.find(t => t.id === d.tarefaId);
-              const tarefaRestrita = tarefaPai?.atribuicaoEspecifica && tarefaPai?.alunosSelecionados && tarefaPai.alunosSelecionados.length > 0;
-              if (tarefaRestrita && !tarefaPai.alunosSelecionados.includes(d.alunoId)) return;
+            const chave = `${ativ.tarefaId}_${ativ.alunoId}`;
+            const existing = atividadesUnicas[chave];
+            
+            const temRespostaAtual = (ativ.resposta && String(ativ.resposta).trim() !== '') || !!ativ.arquivoUrl;
+            const temRespostaExisting = existing ? ((existing.resposta && String(existing.resposta).trim() !== '') || !!existing.arquivoUrl) : false;
 
-              const jaPostado = d.postado === true || d.status === 'finalizado' || d.status === 'postado';
-              const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
-              const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
+            if (!existing) {
+                atividadesUnicas[chave] = ativ;
+            } else {
+                if (temRespostaAtual && !temRespostaExisting) {
+                    atividadesUnicas[chave] = ativ;
+                } else if (temRespostaAtual === temRespostaExisting) {
+                    const timeAtual = ativ.dataCriacao?.toMillis ? ativ.dataCriacao.toMillis() : 0;
+                    const timeExistente = existing.dataCriacao?.toMillis ? existing.dataCriacao.toMillis() : 0;
+                    if (timeAtual > timeExistente) {
+                        atividadesUnicas[chave] = ativ;
+                    }
+                }
+            }
+          });
 
-              if (jaPostado) { ok++; progressoLocal[d.tarefaId] = true; }
-              else if (jaAprovado) { f++; progressoLocal[d.tarefaId] = true; }
-              else if (temResposta) { p++; progressoLocal[d.tarefaId] = true; }
+          const listaAtividadesDedup = Object.values(atividadesUnicas);
 
-              const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
-              const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
-              const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
+          let p = 0, f = 0, ok = 0;
+          let iaTotal = 0, iaOriginais = 0;
+          let progressoLocal = {};
 
-              const fFinal = (d.feedbackFinal || "").trim();
-              const fSugerido = (d.feedbackSugerido || d.feedbackIA || "").trim();
-              if ((jaAprovado || jaPostado) && fSugerido !== "" && ehDessaTemporada) {
-                iaTotal++;
-                if (fFinal === fSugerido) iaOriginais++;
-              }
+          listaAtividadesDedup.forEach(d => {
+            const tarefaPai = tarefasVivas.find(t => t.id === d.tarefaId);
+            if (!tarefaPai) return;
+
+            const tarefaRestrita = tarefaPai.atribuicaoEspecifica && tarefaPai.alunosSelecionados && tarefaPai.alunosSelecionados.length > 0;
+            if (tarefaRestrita && !tarefaPai.alunosSelecionados.includes(d.alunoId)) return;
+
+            const jaPostado = d.postado === true || d.status === 'finalizado' || d.status === 'postado';
+            const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
+            const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
+
+            if (jaPostado) { ok++; progressoLocal[d.tarefaId] = true; }
+            else if (jaAprovado) { f++; progressoLocal[d.tarefaId] = true; }
+            else if (temResposta) { p++; progressoLocal[d.tarefaId] = true; }
+
+            const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
+            const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
+            const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
+
+            const fFinal = (d.feedbackFinal || "").trim();
+            const fSugerido = (d.feedbackSugerido || d.feedbackIA || "").trim();
+            if ((jaAprovado || jaPostado) && fSugerido !== "" && ehDessaTemporada) {
+              iaTotal++;
+              if (fFinal === fSugerido) iaOriginais++;
             }
           });
 
@@ -228,9 +257,9 @@ export default function Dashboard() {
             if (tarefa.atribuicaoEspecifica && tarefa.alunosSelecionados && tarefa.alunosSelecionados.length > 0) {
               alvo = alvo.filter(a => tarefa.alunosSelecionados.includes(a.id));
             }
-            const entregasDaTarefa = atividadesGerais.filter(a => a.tarefaId === tarefa.id);
             const devedores = alvo.filter(aluno => {
-              const ent = entregasDaTarefa.find(e => e.alunoId === aluno.id);
+              // Busca no array que JÁ TEVE OS FANTASMAS IGNORADOS!
+              const ent = listaAtividadesDedup.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id);
               if (!ent) return true; 
               const temResposta = (ent.resposta && String(ent.resposta).trim() !== '') || !!ent.arquivoUrl;
               return !temResposta;
@@ -242,9 +271,10 @@ export default function Dashboard() {
             };
           };
 
+          // AJUSTE: Salva TODAS as tarefas atuais, e no máximo as 2 pendências mais recentes
           setGestaoVista({
-            atual: calcularDevedores(currentTasks.length > 0 ? currentTasks[0] : null),
-            anterior: calcularDevedores(pastTasks.length > 0 ? pastTasks[0] : null)
+            atuais: currentTasks.map(calcularDevedores).filter(Boolean),
+            anteriores: pastTasks.slice(0, 2).map(calcularDevedores).filter(Boolean)
           });
 
         } else {
@@ -467,53 +497,57 @@ export default function Dashboard() {
             )}
           </div>
           
-          {(gestaoVista.atual || gestaoVista.anterior) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-              {gestaoVista.atual && (
-                <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+          {(gestaoVista.atuais?.length > 0 || gestaoVista.anteriores?.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
+              
+              {/* RENDEREZIA TODAS AS TAREFAS ATUAIS (Sem o limite de 1) */}
+              {gestaoVista.atuais.map((gv, idx) => (
+                <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
                   <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
-                    <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl"><AlertTriangle size={20}/></div>
-                    <div>
+                    <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl shrink-0"><AlertTriangle size={20}/></div>
+                    <div className="min-w-0">
                       <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide">Faltam Entregar</h3>
-                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Tarefa Atual: ${gestaoVista.atual.nome}`}>Atual: {gestaoVista.atual.nome}</p>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Atual: ${gv.nome}`}>Atual: {gv.nome}</p>
                     </div>
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                    {gestaoVista.atual.devedores.length === 0 ? (
+                    {gv.devedores.length === 0 ? (
                       <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>
                     ) : (
-                      gestaoVista.atual.devedores.map((nome, idx) => (
-                        <div key={idx} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                      gv.devedores.map((nome, i) => (
+                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
                           <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
                         </div>
                       ))
                     )}
                   </div>
                 </div>
-              )}
+              ))}
 
-              {gestaoVista.anterior && (
-                <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+              {/* RENDEREZIA AS PENDÊNCIAS ANTERIORES (Máximo 2) */}
+              {gestaoVista.anteriores.map((gv, idx) => (
+                <div key={`ant-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
                   <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
-                    <div className="bg-red-100 text-red-600 p-2.5 rounded-xl"><Clock size={20}/></div>
-                    <div>
+                    <div className="bg-red-100 text-red-600 p-2.5 rounded-xl shrink-0"><Clock size={20}/></div>
+                    <div className="min-w-0">
                       <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide">Pendências Antigas</h3>
-                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Tarefa Anterior: ${gestaoVista.anterior.nome}`}>Anterior: {gestaoVista.anterior.nome}</p>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Anterior: ${gv.nome}`}>Anterior: {gv.nome}</p>
                     </div>
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                    {gestaoVista.anterior.devedores.length === 0 ? (
+                    {gv.devedores.length === 0 ? (
                       <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>
                     ) : (
-                      gestaoVista.anterior.devedores.map((nome, idx) => (
-                        <div key={idx} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                      gv.devedores.map((nome, i) => (
+                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
                           <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
                         </div>
                       ))
                     )}
                   </div>
                 </div>
-              )}
+              ))}
+
             </div>
           )}
         </>
