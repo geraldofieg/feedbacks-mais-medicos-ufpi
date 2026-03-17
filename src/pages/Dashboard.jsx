@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,10 +38,16 @@ export default function Dashboard() {
   const [nomeNovaInst, setNomeNovaInst] = useState('');
   const [criandoInst, setCriandoInst] = useState(false);
 
+  // 🔥 CADEADO FÍSICO ANTI-LOOP 🔥
+  const radarExecutado = useRef(false);
+
   // 1. A BÚSSOLA DE LOGIN (RADAR GLOBAL COM LÓGICA DE TURMA ➔ INSTITUIÇÃO)
   useEffect(() => {
+    if (!currentUser || radarExecutado.current) return;
+
     async function setupRadarGlobal() {
-      if (!currentUser) return;
+      radarExecutado.current = true; // Tranca a porta imediatamente
+      
       try {
         const instRef = collection(db, 'instituicoes');
         const snap = await getDocs(instRef);
@@ -50,7 +56,7 @@ export default function Dashboard() {
         setInstituicoes(lista);
 
         if (lista.length === 0) {
-          setEscolaSelecionada(null);
+          if (escolaSelecionada !== null) setEscolaSelecionada(null);
           setLoadingInst(false);
           return;
         }
@@ -71,36 +77,42 @@ export default function Dashboard() {
         const escolaCache = escolaCacheStr ? JSON.parse(escolaCacheStr) : null;
         const escolaCacheValida = escolaCache && lista.some(i => i.id === escolaCache.id);
 
+        let escolaAlvo = null;
+
         if (turmasGlobais.length > 0) {
             // Professor VETERANO. Tem turmas no sistema!
-            // Verifica se a instituição no cache tem alguma turma dele
             const temTurmaNoCache = escolaCacheValida && turmasGlobais.some(t => t.instituicaoId === escolaCache.id);
 
             if (temTurmaNoCache) {
-                // Perfeito. O cache aponta para um lugar onde ele tem trabalho.
-                setEscolaSelecionada(lista.find(i => i.id === escolaCache.id));
+                escolaAlvo = lista.find(i => i.id === escolaCache.id);
             } else {
-                // ERRO DE ROTA: O cache apontou para um lugar vazio (Ex: UFPA).
-                // A Bússola força a instituição da turma mais recente dele! (Ex: UFPI)
+                // ERRO DE ROTA: Bússola atua! Força a instituição da turma mais recente dele!
                 const idCerta = turmasGlobais[0].instituicaoId;
-                const escolaCerta = lista.find(i => i.id === idCerta);
-                if (escolaCerta) {
-                    setEscolaSelecionada(escolaCerta);
-                    localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaCerta));
-                } else {
-                    setEscolaSelecionada(null); 
+                escolaAlvo = lista.find(i => i.id === idCerta) || null;
+                if (escolaAlvo) {
+                    localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaAlvo));
                 }
             }
         } else {
-            // Professor NOVATO. Não tem turmas. Segue o jogo normal.
-            if (escolaCacheValida) setEscolaSelecionada(lista.find(i => i.id === escolaCache.id));
-            else setEscolaSelecionada(null);
+            // Professor NOVATO. Não tem turmas.
+            if (escolaCacheValida) escolaAlvo = lista.find(i => i.id === escolaCache.id);
         }
-      } catch (e) { console.error("Erro ao buscar instituições:", e); } 
-      finally { setLoadingInst(false); }
+
+        // 🔥 A SEGUNDA TRAVA ANTI-LOOP 🔥
+        // Só chama a atualização global se a escola for realmente diferente!
+        if (escolaSelecionada?.id !== escolaAlvo?.id) {
+            setEscolaSelecionada(escolaAlvo);
+        }
+
+      } catch (e) { 
+        console.error("Erro ao buscar instituições:", e); 
+      } finally { 
+        setLoadingInst(false); 
+      }
     }
     setupRadarGlobal();
-  }, [currentUser, isAdmin, setEscolaSelecionada]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, isAdmin]); // removido setEscolaSelecionada da lista de dependências
 
   // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
   useEffect(() => {
