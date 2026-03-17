@@ -47,25 +47,46 @@ export default function Login() {
           </div>
         )}
 
+        {/* O formulário agora tem as "pistas" que o Chrome precisa */}
         <form onSubmit={handleSubmit} className="space-y-5">
           
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">E-mail Profissional</label>
+            <label htmlFor="email" className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">E-mail Profissional</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Mail className="h-5 w-5 text-gray-400" />
               </div>
-              <input type="email" required className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="nome@instituicao.com.br" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input 
+                type="email" 
+                id="email"
+                name="email"
+                autoComplete="email"
+                required 
+                className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500" 
+                placeholder="nome@instituicao.com.br" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+              />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Senha de Acesso</label>
+            <label htmlFor="password" className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Senha de Acesso</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Lock className="h-5 w-5 text-gray-400" />
               </div>
-              <input type="password" required className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input 
+                type="password" 
+                id="password"
+                name="password"
+                autoComplete="current-password"
+                required 
+                className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500" 
+                placeholder="••••••••" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+              />
             </div>
           </div>
 
