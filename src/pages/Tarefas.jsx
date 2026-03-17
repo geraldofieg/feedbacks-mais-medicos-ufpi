@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { FileText, Plus, Search, Pencil, Trash2, Calendar, CalendarDays, StickyNote, GraduationCap, Check, X, RefreshCw, Paperclip, FileUp, FileCheck, ExternalLink, Users, User } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
-// IMPORTAÇÃO DAS EMENTAS ESTÁTICAS (FICHA TÉCNICA)
+// IMPORTAÇÃO DAS EMENTAS ESTÁTICAS
 import { ementaMaisMedicos } from '../data/ementaMaisMedicos';
 import { ementaUFPA } from '../data/ementaUFPA';
 
@@ -20,7 +20,6 @@ export default function Tarefas() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   
-  // 🔥 ESTADOS PARA AS ABAS (AGENDA VS FICHA TÉCNICA)
   const [abaAtiva, setAbaAtiva] = useState('agenda'); 
   const [esconderPassados, setEsconderPassados] = useState(true);
 
@@ -122,7 +121,6 @@ export default function Tarefas() {
     fetchDadosTurma();
   }, [turmaAtiva, escolaSelecionada]);
 
-  // LÓGICA VISUAL DO CRONOGRAMA
   const getStatusPrazo = (tsInicio, tsFim) => {
     let status = 'atual';
     let dias = 0;
@@ -247,7 +245,6 @@ export default function Tarefas() {
         professorUid: currentUser.uid,
         status: 'ativa', 
         dataCriacao: serverTimestamp(),
-        // 🔥 REGRA CRÍTICA DOC (Trava de Atribuição)
         atribuicaoEspecifica: atribuicaoEspecifica,
         alunosSelecionados: atribuicaoEspecifica ? alunosSelecionados : []
       };
@@ -266,14 +263,11 @@ export default function Tarefas() {
             turmaId: turmaAtiva,
             instituicaoId: escolaSelecionada.id,
             tarefaId: novaId,
-            
-            // 🔥 REGRA CRÍTICA DOC (Retrocompatibilidade Poliglota)
             nomeAluno: aluno.nome,
             aluno: aluno.nome,
             nomeTarefa: tituloSalvo,
             tarefa: tituloSalvo,
             modulo: tituloSalvo,
-
             resposta: '',
             nota: null,
             feedbackSugerido: '',
@@ -396,7 +390,6 @@ export default function Tarefas() {
           </div>
         )}
 
-        {/* 🔥 ABA DE AGENDA E FICHA TÉCNICA AQUI 🔥 */}
         {isTurmaMaisMedicos && turmaAtiva && (
           <div className="flex bg-gray-200/50 p-1.5 rounded-2xl mb-8 w-fit">
             <button onClick={() => setAbaAtiva('agenda')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${abaAtiva === 'agenda' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Agenda de Tarefas</button>
@@ -493,7 +486,9 @@ export default function Tarefas() {
                                <button onClick={() => iniciarEdicao(item)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar Tarefa"><Pencil size={18}/></button>
                                <button onClick={() => handleLixeira(item.id, item.nomeTarefa || item.titulo)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir Tarefa"><Trash2 size={18}/></button>
                              </div>
-                             {(item.tipo === 'entrega' || !item.tipo) && (
+                             
+                             {/* 🔥 BOTÃO CORRIGIR TAREFAS OCULTADO PARA TAREFAS FUTURAS 🔥 */}
+                             {(item.tipo === 'entrega' || !item.tipo) && status !== 'futuro' && (
                                <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all ${status === 'passado' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
                                  {status === 'passado' ? 'Consultar Histórico' : 'Corrigir Tarefas'}
                                </Link>
