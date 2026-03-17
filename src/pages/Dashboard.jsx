@@ -208,9 +208,20 @@ export default function Dashboard() {
 
             const fFinal = (d.feedbackFinal || "").trim();
             const fSugerido = (d.feedbackSugerido || d.feedbackIA || "").trim();
+            
+            // 🔥 AQUI ESTÁ A AUDITORIA SILENCIOSA ATIVADA 🔥
             if ((jaAprovado || jaPostado) && fSugerido !== "" && ehDessaTemporada) {
               iaTotal++;
-              if (fFinal === fSugerido) iaOriginais++;
+              const isIgual = (fFinal === fSugerido);
+              if (isIgual) {
+                iaOriginais++;
+              } else {
+                // 🕵️ AUDITORIA: Mostra no F12 os que falharam e o porquê!
+                console.log(`[AUDITORIA IA] Falha no Aluno: ${d.alunoId}`);
+                console.log(`-> IA Sugeriu (${fSugerido.length} letras): "${fSugerido}"`);
+                console.log(`-> Prof Salvou (${fFinal.length} letras): "${fFinal}"`);
+                console.log('--------------------------------------------------');
+              }
             }
           });
 
