@@ -10,8 +10,10 @@ export default function Dashboard() {
   const navigate = useNavigate(); 
   
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
-  const planoUsuario = userProfile?.plano || 'basico';
-  const isTier1 = planoUsuario === 'basico';
+  
+  // 🔥 LEITURA DE PLANOS 100% ESTrita e Limpa (Fim do Achismo)
+  const planoUsuario = (userProfile?.plano || 'basico').toLowerCase().trim();
+  const isTier1 = planoUsuario === 'basico' || planoUsuario === 'trial';
   const isTier2 = planoUsuario === 'intermediario';
   const isTier3 = planoUsuario === 'premium';
 
@@ -25,17 +27,18 @@ export default function Dashboard() {
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
   const [progressoTarefas, setProgressoTarefas] = useState({});
-  const [loading, setLoading] = useState(true);
   const [temAlunos, setTemAlunos] = useState(true); 
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
   const [gestaoVista, setGestaoVista] = useState({ atual: null, anterior: null });
 
-  // ESTADOS DO NOVO ONBOARDING (PASSO 1 INLINE)
+  const [loadingInst, setLoadingInst] = useState(true);
+  const [loadingDados, setLoadingDados] = useState(false);
+
   const [showFormNova, setShowFormNova] = useState(false);
   const [nomeNovaInst, setNomeNovaInst] = useState('');
   const [criandoInst, setCriandoInst] = useState(false);
 
-  // 1. BUSCA TODAS AS INSTITUIÇÕES E APLICA O RADAR GLOBAL
+  // 1. A BÚSSOLA DE LOGIN (RADAR GLOBAL COM LÓGICA DE TURMA ➔ INSTITUIÇÃO)
   useEffect(() => {
     async function setupRadarGlobal() {
       if (!currentUser) return;
@@ -48,58 +51,58 @@ export default function Dashboard() {
 
         if (lista.length === 0) {
           setEscolaSelecionada(null);
-          setLoading(false);
+          setLoadingInst(false);
           return;
         }
 
-        // 🔥 O RADAR GLOBAL INVISÍVEL 🔥
-        // Busca todas as turmas deste professor em QUALQUER instituição
+        // Puxa as turmas deste professor e ordena da mais recente para a mais antiga
         const turmasRef = collection(db, 'turmas');
         const qTurmasGlobais = isAdmin 
           ? turmasRef 
           : query(turmasRef, where('professorUid', '==', currentUser.uid));
         
         const snapTurmas = await getDocs(qTurmasGlobais);
-        const turmasGlobais = snapTurmas.docs.map(d => d.data()).filter(t => t.status !== 'lixeira');
+        const turmasGlobais = snapTurmas.docs
+            .map(d => ({ ...d.data(), tsCriacao: d.data().dataCriacao?.toMillis ? d.data().dataCriacao.toMillis() : 0 }))
+            .filter(t => t.status !== 'lixeira')
+            .sort((a, b) => b.tsCriacao - a.tsCriacao);
 
-        // Pega a escola que o navegador está a tentar carregar pelo Cache
         const escolaCacheStr = localStorage.getItem('@SaaS_EscolaSelecionada');
         const escolaCache = escolaCacheStr ? JSON.parse(escolaCacheStr) : null;
-        
-        const escolaAtualExiste = escolaCache && lista.find(i => i.id === escolaCache.id);
-        const temTurmaNaAtual = escolaAtualExiste && turmasGlobais.some(t => t.instituicaoId === escolaCache.id);
+        const escolaCacheValida = escolaCache && lista.some(i => i.id === escolaCache.id);
 
-        if (turmasGlobais.length > 0 && !temTurmaNaAtual) {
-            // CENÁRIO: Professor VETERANO, mas caiu numa faculdade onde não tem turmas.
-            // A Bússola atua e puxa-o de volta para a faculdade onde ele tem turmas!
-            const idCerta = turmasGlobais[0].instituicaoId;
-            const escolaCerta = lista.find(i => i.id === idCerta);
-            
-            if (escolaCerta) {
-                setEscolaSelecionada(escolaCerta);
-                localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaCerta));
+        if (turmasGlobais.length > 0) {
+            // Professor VETERANO. Tem turmas no sistema!
+            // Verifica se a instituição no cache tem alguma turma dele
+            const temTurmaNoCache = escolaCacheValida && turmasGlobais.some(t => t.instituicaoId === escolaCache.id);
+
+            if (temTurmaNoCache) {
+                // Perfeito. O cache aponta para um lugar onde ele tem trabalho.
+                setEscolaSelecionada(lista.find(i => i.id === escolaCache.id));
             } else {
-                setEscolaSelecionada(null);
+                // ERRO DE ROTA: O cache apontou para um lugar vazio (Ex: UFPA).
+                // A Bússola força a instituição da turma mais recente dele! (Ex: UFPI)
+                const idCerta = turmasGlobais[0].instituicaoId;
+                const escolaCerta = lista.find(i => i.id === idCerta);
+                if (escolaCerta) {
+                    setEscolaSelecionada(escolaCerta);
+                    localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaCerta));
+                } else {
+                    setEscolaSelecionada(null); 
+                }
             }
-        } else if (!escolaAtualExiste) {
-            // CENÁRIO: Professor NOVATO, ou cache vazio. Mantém a lógica de perguntar onde ele ensina.
-            setEscolaSelecionada(null); 
         } else {
-            // TUDO CERTO: Ele tem turmas na escola atual ou é um novato a explorar. Mantém o cache.
-            setEscolaSelecionada(escolaAtualExiste);
+            // Professor NOVATO. Não tem turmas. Segue o jogo normal.
+            if (escolaCacheValida) setEscolaSelecionada(lista.find(i => i.id === escolaCache.id));
+            else setEscolaSelecionada(null);
         }
-
-      } catch (e) {
-        console.error("Erro ao buscar instituições:", e);
-      } finally {
-        setLoading(false);
-      }
+      } catch (e) { console.error("Erro ao buscar instituições:", e); } 
+      finally { setLoadingInst(false); }
     }
     setupRadarGlobal();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isAdmin, setEscolaSelecionada]);
 
-  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA (COM TRAVA DE QUINTAL PRIVADO)
+  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id || instituicoes.length === 0) {
@@ -107,6 +110,8 @@ export default function Dashboard() {
         setMinhasTurmas([]);
         return;
       }
+      
+      setLoadingDados(true); 
       
       try {
         const turmasRef = collection(db, 'turmas');
@@ -123,17 +128,19 @@ export default function Dashboard() {
           
           const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAlunos = await getDocs(qAlunos);
-          const alunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId));
-          setTemAlunos(alunosVivos.length > 0);
+          
+          const listaAlunosVivos = snapAlunos.docs
+            .filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId))
+            .map(d => ({id: d.id, nome: d.data().nome, turmaId: d.data().turmaId}));
+          
+          setTemAlunos(listaAlunosVivos.length > 0);
 
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
           const tarefasVivas = snapTarefas.docs.map(d => ({id: d.id, ...d.data()})).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
           setTemTarefasGeral(tarefasVivas.length > 0);
 
-          const hoje = new Date();
-          const hojeTime = hoje.getTime();
-
+          const hojeTime = new Date().getTime();
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
 
@@ -143,14 +150,14 @@ export default function Dashboard() {
 
           const docRefUser = doc(db, 'usuarios', currentUser.uid);
           const docSnapUser = await getDoc(docRefUser);
-          const dataUser = docSnapUser.data();
-          const timestampPrompt = dataUser?.timestampPrompt || 0;
+          const timestampPrompt = docSnapUser.data()?.timestampPrompt || 0;
 
-          snapAtiv.docs.forEach(doc => {
-            const d = doc.data();
+          const atividadesGerais = snapAtiv.docs.map(d => d.data());
+
+          atividadesGerais.forEach(d => {
             if (tIds.includes(d.turmaId)) {
               const tarefaPai = tarefasVivas.find(t => t.id === d.tarefaId);
-              const tarefaRestrita = tarefaPai?.alunosSelecionados && tarefaPai.alunosSelecionados.length > 0;
+              const tarefaRestrita = tarefaPai?.atribuicaoEspecifica && tarefaPai?.alunosSelecionados && tarefaPai.alunosSelecionados.length > 0;
               if (tarefaRestrita && !tarefaPai.alunosSelecionados.includes(d.alunoId)) return;
 
               const jaPostado = d.postado === true || d.status === 'finalizado' || d.status === 'postado';
@@ -178,29 +185,62 @@ export default function Dashboard() {
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
           setProgressoTarefas(progressoLocal);
 
-          const agenda = tarefasVivas.filter(t => t.dataFim).map(t => {
-            const end = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
-            const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
-            const startObj = startRaw ? (startRaw.toDate ? startRaw.toDate() : new Date(startRaw)) : new Date();
-            const timeInicio = startObj.getTime();
-            
-            const referenceTime = timeInicio > hojeTime ? timeInicio : end.getTime();
-            const diasRestantes = Math.ceil((referenceTime - hojeTime) / (1000 * 3600 * 24));
-            
-            return { 
-                id: t.id, 
-                nomeTarefa: t.nomeTarefa || t.titulo, 
-                diasRestantes: diasRestantes,
-                isFutura: timeInicio > hojeTime 
+          const tarefasPrazo = tarefasVivas.filter(t => t.dataFim).map(t => {
+            const timeFim = t.dataFim.toDate ? t.dataFim.toDate().getTime() : new Date(t.dataFim).getTime();
+            const timeInicio = t.dataInicio ? (t.dataInicio.toDate ? t.dataInicio.toDate().getTime() : new Date(t.dataInicio).getTime()) : 0;
+            return {
+              ...t,
+              timeFim,
+              timeInicio,
+              isFutura: timeInicio > hojeTime,
+              isPassada: timeFim < hojeTime,
+              diasRestantes: Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24))
             };
-          }).sort((a,b) => (a.isFutura === b.isFutura) ? (a.diasRestantes - b.diasRestantes) : (a.isFutura ? 1 : -1));
+          });
 
+          const agenda = tarefasPrazo.map(t => ({
+            id: t.id,
+            nomeTarefa: t.nomeTarefa || t.titulo,
+            diasRestantes: t.diasRestantes,
+            isFutura: t.isFutura
+          })).sort((a,b) => (a.isFutura === b.isFutura) ? (a.diasRestantes - b.diasRestantes) : (a.isFutura ? 1 : -1));
+          
           setTarefasEmAndamento(agenda.filter(t => t.diasRestantes >= 0 && !t.isFutura).slice(0, 5));
+
+          const currentTasks = tarefasPrazo.filter(t => !t.isFutura && !t.isPassada).sort((a, b) => a.timeFim - b.timeFim);
+          const pastTasks = tarefasPrazo.filter(t => t.isPassada).sort((a, b) => b.timeFim - a.timeFim);
+
+          const calcularDevedores = (tarefa) => {
+            if (!tarefa) return null;
+            let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
+            if (tarefa.atribuicaoEspecifica && tarefa.alunosSelecionados && tarefa.alunosSelecionados.length > 0) {
+              alvo = alvo.filter(a => tarefa.alunosSelecionados.includes(a.id));
+            }
+            const entregasDaTarefa = atividadesGerais.filter(a => a.tarefaId === tarefa.id);
+            const devedores = alvo.filter(aluno => {
+              const ent = entregasDaTarefa.find(e => e.alunoId === aluno.id);
+              if (!ent) return true; 
+              const temResposta = (ent.resposta && String(ent.resposta).trim() !== '') || !!ent.arquivoUrl;
+              return !temResposta;
+            });
+            return {
+              id: tarefa.id,
+              nome: tarefa.nomeTarefa || tarefa.titulo,
+              devedores: devedores.map(d => d.nome).sort()
+            };
+          };
+
+          setGestaoVista({
+            atual: calcularDevedores(currentTasks.length > 0 ? currentTasks[0] : null),
+            anterior: calcularDevedores(pastTasks.length > 0 ? pastTasks[0] : null)
+          });
+
         } else {
           setTemAlunos(false);
           setTemTarefasGeral(false);
         }
-      } catch (e) { console.error("Erro ao carregar dados do dashboard:", e); }
+      } catch (e) { console.error("Erro ao carregar dados:", e); }
+      finally { setLoadingDados(false); } 
     }
     fetchDados();
   }, [escolaSelecionada, instituicoes, currentUser, isAdmin]);
@@ -228,7 +268,6 @@ export default function Dashboard() {
 
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
   
-  // LÓGICA DE PASSOS DO ONBOARDING
   let passoAtual = 5;
   if (!escolaSelecionada?.id || instituicoes.length === 0) passoAtual = 1;
   else if (minhasTurmas.length === 0) passoAtual = 2;
@@ -262,35 +301,28 @@ export default function Dashboard() {
     );
   };
 
-  if (loading) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
+  if (loadingInst || loadingDados) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
   if (!escolaSelecionada?.id || instituicoes.length === 0) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8 text-center animate-in fade-in duration-700">
         {renderBarraProgresso()}
-        
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-[40px] shadow-2xl max-w-lg mx-auto mt-10">
            <School size={56} className="mx-auto text-blue-600 mb-6" />
            <h1 className="text-3xl font-black text-gray-800 mb-3 tracking-tight">Onde você ensina?</h1>
            <p className="text-gray-500 font-medium mb-8 text-lg leading-relaxed">
              Selecione sua instituição para acessar turmas já criadas por colegas, ou cadastre uma nova.
            </p>
-           
            <div className="space-y-4 text-left">
               <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Instituições Cadastradas</label>
-              <select 
-                 className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-bold text-gray-700 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
-                 defaultValue=""
-                 onChange={(e) => {
-                    if (e.target.value === 'nova') {
-                        setShowFormNova(true);
-                    } else if (e.target.value !== '') {
+              <select className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-bold text-gray-700 outline-none focus:border-blue-500 cursor-pointer shadow-sm" defaultValue="" onChange={(e) => {
+                    if (e.target.value === 'nova') setShowFormNova(true);
+                    else if (e.target.value !== '') {
                         const inst = instituicoes.find(i => i.id === e.target.value);
                         setEscolaSelecionada(inst);
                         localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(inst));
                     }
-                 }}
-              >
+                 }}>
                  <option value="" disabled>Selecione na lista...</option>
                  {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
                  <option disabled>──────────</option>
@@ -299,11 +331,7 @@ export default function Dashboard() {
 
               {showFormNova && (
                  <form onSubmit={handleCriarInstituicao} className="mt-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 animate-in slide-in-from-top-4 duration-300">
-                    <input 
-                      autoFocus required placeholder="Nome da nova instituição..." 
-                      className="w-full p-4 bg-white border-2 border-blue-200 rounded-2xl font-bold outline-none focus:border-blue-500 mb-3 text-gray-800"
-                      value={nomeNovaInst} onChange={e => setNomeNovaInst(e.target.value)}
-                    />
+                    <input autoFocus required placeholder="Nome da nova instituição..." className="w-full p-4 bg-white border-2 border-blue-200 rounded-2xl font-bold outline-none focus:border-blue-500 mb-3 text-gray-800" value={nomeNovaInst} onChange={e => setNomeNovaInst(e.target.value)}/>
                     <button disabled={criandoInst} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">{criandoInst ? 'Criando...' : 'Salvar Instituição'}</button>
                     <button type="button" onClick={() => setShowFormNova(false)} className="w-full mt-2 py-2 text-sm font-bold text-gray-400 hover:text-gray-600">Cancelar</button>
                  </form>
@@ -321,17 +349,12 @@ export default function Dashboard() {
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
           <div className="flex items-center gap-2 mt-2 max-w-full">
             <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
-            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner truncate max-w-[220px] sm:max-w-md" 
-              value={escolaSelecionada?.id || ''} 
-              onChange={e => {
+            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => {
                 if (e.target.value === 'nova_instituicao') navigate('/turmas', { state: { abrirModalInstituicao: true } });
                 else setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value));
-              }}
-            >
+              }}>
               {instituicoes.map(i => (
-                <option key={i.id} value={i.id} className="truncate">
-                  {i.nome} {isAdmin && i.professorUid === currentUser.uid ? '(Sua conta)' : isAdmin ? '(De outro prof.)' : ''}
-                </option>
+                <option key={i.id} value={i.id} className="truncate">{i.nome} {isAdmin && i.professorUid === currentUser.uid ? '(Sua conta)' : isAdmin ? '(De outro prof.)' : ''}</option>
               ))}
               <option disabled>──────────</option>
               <option value="nova_instituicao">+ Criar Nova Instituição</option>
@@ -347,71 +370,30 @@ export default function Dashboard() {
           <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi vinculada.</h2>
           <p className="text-gray-500 font-medium mb-8 text-lg">O próximo passo é configurar sua primeira turma para gerenciar os alunos.</p>
-          
           <div className="space-y-4">
             <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">
               Passo 2: Configurar Turma <ChevronRight size={18}/>
             </Link>
-            <div className="flex items-center justify-center gap-2 text-purple-600 font-bold text-sm animate-pulse mt-4">
-              <Sparkles size={16}/>
-              <span>Dica: Você poderá "Copiar turma existente" neste passo!</span>
-            </div>
+            <div className="flex items-center justify-center gap-2 text-purple-600 font-bold text-sm animate-pulse mt-4"><Sparkles size={16}/><span>Dica: Você poderá "Copiar turma existente" neste passo!</span></div>
           </div>
         </div>
-      ) : 
-
-      !temAlunos ? (
+      ) : !temAlunos ? (
         <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12 animate-in zoom-in-95 duration-500">
           <div className="bg-orange-50 text-orange-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><UserPlus size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Turma configurada! Mas e os alunos?</h2>
           <p className="text-gray-500 font-medium mb-8 text-lg">Uma sala de aula não funciona sem eles. Vamos adicionar a lista de alunos para que eles possam receber as atividades.</p>
-          <Link to="/alunos" className="inline-flex items-center gap-2 bg-orange-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-orange-600/20 hover:bg-orange-700 transition-all">
-            Passo 3: Cadastrar Alunos <ChevronRight size={18}/>
-          </Link>
+          <Link to="/alunos" className="inline-flex items-center gap-2 bg-orange-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-orange-600/20 hover:bg-orange-700 transition-all">Passo 3: Cadastrar Alunos <ChevronRight size={18}/></Link>
         </div>
-      ) : 
-
-      !temTarefasGeral ? (
+      ) : !temTarefasGeral ? (
         <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12 animate-in zoom-in-95 duration-500">
           <div className="bg-purple-50 text-purple-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><FileText size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Tudo pronto! Vamos ao trabalho.</h2>
           <p className="text-gray-500 font-medium mb-8 text-lg">Sua turma já tem alunos cadastrados. Que tal lançar o seu primeiro desafio ou atividade para eles?</p>
-          <Link to="/tarefas" className="inline-flex items-center gap-2 bg-purple-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-purple-600/20 hover:bg-purple-700 transition-all">
-            Passo 4: Criar Tarefa <ChevronRight size={18}/>
-          </Link>
+          <Link to="/tarefas" className="inline-flex items-center gap-2 bg-purple-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-purple-600/20 hover:bg-purple-700 transition-all">Passo 4: Criar Tarefa <ChevronRight size={18}/></Link>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
-            <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-[11px] font-black text-yellow-600 uppercase tracking-widest mt-1">Aguardando Revisão</h3>
-                <div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div>
-              </div>
-              <span className="text-4xl font-black text-gray-800">{kanban.pendentes}</span>
-              <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
-            </div>
-            
-            <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest mt-1">Aguardando Postar</h3>
-                <div className="text-blue-500 bg-blue-50 p-1.5 rounded-lg"><Send size={20}/></div>
-              </div>
-              <span className="text-4xl font-black text-gray-800">{kanban.faltaLancar}</span>
-              <Link to="/faltapostar" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Copiar p/ Site <ChevronRight size={14}/></Link>
-            </div>
-            
-            <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
-                <div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div>
-              </div>
-              <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
-              <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
-            </div>
-          </div>
-          
-          <div className="bg-slate-900 rounded-3xl p-6 md:p-8 text-white border border-slate-800 shadow-xl">
+          <div className="bg-slate-900 rounded-3xl p-6 md:p-8 text-white border border-slate-800 shadow-xl mb-10">
              <div className="flex items-center gap-3 mb-6">
                 <div className="bg-blue-600 p-2.5 rounded-xl"><Calendar size={22} /></div>
                 <h2 className="text-xl font-black tracking-tight">Próximas Entregas do Cronograma</h2>
@@ -429,6 +411,99 @@ export default function Dashboard() {
                 )}
              </div>
           </div>
+
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${mostrarFaltaPostar && mostrarTermometroIA ? 'lg:grid-cols-4' : (mostrarFaltaPostar || mostrarTermometroIA) ? 'lg:grid-cols-3' : ''} gap-5 mb-10`}>
+            
+            <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-[11px] font-black text-yellow-600 uppercase tracking-widest mt-1">Aguardando Revisão</h3>
+                <div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div>
+              </div>
+              <span className="text-4xl font-black text-gray-800">{kanban.pendentes}</span>
+              <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
+            </div>
+            
+            {mostrarFaltaPostar && (
+              <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest mt-1">Aguardando Postar</h3>
+                  <div className="text-blue-500 bg-blue-50 p-1.5 rounded-lg"><Send size={20}/></div>
+                </div>
+                <span className="text-4xl font-black text-gray-800">{kanban.faltaLancar}</span>
+                <Link to="/faltapostar" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Copiar p/ Site <ChevronRight size={14}/></Link>
+              </div>
+            )}
+            
+            <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
+                <div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div>
+              </div>
+              <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
+              <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
+            </div>
+
+            {mostrarTermometroIA && (
+              <div className="bg-white border border-purple-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-[11px] font-black text-purple-600 uppercase tracking-widest mt-1">Termômetro IA</h3>
+                  <div className="text-purple-500 bg-purple-50 p-1.5 rounded-lg"><Sparkles size={20}/></div>
+                </div>
+                <span className="text-4xl font-black text-gray-800">{metricasIA.percentual}%</span>
+                <p className="mt-4 text-xs font-bold text-gray-500 tracking-wide">{metricasIA.originais} de {metricasIA.total} originais</p>
+              </div>
+            )}
+          </div>
+          
+          {(gestaoVista.atual || gestaoVista.anterior) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+              {gestaoVista.atual && (
+                <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
+                    <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl"><AlertTriangle size={20}/></div>
+                    <div>
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide">Faltam Entregar</h3>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Tarefa Atual: ${gestaoVista.atual.nome}`}>Atual: {gestaoVista.atual.nome}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                    {gestaoVista.atual.devedores.length === 0 ? (
+                      <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>
+                    ) : (
+                      gestaoVista.atual.devedores.map((nome, idx) => (
+                        <div key={idx} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {gestaoVista.anterior && (
+                <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
+                    <div className="bg-red-100 text-red-600 p-2.5 rounded-xl"><Clock size={20}/></div>
+                    <div>
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide">Pendências Antigas</h3>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Tarefa Anterior: ${gestaoVista.anterior.nome}`}>Anterior: {gestaoVista.anterior.nome}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                    {gestaoVista.anterior.devedores.length === 0 ? (
+                      <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>
+                    ) : (
+                      gestaoVista.anterior.devedores.map((nome, idx) => (
+                        <div key={idx} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
