@@ -35,9 +35,9 @@ export default function Dashboard() {
   const [nomeNovaInst, setNomeNovaInst] = useState('');
   const [criandoInst, setCriandoInst] = useState(false);
 
-  // 1. BUSCA TODAS AS INSTITUIÇÕES PARA O ONBOARDING
+  // 1. BUSCA TODAS AS INSTITUIÇÕES E APLICA O RADAR GLOBAL
   useEffect(() => {
-    async function fetchInst() {
+    async function setupRadarGlobal() {
       if (!currentUser) return;
       try {
         const instRef = collection(db, 'instituicoes');
@@ -45,21 +45,59 @@ export default function Dashboard() {
         const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
         lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
         setInstituicoes(lista);
-        
+
         if (lista.length === 0) {
           setEscolaSelecionada(null);
-        } else {
-          const escolaAindaExiste = escolaSelecionada && lista.find(i => i.id === escolaSelecionada.id);
-          if (escolaSelecionada && !escolaAindaExiste) setEscolaSelecionada(null);
+          setLoading(false);
+          return;
         }
+
+        // 🔥 O RADAR GLOBAL INVISÍVEL 🔥
+        // Busca todas as turmas deste professor em QUALQUER instituição
+        const turmasRef = collection(db, 'turmas');
+        const qTurmasGlobais = isAdmin 
+          ? turmasRef 
+          : query(turmasRef, where('professorUid', '==', currentUser.uid));
+        
+        const snapTurmas = await getDocs(qTurmasGlobais);
+        const turmasGlobais = snapTurmas.docs.map(d => d.data()).filter(t => t.status !== 'lixeira');
+
+        // Pega a escola que o navegador está a tentar carregar pelo Cache
+        const escolaCacheStr = localStorage.getItem('@SaaS_EscolaSelecionada');
+        const escolaCache = escolaCacheStr ? JSON.parse(escolaCacheStr) : null;
+        
+        const escolaAtualExiste = escolaCache && lista.find(i => i.id === escolaCache.id);
+        const temTurmaNaAtual = escolaAtualExiste && turmasGlobais.some(t => t.instituicaoId === escolaCache.id);
+
+        if (turmasGlobais.length > 0 && !temTurmaNaAtual) {
+            // CENÁRIO: Professor VETERANO, mas caiu numa faculdade onde não tem turmas.
+            // A Bússola atua e puxa-o de volta para a faculdade onde ele tem turmas!
+            const idCerta = turmasGlobais[0].instituicaoId;
+            const escolaCerta = lista.find(i => i.id === idCerta);
+            
+            if (escolaCerta) {
+                setEscolaSelecionada(escolaCerta);
+                localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaCerta));
+            } else {
+                setEscolaSelecionada(null);
+            }
+        } else if (!escolaAtualExiste) {
+            // CENÁRIO: Professor NOVATO, ou cache vazio. Mantém a lógica de perguntar onde ele ensina.
+            setEscolaSelecionada(null); 
+        } else {
+            // TUDO CERTO: Ele tem turmas na escola atual ou é um novato a explorar. Mantém o cache.
+            setEscolaSelecionada(escolaAtualExiste);
+        }
+
       } catch (e) {
         console.error("Erro ao buscar instituições:", e);
       } finally {
         setLoading(false);
       }
     }
-    fetchInst();
-  }, [currentUser, setEscolaSelecionada, escolaSelecionada]);
+    setupRadarGlobal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, isAdmin, setEscolaSelecionada]);
 
   // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA (COM TRAVA DE QUINTAL PRIVADO)
   useEffect(() => {
@@ -157,7 +195,6 @@ export default function Dashboard() {
             };
           }).sort((a,b) => (a.isFutura === b.isFutura) ? (a.diasRestantes - b.diasRestantes) : (a.isFutura ? 1 : -1));
 
-          // 🔥 CORREÇÃO: Filtra para não mostrar tarefas que ainda não começaram (!t.isFutura)
           setTarefasEmAndamento(agenda.filter(t => t.diasRestantes >= 0 && !t.isFutura).slice(0, 5));
         } else {
           setTemAlunos(false);
