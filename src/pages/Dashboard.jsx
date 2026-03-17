@@ -71,7 +71,6 @@ export default function Dashboard() {
       }
       
       try {
-        // 🔥 A MÁGICA DA BIFURCAÇÃO: Busca APENAS as turmas deste professor (ou todas se for admin)
         const turmasRef = collection(db, 'turmas');
         const qTurmas = isAdmin 
             ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
@@ -84,13 +83,11 @@ export default function Dashboard() {
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
           
-          // Verifica se existem alunos NAS TURMAS DELE
           const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAlunos = await getDocs(qAlunos);
           const alunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId));
           setTemAlunos(alunosVivos.length > 0);
 
-          // Verifica se existem tarefas NAS TURMAS DELE
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
           const tarefasVivas = snapTarefas.docs.map(d => ({id: d.id, ...d.data()})).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
@@ -114,7 +111,6 @@ export default function Dashboard() {
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
             if (tIds.includes(d.turmaId)) {
-              // Trava anti-falsos positivos (Ignora alunos não selecionados em tarefas restritas)
               const tarefaPai = tarefasVivas.find(t => t.id === d.tarefaId);
               const tarefaRestrita = tarefaPai?.alunosSelecionados && tarefaPai.alunosSelecionados.length > 0;
               if (tarefaRestrita && !tarefaPai.alunosSelecionados.includes(d.alunoId)) return;
@@ -161,9 +157,9 @@ export default function Dashboard() {
             };
           }).sort((a,b) => (a.isFutura === b.isFutura) ? (a.diasRestantes - b.diasRestantes) : (a.isFutura ? 1 : -1));
 
-          setTarefasEmAndamento(agenda.filter(t => t.diasRestantes >= 0 || !t.isFutura).slice(0, 5));
+          // 🔥 CORREÇÃO: Filtra para não mostrar tarefas que ainda não começaram (!t.isFutura)
+          setTarefasEmAndamento(agenda.filter(t => t.diasRestantes >= 0 && !t.isFutura).slice(0, 5));
         } else {
-          // Se o professor não tem turmas, zera os indicadores complementares para forçar a barra de progresso
           setTemAlunos(false);
           setTemTarefasGeral(false);
         }
@@ -202,7 +198,6 @@ export default function Dashboard() {
   else if (!temAlunos) passoAtual = 3;
   else if (!temTarefasGeral) passoAtual = 4;
 
-  // A BARRA DE PROGRESSO GLOBAL GUIADA
   const renderBarraProgresso = () => {
     const passos = [
       { id: 1, titulo: 'Instituição', icone: <School size={18} /> },
@@ -232,7 +227,6 @@ export default function Dashboard() {
 
   if (loading) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
-  // CASO 1: SEM INSTITUIÇÃO (ONBOARDING INLINE TOTALMENTE GUIADO)
   if (!escolaSelecionada?.id || instituicoes.length === 0) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8 text-center animate-in fade-in duration-700">
@@ -283,7 +277,6 @@ export default function Dashboard() {
     );
   }
 
-  // CASO 2: TELA PRINCIPAL (DASHBOARD)
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 overflow-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
@@ -310,7 +303,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* A BARRA DE PROGRESSO DEVE ESTAR VISÍVEL ENQUANTO ELE NÃO CHEGAR AO PASSO 5 */}
       {passoAtual <= 4 && renderBarraProgresso()}
 
       {minhasTurmas.length === 0 ? (
