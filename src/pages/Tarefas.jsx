@@ -481,16 +481,16 @@ export default function Tarefas() {
                              )}
                            </div>
                            
-                           <div className="flex flex-col items-end justify-between shrink-0">
-                             <div className="flex gap-2 mb-4 md:mb-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                           {/* 🔥 MODIFICAÇÃO DO LAYOUT PARA AFASTAR OS BOTÕES 🔥 */}
+                           <div className="flex flex-col items-end justify-between h-full shrink-0 gap-4">
+                             <div className="flex gap-2 mb-5 md:mb-8 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                <button onClick={() => iniciarEdicao(item)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar Tarefa"><Pencil size={18}/></button>
                                <button onClick={() => handleLixeira(item.id, item.nomeTarefa || item.titulo)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir Tarefa"><Trash2 size={18}/></button>
                              </div>
                              
-                             {/* 🔥 BOTÃO CORRIGIR TAREFAS OCULTADO PARA TAREFAS FUTURAS 🔥 */}
                              {(item.tipo === 'entrega' || !item.tipo) && status !== 'futuro' && (
-                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all ${status === 'passado' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
-                                 {status === 'passado' ? 'Consultar Histórico' : 'Corrigir Tarefas'}
+                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto ${status === 'passado' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
+                                 {status === 'passado' ? 'Consultar Histórico' : 'Corrigir tarefas'}
                                </Link>
                              )}
                            </div>
