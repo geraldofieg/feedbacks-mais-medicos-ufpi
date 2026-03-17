@@ -11,6 +11,7 @@ export default function Turmas() {
   const location = useLocation();
   const navigate = useNavigate();
   
+  const [instituicoes, setInstituicoes] = useState([]);
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -34,43 +35,46 @@ export default function Turmas() {
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
+  // 🔥 BUSCA E ATUALIZA A LISTA DE INSTITUIÇÕES PARA O DROPDOWN
   useEffect(() => {
-    async function checkInstituicao() {
+    async function setupInstituicoes() {
       if (!currentUser) return;
+      
       if (location.state?.abrirModalInstituicao) {
          setPrecisaCriarEscola(true);
          setLoading(false);
          window.history.replaceState({}, document.title);
-         return;
-      }
-
-      if (escolaSelecionada) {
-         setPrecisaCriarEscola(false);
-         setLoading(false);
-         return;
       }
 
       try {
         const instRef = collection(db, 'instituicoes');
         const snap = await getDocs(instRef);
         const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
+        lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+        setInstituicoes(lista);
         
         if (lista.length === 0) {
           setPrecisaCriarEscola(true);
-          setLoading(false);
-          return;
+          setEscolaSelecionada(null);
+        } else {
+          if (escolaSelecionada) {
+             const existe = lista.find(i => i.id === escolaSelecionada.id);
+             if (!existe) setEscolaSelecionada(lista[0]);
+          } else {
+             setEscolaSelecionada(lista[0]);
+          }
+          if (!location.state?.abrirModalInstituicao) {
+             setPrecisaCriarEscola(false);
+          }
         }
-        
-        if (!escolaSelecionada) setEscolaSelecionada(lista[0]);
-  
       } catch (e) { 
         console.error("Erro ao verificar instituição:", e); 
       } finally {
         setLoading(false);
       }
     }
-    checkInstituicao();
-  }, [currentUser, isAdmin, escolaSelecionada, setEscolaSelecionada, location.state]);
+    setupInstituicoes();
+  }, [currentUser, setEscolaSelecionada, location.state]);
 
   useEffect(() => {
     async function fetchTurmas() {
@@ -104,7 +108,15 @@ export default function Turmas() {
       setSalvandoEscola(true);
       const nova = { nome: novaEscolaNome.trim(), professorUid: currentUser.uid, status: 'ativa', dataCriacao: serverTimestamp() };
       const docRef = await addDoc(collection(db, 'instituicoes'), nova);
-      setEscolaSelecionada({ id: docRef.id, ...nova }); setPrecisaCriarEscola(false); setNovaEscolaNome(''); navigate('/turmas');
+      const novaInst = { id: docRef.id, ...nova };
+      
+      setInstituicoes(prev => [...prev, novaInst].sort((a,b) => a.nome.localeCompare(b.nome)));
+      setEscolaSelecionada(novaInst); 
+      localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(novaInst));
+      
+      setPrecisaCriarEscola(false); 
+      setNovaEscolaNome(''); 
+      navigate('/turmas');
     } catch (error) { console.error(error);
     } finally { setSalvandoEscola(false); }
   }
@@ -112,8 +124,12 @@ export default function Turmas() {
   async function handleSalvarEdicaoEscola() {
     if (!nomeEscolaEdicao.trim() || !escolaSelecionada) return;
     try {
-      setSalvandoEscola(true); await updateDoc(doc(db, 'instituicoes', escolaSelecionada.id), { nome: nomeEscolaEdicao.trim() });
-      setEscolaSelecionada({ ...escolaSelecionada, nome: nomeEscolaEdicao.trim() }); setEditandoEscola(false);
+      setSalvandoEscola(true); 
+      await updateDoc(doc(db, 'instituicoes', escolaSelecionada.id), { nome: nomeEscolaEdicao.trim() });
+      
+      setInstituicoes(prev => prev.map(i => i.id === escolaSelecionada.id ? { ...i, nome: nomeEscolaEdicao.trim() } : i));
+      setEscolaSelecionada({ ...escolaSelecionada, nome: nomeEscolaEdicao.trim() }); 
+      setEditandoEscola(false);
     } catch (error) { console.error(error); } finally { setSalvandoEscola(false);
     }
   }
@@ -194,7 +210,7 @@ export default function Turmas() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <Breadcrumb items={[{ label: 'Turmas' }]} />
       
-      {/* HEADER MELHORADO (Instituição à esquerda, Ação de Nova Instituição Discreta à Direita) */}
+      {/* HEADER MELHORADO (Instituição à esquerda c/ Dropdown, Ação de Nova Instituição Discreta à Direita) */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8 mt-3 border-b pb-6">
         <div>
           <h1 className="text-3xl font-black text-gray-800 tracking-tight mb-2">Gestão de Turmas</h1>
@@ -206,8 +222,28 @@ export default function Turmas() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-gray-500">Agrupamentos em: <strong className="text-gray-800 bg-gray-100 px-2 py-0.5 rounded-md ml-1">{escolaSelecionada?.nome}</strong></p>
-              <button onClick={() => { setEditandoEscola(true); setNomeEscolaEdicao(escolaSelecionada.nome); }} className="text-gray-400 hover:text-blue-500 transition-colors p-1" title="Renomear Instituição"><Pencil size={14}/></button>
+              <p className="text-sm font-medium text-gray-500">Agrupamentos em:</p>
+              
+              {/* 🔥 DROPDOWN INJETADO AQUI PARA MUDAR DE INSTITUIÇÃO RAPIDAMENTE 🔥 */}
+              <select 
+                className="bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded-md border-none outline-none cursor-pointer hover:bg-gray-200 transition-colors text-sm max-w-[200px] sm:max-w-[300px] truncate"
+                value={escolaSelecionada?.id || ''}
+                onChange={e => {
+                  const inst = instituicoes.find(i => i.id === e.target.value);
+                  if (inst) {
+                     setEscolaSelecionada(inst);
+                     localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(inst));
+                  }
+                }}
+              >
+                {instituicoes.map(i => (
+                  <option key={i.id} value={i.id}>
+                    {i.nome} {isAdmin && i.professorUid === currentUser.uid ? '(Sua conta)' : isAdmin ? '(De outro prof.)' : ''}
+                  </option>
+                ))}
+              </select>
+
+              <button onClick={() => { setEditandoEscola(true); setNomeEscolaEdicao(escolaSelecionada.nome); }} className="text-gray-400 hover:text-blue-500 transition-colors p-1 ml-1" title="Renomear Instituição"><Pencil size={14}/></button>
               <button onClick={handleLixeiraEscola} className="text-gray-400 hover:text-red-500 transition-colors p-1" title="Excluir Instituição"><Trash2 size={14}/></button>
             </div>
           )}
