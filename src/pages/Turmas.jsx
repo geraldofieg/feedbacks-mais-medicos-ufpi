@@ -153,7 +153,8 @@ export default function Turmas() {
         const t = d.data();
         if (t.status !== 'lixeira') await addDoc(collection(db, 'tarefas'), { ...t, turmaId: tr.id, professorUid: currentUser.uid, dataCriacao: serverTimestamp() });
       }
-      setTurmas([{ id: tr.id, ...nt, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]); setModeloSelecionado('');
+      setTurmas([{ id: tr.id, ...nt, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]); 
+      setModeloSelecionado('');
       setNomeTurmaClonada('');
     } catch (error) { console.error(error); } finally { setClonando(false);
     }
@@ -212,7 +213,6 @@ export default function Turmas() {
           )}
         </div>
         
-        {/* BOTÃO SECUNDÁRIO E DISCRETO PARA NOVA INSTITUIÇÃO */}
         <button onClick={() => setPrecisaCriarEscola(true)} className="flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-blue-600 transition-colors bg-gray-50 hover:bg-blue-50 px-4 py-2 rounded-xl">
           <Building2 size={14} /> Cadastrar outra Instituição
         </button>
@@ -251,7 +251,22 @@ export default function Turmas() {
              </div>
              <form onSubmit={handleClonarTurma} className="flex flex-col gap-3">
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <select required className="flex-1 px-4 py-3 bg-white border border-purple-200 rounded-xl font-bold outline-none cursor-pointer focus:ring-2 focus:ring-purple-500 text-sm text-gray-700 shadow-sm" value={modeloSelecionado} onChange={e => setModeloSelecionado(e.target.value)}>
+                  <select 
+                    required 
+                    className="flex-1 px-4 py-3 bg-white border border-purple-200 rounded-xl font-bold outline-none cursor-pointer focus:ring-2 focus:ring-purple-500 text-sm text-gray-700 shadow-sm" 
+                    value={modeloSelecionado} 
+                    // 🔥 MÁGICA DO AUTOFILL AQUI
+                    onChange={e => {
+                        const idModel = e.target.value;
+                        setModeloSelecionado(idModel);
+                        if(idModel) {
+                            const modelEncontrado = turmasModelo.find(t => t.id === idModel);
+                            if(modelEncontrado) setNomeTurmaClonada(modelEncontrado.nome);
+                        } else {
+                            setNomeTurmaClonada('');
+                        }
+                    }}
+                  >
                     <option value="">Selecione a turma base...</option>
                     {turmasModelo.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                   </select>
