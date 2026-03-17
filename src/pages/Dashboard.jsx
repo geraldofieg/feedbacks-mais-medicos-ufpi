@@ -500,50 +500,70 @@ export default function Dashboard() {
           {(gestaoVista.atuais?.length > 0 || gestaoVista.anteriores?.length > 0) && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
               
-              {/* RENDEREZIA TODAS AS TAREFAS ATUAIS (Sem o limite de 1) */}
+              {/* RENDEREZIA TODAS AS TAREFAS ATUAIS */}
               {gestaoVista.atuais.map((gv, idx) => (
                 <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
                   <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
                     <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl shrink-0"><AlertTriangle size={20}/></div>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide">Faltam Entregar</h3>
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">
+                        Faltam Entregar
+                        <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span>
+                      </h3>
                       <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Atual: ${gv.nome}`}>Atual: {gv.nome}</p>
                     </div>
                   </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                    {gv.devedores.length === 0 ? (
-                      <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>
-                    ) : (
-                      gv.devedores.map((nome, i) => (
-                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
-                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
-                        </div>
-                      ))
+                  <div className="relative">
+                    {/* O Gradiente de Sombra (Esconde a base para dar profundidade) */}
+                    {gv.devedores.length > 4 && (
+                        <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white to-transparent pointer-events-none z-10"></div>
                     )}
+                    {/* A Caixa de Rolagem com Scroll Forçado via Tailwind arbitrary variants */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                      {gv.devedores.length === 0 ? (
+                        <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>
+                      ) : (
+                        gv.devedores.map((nome, i) => (
+                          <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                            <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
 
-              {/* RENDEREZIA AS PENDÊNCIAS ANTERIORES (Máximo 2) */}
+              {/* RENDEREZIA AS PENDÊNCIAS ANTERIORES */}
               {gestaoVista.anteriores.map((gv, idx) => (
                 <div key={`ant-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
                   <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
                     <div className="bg-red-100 text-red-600 p-2.5 rounded-xl shrink-0"><Clock size={20}/></div>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide">Pendências Antigas</h3>
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">
+                        Pendências
+                        <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span>
+                      </h3>
                       <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Anterior: ${gv.nome}`}>Anterior: {gv.nome}</p>
                     </div>
                   </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                    {gv.devedores.length === 0 ? (
-                      <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>
-                    ) : (
-                      gv.devedores.map((nome, i) => (
-                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
-                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
-                        </div>
-                      ))
+                  <div className="relative">
+                    {/* O Gradiente de Sombra */}
+                    {gv.devedores.length > 4 && (
+                        <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white to-transparent pointer-events-none z-10"></div>
                     )}
+                    {/* A Caixa de Rolagem com Scroll Forçado via Tailwind arbitrary variants */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                      {gv.devedores.length === 0 ? (
+                        <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>
+                      ) : (
+                        gv.devedores.map((nome, i) => (
+                          <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                            <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
