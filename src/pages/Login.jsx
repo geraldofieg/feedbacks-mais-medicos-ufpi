@@ -19,14 +19,18 @@ export default function Login() {
       setError('');
       setLoading(true);
       await login(email, password);
-      // O professor entra na plataforma "limpo", sem instituição selecionada ainda
-      navigate('/'); 
+      
+      // O TRUQUE: Espera meio segundo antes de mudar de tela.
+      // Isso dá tempo para o Chrome perceber o "submit" e perguntar se quer salvar a senha.
+      setTimeout(() => {
+        navigate('/'); 
+      }, 500);
+
     } catch (err) {
       setError('Falha ao fazer login. Verifique seu e-mail e senha.');
       console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      setLoading(false); // Só desativa o loading se der erro
+    } 
   }
 
   return (
@@ -47,8 +51,8 @@ export default function Login() {
           </div>
         )}
 
-        {/* O formulário agora tem as "pistas" que o Chrome precisa */}
-        <form onSubmit={handleSubmit} className="space-y-5">
+        {/* O formulário agora tem o action="#" e as "pistas" que o Chrome precisa */}
+        <form action="#" onSubmit={handleSubmit} className="space-y-5">
           
           <div>
             <label htmlFor="email" className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">E-mail Profissional</label>
