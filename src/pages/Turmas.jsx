@@ -71,6 +71,7 @@ export default function Turmas() {
         const q = isAdmin
           ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
           : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        
         const querySnapshot = await getDocs(q);
         const turmasData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const turmasAtivas = turmasData.filter(t => t.status !== 'lixeira');
@@ -105,8 +106,7 @@ export default function Turmas() {
   async function handleLixeiraEscola() {
     if (!window.confirm(`Tem certeza que deseja enviar a instituição "${escolaSelecionada.nome}" para a lixeira?`)) return;
     try { 
-      await updateDoc(doc(db, 'instituicoes', escolaSelecionada.id), { status: 'lixeira' }); 
-      // 🔥 CORREÇÃO: Limpa o rastro no localStorage para resetar o Dashboard
+      await updateDoc(doc(db, 'instituicoes', escolaSelecionada.id), { status: 'lixeira' });
       localStorage.removeItem('@SaaS_EscolaSelecionada');
       setEscolaSelecionada(null);
       window.location.href = '/'; 
@@ -114,12 +114,14 @@ export default function Turmas() {
   }
 
   async function handleCriarTurma(e) {
-    e.preventDefault(); if (!novaTurma.trim() || !escolaSelecionada?.id) return;
+    e.preventDefault();
+    if (!novaTurma.trim() || !escolaSelecionada?.id) return;
     try {
       setSalvando(true);
       const nt = { nome: novaTurma.trim(), instituicaoId: escolaSelecionada.id, instituicaoNome: escolaSelecionada.nome, professorUid: currentUser.uid, status: 'ativa', isModelo: false, dataCriacao: serverTimestamp() };
       const docRef = await addDoc(collection(db, 'turmas'), nt);
-      setTurmas([{ id: docRef.id, ...nt, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]); setNovaTurma('');
+      setTurmas([{ id: docRef.id, ...nt, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]);
+      setNovaTurma('');
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
@@ -132,15 +134,18 @@ export default function Turmas() {
       const q = query(collection(db, 'tarefas'), where('turmaId', '==', modeloSelecionado));
       const snap = await getDocs(q);
       for (const d of snap.docs) {
-        const t = d.data(); if (t.status !== 'lixeira') await addDoc(collection(db, 'tarefas'), { ...t, turmaId: tr.id, professorUid: currentUser.uid, dataCriacao: serverTimestamp() });
+        const t = d.data();
+        if (t.status !== 'lixeira') await addDoc(collection(db, 'tarefas'), { ...t, turmaId: tr.id, professorUid: currentUser.uid, dataCriacao: serverTimestamp() });
       }
-      setTurmas([{ id: tr.id, ...nt, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]); setModeloSelecionado(''); setNomeTurmaClonada(''); setModoCriacao('nova');
+      setTurmas([{ id: tr.id, ...nt, dataCriacao: { toMillis: () => Date.now() } }, ...turmas]); setModeloSelecionado('');
+      setNomeTurmaClonada(''); setModoCriacao('nova');
     } catch (error) { console.error(error); } finally { setClonando(false); }
   }
 
   async function handleSalvarEdicao(id) {
     if (!nomeEdicao.trim()) return;
-    try { await updateDoc(doc(db, 'turmas', id), { nome: nomeEdicao.trim() }); setTurmas(turmas.map(t => t.id === id ? { ...t, nome: nomeEdicao.trim() } : t)); setEditandoId(null); } catch (e) { console.error(e); }
+    try { await updateDoc(doc(db, 'turmas', id), { nome: nomeEdicao.trim() });
+    setTurmas(turmas.map(t => t.id === id ? { ...t, nome: nomeEdicao.trim() } : t)); setEditandoId(null); } catch (e) { console.error(e); }
   }
 
   async function handleLixeira(id, nome) {
@@ -157,7 +162,8 @@ export default function Turmas() {
         <h1 className="text-3xl font-black mb-4 tracking-tight text-gray-800">Onde você ensina?</h1>
         <p className="text-gray-500 text-lg mb-10 max-w-lg mx-auto font-medium">Digite o nome da sua escola ou ambiente de ensino para começarmos.</p>
         <form onSubmit={handleCriarInstituicao} className="max-w-md mx-auto flex flex-col gap-4">
-          <input type="text" required autoFocus placeholder="Nome da Instituição..." className="w-full px-5 py-4 border-2 rounded-2xl text-center font-bold outline-none shadow-sm focus:border-blue-500 text-gray-800" value={novaEscolaNome} onChange={e => setNovaEscolaNome(e.target.value)} />
+          <input type="text" 
+            required autoFocus placeholder="Nome da Instituição..." className="w-full px-5 py-4 border-2 rounded-2xl text-center font-bold outline-none shadow-sm focus:border-blue-500 text-gray-800" value={novaEscolaNome} onChange={e => setNovaEscolaNome(e.target.value)} />
           <button type="submit" disabled={salvandoEscola} className="bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">Salvar e Continuar</button>
         </form>
       </div>
@@ -189,7 +195,8 @@ export default function Turmas() {
 
       <div className="flex flex-col lg:flex-row gap-8">
         <div className="w-full lg:w-2/3">
-          {turmas.length === 0 ? <div className="p-10 text-center border-2 border-dashed rounded-2xl text-gray-400 font-bold bg-gray-50">Nenhuma sala de aula criada ainda.</div> : (
+          {turmas.length === 0 ?
+            <div className="p-10 text-center border-2 border-dashed rounded-2xl text-gray-400 font-bold bg-gray-50">Nenhuma sala de aula criada ainda.</div> : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {turmas.map(turma => (
                 <div key={turma.id} className="bg-white border rounded-2xl p-5 shadow-sm group hover:border-blue-300 transition-all">
@@ -200,7 +207,8 @@ export default function Turmas() {
                       <button onClick={() => handleLixeira(turma.id, turma.nome)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
                     </div>
                   </div>
-                  {editandoId === turma.id ? (
+                  {editandoId === turma.id ?
+                  (
                     <div className="flex gap-2 mb-2">
                       <input type="text" value={nomeEdicao} onChange={e => setNomeEdicao(e.target.value)} className="w-full border rounded-lg p-2 font-bold focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
                       <button onClick={() => handleSalvarEdicao(turma.id)} className="bg-green-500 text-white px-2 rounded-lg hover:bg-green-600"><Check size={18}/></button>
@@ -215,22 +223,33 @@ export default function Turmas() {
             </div>
           )}
         </div>
+        
         <div className="w-full lg:w-1/3">
           <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm sticky top-24">
             <div className="flex bg-gray-50 p-1 rounded-2xl mb-4">
               <button onClick={() => setModoCriacao('nova')} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${modoCriacao === 'nova' ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}>Criar do Zero</button>
-              <button onClick={() => setModoCriacao('clonar')} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${modoCriacao === 'clonar' ? 'bg-white text-purple-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}>Importar Modelo</button>
+              
+              {/* 🔥 BOTÃO RENOMEADO AQUI */}
+              <button onClick={() => setModoCriacao('clolar')} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${modoCriacao === 'clolar' ? 'bg-white text-purple-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'}`}>Copiar turma existente</button>
             </div>
+            
             {modoCriacao === 'nova' ? (
               <form onSubmit={handleCriarTurma} className="flex flex-col gap-4 p-2">
                 <input type="text" required placeholder="Ex: Odontologia 3º Período..." className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" value={novaTurma} onChange={e => setNovaTurma(e.target.value)} />
                 <button type="submit" disabled={salvando} className="bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all">{salvando ? 'Criando...' : 'Criar Turma'}</button>
               </form>
             ) : (
-              <form onSubmit={handleClonarTurma} className="flex flex-col gap-4 p-2">
-                <select required className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none cursor-pointer focus:bg-white focus:ring-2 focus:ring-purple-500" value={modeloSelecionado} onChange={e => setModeloSelecionado(e.target.value)}><option value="">Selecione o Modelo...</option>{turmasModelo.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
-                <input type="text" required placeholder="Novo nome da turma..." className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none focus:bg-white focus:ring-2 focus:ring-purple-500" value={nomeTurmaClonada} onChange={e => setNomeTurmaClonada(e.target.value)} />
-                <button type="submit" disabled={clonando || !modeloSelecionado} className="bg-purple-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-purple-700 transition-all">{clonando ? 'Importando...' : 'Clonar Agora'}</button>
+              // 🔥 FORMULÁRIO DE CÓPIA COM SUBTÍTULO E TEXTOS ATUALIZADOS
+              <form onSubmit={handleClonarTurma} className="flex flex-col gap-4 p-4 bg-purple-50/50 rounded-2xl border border-purple-100 mt-2">
+                <p className="text-xs text-purple-700 text-center font-medium leading-relaxed px-2">
+                  Aproveite a estrutura e as tarefas de uma turma já configurada na instituição.
+                </p>
+                <select required className="w-full p-4 bg-white border border-purple-200 rounded-xl font-bold outline-none cursor-pointer focus:ring-2 focus:ring-purple-500 text-gray-700" value={modeloSelecionado} onChange={e => setModeloSelecionado(e.target.value)}>
+                  <option value="">Selecione a turma base...</option>
+                  {turmasModelo.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+                <input type="text" required placeholder="Novo nome da sua turma..." className="w-full p-4 bg-white border border-purple-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-purple-500 text-gray-700" value={nomeTurmaClonada} onChange={e => setNomeTurmaClonada(e.target.value)} />
+                <button type="submit" disabled={clonando || !modeloSelecionado} className="bg-purple-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-purple-700 transition-all">{clonando ? 'Copiando...' : 'Copiar estrutura'}</button>
               </form>
             )}
           </div>
