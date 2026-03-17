@@ -30,7 +30,6 @@ export default function Dashboard() {
   const [temAlunos, setTemAlunos] = useState(true); 
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
   
-  // 🔥 AJUSTE: Agora suporta múltiplas tarefas simultâneas
   const [gestaoVista, setGestaoVista] = useState({ atuais: [], anteriores: [] });
 
   const [loadingInst, setLoadingInst] = useState(true);
@@ -40,15 +39,14 @@ export default function Dashboard() {
   const [nomeNovaInst, setNomeNovaInst] = useState('');
   const [criandoInst, setCriandoInst] = useState(false);
 
-  // 🔥 CADEADO FÍSICO ANTI-LOOP 🔥
   const radarExecutado = useRef(false);
 
-  // 1. A BÚSSOLA DE LOGIN (RADAR GLOBAL COM LÓGICA DE TURMA ➔ INSTITUIÇÃO)
+  // 1. A BÚSSOLA DE LOGIN
   useEffect(() => {
     if (!currentUser || radarExecutado.current) return;
 
     async function setupRadarGlobal() {
-      radarExecutado.current = true; // Tranca a porta imediatamente
+      radarExecutado.current = true; 
       
       try {
         const instRef = collection(db, 'instituicoes');
@@ -63,7 +61,6 @@ export default function Dashboard() {
           return;
         }
 
-        // Puxa as turmas deste professor e ordena da mais recente para a mais antiga
         const turmasRef = collection(db, 'turmas');
         const qTurmasGlobais = isAdmin 
           ? turmasRef 
@@ -82,13 +79,10 @@ export default function Dashboard() {
         let escolaAlvo = null;
 
         if (turmasGlobais.length > 0) {
-            // Professor VETERANO. Tem turmas no sistema!
             const temTurmaNoCache = escolaCacheValida && turmasGlobais.some(t => t.instituicaoId === escolaCache.id);
-
             if (temTurmaNoCache) {
                 escolaAlvo = lista.find(i => i.id === escolaCache.id);
             } else {
-                // ERRO DE ROTA: Bússola atua! Força a instituição da turma mais recente dele!
                 const idCerta = turmasGlobais[0].instituicaoId;
                 escolaAlvo = lista.find(i => i.id === idCerta) || null;
                 if (escolaAlvo) {
@@ -96,11 +90,9 @@ export default function Dashboard() {
                 }
             }
         } else {
-            // Professor NOVATO. Não tem turmas.
             if (escolaCacheValida) escolaAlvo = lista.find(i => i.id === escolaCache.id);
         }
 
-        // 🔥 A SEGUNDA TRAVA ANTI-LOOP 🔥
         if (escolaSelecionada?.id !== escolaAlvo?.id) {
             setEscolaSelecionada(escolaAlvo);
         }
@@ -115,7 +107,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isAdmin]);
 
-  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
+  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA E GESTÃO À VISTA
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id || instituicoes.length === 0) {
@@ -161,7 +153,7 @@ export default function Dashboard() {
           const docSnapUser = await getDoc(docRefUser);
           const timestampPrompt = docSnapUser.data()?.timestampPrompt || 0;
 
-          // 🔥 AJUSTE: DESFRAGMENTADOR ANTI-CLONES (Evita devedores falsos)
+          // DESFRAGMENTADOR ANTI-CLONES
           const atividadesGerais = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira');
           const atividadesUnicas = {};
           
@@ -258,7 +250,6 @@ export default function Dashboard() {
               alvo = alvo.filter(a => tarefa.alunosSelecionados.includes(a.id));
             }
             const devedores = alvo.filter(aluno => {
-              // Busca no array que JÁ TEVE OS FANTASMAS IGNORADOS!
               const ent = listaAtividadesDedup.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id);
               if (!ent) return true; 
               const temResposta = (ent.resposta && String(ent.resposta).trim() !== '') || !!ent.arquivoUrl;
@@ -271,7 +262,6 @@ export default function Dashboard() {
             };
           };
 
-          // AJUSTE: Salva TODAS as tarefas atuais, e no máximo as 2 pendências mais recentes
           setGestaoVista({
             atuais: currentTasks.map(calcularDevedores).filter(Boolean),
             anteriores: pastTasks.slice(0, 2).map(calcularDevedores).filter(Boolean)
@@ -435,26 +425,47 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="bg-slate-900 rounded-3xl p-6 md:p-8 text-white border border-slate-800 shadow-xl mb-10">
-             <div className="flex items-center gap-3 mb-6">
-                <div className="bg-blue-600 p-2.5 rounded-xl"><Calendar size={22} /></div>
-                <h2 className="text-xl font-black tracking-tight">Próximas Entregas do Cronograma</h2>
+          {/* 🔥 BARRA PRETA - MAIS DISCRETA E COMPACTA 🔥 */}
+          <div className="bg-slate-900 rounded-2xl p-4 md:p-5 text-white border border-slate-800 shadow-xl mb-6">
+             <div className="flex items-center gap-2.5 mb-4">
+                <div className="bg-blue-600 p-2 rounded-lg"><Calendar size={18} /></div>
+                <h2 className="text-base font-black tracking-tight">Próximas Entregas do Cronograma</h2>
              </div>
-             <div className="space-y-3">
+             <div className="space-y-2">
                 {tarefasEmAndamento.length > 0 ? (
                   tarefasEmAndamento.map(t => (
-                    <div key={t.id} className="flex justify-between items-center p-4 bg-slate-800/50 hover:bg-slate-800 rounded-2xl border border-slate-700/50 transition-colors">
-                      <span className="font-bold text-slate-200 truncate pr-4">{t.nomeTarefa}</span>
-                      <span className="text-[11px] font-black uppercase text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 shrink-0">Faltam {t.diasRestantes} dias</span>
+                    <div key={t.id} className="flex justify-between items-center px-4 py-2.5 bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
+                      <span className="text-sm font-bold text-slate-200 truncate pr-4">{t.nomeTarefa}</span>
+                      <span className="text-[10px] font-black uppercase text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/20 shrink-0">Faltam {t.diasRestantes} dias</span>
                     </div>
                   ))
                 ) : (
-                  <p className="text-slate-500 font-medium italic p-4 text-center">Nenhuma tarefa ativa no momento.</p>
+                  <p className="text-sm text-slate-500 font-medium italic p-2 text-center">Nenhuma tarefa ativa no momento.</p>
                 )}
              </div>
           </div>
 
-          <div className={`grid grid-cols-1 md:grid-cols-2 ${mostrarFaltaPostar && mostrarTermometroIA ? 'lg:grid-cols-4' : (mostrarFaltaPostar || mostrarTermometroIA) ? 'lg:grid-cols-3' : ''} gap-5 mb-10`}>
+          {/* 🔥 NOVO TERMÔMETRO IA - BANNER HORIZONTAL E EXPLICATIVO 🔥 */}
+          {mostrarTermometroIA && (
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl shrink-0"><Sparkles size={22}/></div>
+                <div>
+                  <h3 className="text-xs font-black text-purple-700 uppercase tracking-widest">Termômetro de Autonomia da IA</h3>
+                  <p className="text-xs font-medium text-purple-600 mt-1 leading-relaxed max-w-xl">
+                    Mede a eficácia da IA. Mostra a porcentagem de feedbacks que a IA gerou e você aprovou para enviar ao aluno <strong>sem precisar fazer nenhuma edição</strong> no texto original.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col items-start sm:items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-purple-100 shadow-sm w-full sm:w-auto text-right">
+                <span className="text-3xl font-black text-purple-700 w-full">{metricasIA.percentual}%</span>
+                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest w-full">{metricasIA.originais} de {metricasIA.total} exatos</span>
+              </div>
+            </div>
+          )}
+
+          {/* 🔥 KANBAN REAJUSTADO 🔥 */}
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${mostrarFaltaPostar ? 'lg:grid-cols-3' : ''} gap-5 mb-10`}>
             
             <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
               <div className="flex justify-between items-start mb-2">
@@ -484,17 +495,6 @@ export default function Dashboard() {
               <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
               <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
             </div>
-
-            {mostrarTermometroIA && (
-              <div className="bg-white border border-purple-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-[11px] font-black text-purple-600 uppercase tracking-widest mt-1">Termômetro IA</h3>
-                  <div className="text-purple-500 bg-purple-50 p-1.5 rounded-lg"><Sparkles size={20}/></div>
-                </div>
-                <span className="text-4xl font-black text-gray-800">{metricasIA.percentual}%</span>
-                <p className="mt-4 text-xs font-bold text-gray-500 tracking-wide">{metricasIA.originais} de {metricasIA.total} originais</p>
-              </div>
-            )}
           </div>
           
           {(gestaoVista.atuais?.length > 0 || gestaoVista.anteriores?.length > 0) && (
