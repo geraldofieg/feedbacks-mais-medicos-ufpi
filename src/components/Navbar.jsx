@@ -8,11 +8,9 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // ESTADOS DO DROPDOWN DO PROFESSOR
   const [menuAberto, setMenuAberto] = useState(false);
   const menuRef = useRef(null);
 
-  // FECHA O MENU SE CLICAR FORA DELE
   useEffect(() => {
     function handleClickOutside(event) {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -36,16 +34,16 @@ export default function Navbar() {
     }
   }
 
+  // 🔥 A MÁGICA DA ROTA: Removemos /cronograma e evoluímos a /tarefas
   const navLinks = [
     { path: '/', icon: <Home size={18} />, label: 'Início' },
     { path: '/turmas', icon: <Users size={18} />, label: 'Turmas' }, 
-    { path: '/cronograma', icon: <CalendarRange size={18} />, label: 'Cronograma' },
+    { path: '/tarefas', icon: <CalendarRange size={18} />, label: 'Tarefas e Cronograma' },
     { path: '/comunicacao', icon: <Megaphone size={18} />, label: 'Comunicação' },
     { path: '/pendencias', icon: <AlertTriangle size={18} />, label: 'Pendências' },
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
   ];
 
-  // AJUSTE: Lógica inteligente para as reticências e Tooltip
   const nomeCompleto = escolaSelecionada?.nome || 'SaaS';
   const arrayNome = nomeCompleto.split(' ');
   const siglaEscola = arrayNome.length > 1 ? `${arrayNome[0]}...` : arrayNome[0];
@@ -58,16 +56,10 @@ export default function Navbar() {
         
         {/* === MODO COMPUTADOR === */}
         <div className="hidden md:flex items-center justify-between h-16">
-          
           <Link to="/" className="flex items-center gap-3 transition-transform hover:scale-105 shrink-0 mr-8 lg:mr-12">
             <span className="font-black text-slate-900 text-lg tracking-tight hidden lg:block">Plataforma do Professor</span>
             <div className="hidden lg:block w-px h-5 bg-gray-300"></div>
-            
-            {/* AJUSTE: Injetado o atributo 'title' para criar o Tooltip nativo */}
-            <span 
-              className="bg-blue-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs shadow-sm font-bold tracking-wide"
-              title={nomeCompleto}
-            >
+            <span className="bg-blue-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs shadow-sm font-bold tracking-wide" title={nomeCompleto}>
               <GraduationCap size={14} /> {siglaEscola}
             </span>
           </Link>
@@ -102,10 +94,7 @@ export default function Navbar() {
 
             {/* O MENU DO PROFESSOR (DROPDOWN VIP) */}
             <div className="relative border-l border-gray-200 pl-5 ml-2" ref={menuRef}>
-              <button 
-                onClick={() => setMenuAberto(!menuAberto)} 
-                className={`flex items-center gap-2 text-sm font-bold transition-all py-4 hover:text-blue-600 ${menuAberto ? 'text-blue-600' : 'text-gray-600'}`}
-              >
+              <button onClick={() => setMenuAberto(!menuAberto)} className={`flex items-center gap-2 text-sm font-bold transition-all py-4 hover:text-blue-600 ${menuAberto ? 'text-blue-600' : 'text-gray-600'}`}>
                 <div className={`p-1.5 rounded-full transition-colors ${menuAberto ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
                   <UserCircle size={20} />
                 </div>
@@ -146,18 +135,12 @@ export default function Navbar() {
                 </div>
               )}
             </div>
-
           </div>
         </div>
 
         {/* === MODO CELULAR === */}
         <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          
-          <Link 
-            to="/" 
-            className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-2.5 py-1 rounded-md mr-1 font-bold text-xs gap-1 shadow-sm"
-            title={nomeCompleto}
-          >
+          <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-2.5 py-1 rounded-md mr-1 font-bold text-xs gap-1 shadow-sm" title={nomeCompleto}>
             <GraduationCap size={14} /> {siglaEscola}
           </Link>
 
@@ -166,9 +149,7 @@ export default function Navbar() {
               key={link.path}
               to={link.path}
               className={`shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full transition-colors ${
-                location.pathname === link.path 
-                  ? 'bg-blue-100 text-blue-700' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                location.pathname === link.path ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {link.icon} {link.label}
