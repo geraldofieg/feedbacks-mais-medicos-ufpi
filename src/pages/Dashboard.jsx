@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, PlayCircle } from 'lucide-react';
@@ -30,24 +30,28 @@ export default function Dashboard() {
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
   const [gestaoVista, setGestaoVista] = useState({ atual: null, anterior: null });
 
-  // 1. BUSCA INSTITUIÇÕES E ESTABELECE O ESTADO INICIAL
+  // ESTADOS DO NOVO ONBOARDING (PASSO 1 INLINE)
+  const [showFormNova, setShowFormNova] = useState(false);
+  const [nomeNovaInst, setNomeNovaInst] = useState('');
+  const [criandoInst, setCriandoInst] = useState(false);
+
+  // 1. BUSCA TODAS AS INSTITUIÇÕES PARA O ONBOARDING
   useEffect(() => {
     async function fetchInst() {
       if (!currentUser) return;
       try {
         const instRef = collection(db, 'instituicoes');
-        const q = isAdmin ? instRef : query(instRef, where('professorUid', '==', currentUser.uid));
-        const snap = await getDocs(q);
+        // Busca todas para que o professor possa "entrar" numa já existente e copiar turmas
+        const snap = await getDocs(instRef);
         const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
         lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
         setInstituicoes(lista);
         
-        // Regra de Ouro: Se a lista está vazia, o estado global deve ser null para forçar o onboarding
         if (lista.length === 0) {
           setEscolaSelecionada(null);
         } else {
           const escolaAindaExiste = escolaSelecionada && lista.find(i => i.id === escolaSelecionada.id);
-          if (!escolaAindaExiste) setEscolaSelecionada(lista[0]);
+          if (escolaSelecionada && !escolaAindaExiste) setEscolaSelecionada(null);
         }
       } catch (e) {
         console.error("Erro ao buscar instituições:", e);
@@ -56,7 +60,7 @@ export default function Dashboard() {
       }
     }
     fetchInst();
-  }, [currentUser, isAdmin, setEscolaSelecionada]);
+  }, [currentUser, setEscolaSelecionada, escolaSelecionada]);
 
   // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
   useEffect(() => {
@@ -79,7 +83,7 @@ export default function Dashboard() {
           const snapAlunos = await getDocs(qAlunos);
           const alunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira');
           setTemAlunos(alunosVivos.length > 0);
-          
+
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
           const tarefasVivas = snapTarefas.docs.map(d => ({id: d.id, ...d.data()})).filter(t => t.status !== 'lixeira');
@@ -90,7 +94,7 @@ export default function Dashboard() {
 
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
-          
+
           let p = 0, f = 0, ok = 0;
           let iaTotal = 0, iaOriginais = 0;
           let progressoLocal = {};
@@ -98,6 +102,11 @@ export default function Dashboard() {
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
             if (tIds.includes(d.turmaId)) {
+              // Trava anti-falsos positivos (Ignora alunos não selecionados em tarefas restritas)
+              const tarefaPai = tarefasVivas.find(t => t.id === d.tarefaId);
+              const tarefaRestrita = tarefaPai?.alunosSelecionados && tarefaPai.alunosSelecionados.length > 0;
+              if (tarefaRestrita && !tarefaPai.alunosSelecionados.includes(d.alunoId)) return;
+
               const jaPostado = d.postado === true || d.status === 'finalizado' || d.status === 'postado';
               const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
               const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
@@ -123,6 +132,7 @@ export default function Dashboard() {
             const end = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
             return { id: t.id, nomeTarefa: t.nomeTarefa || t.titulo, reference: end.getTime(), diasRestantes: Math.ceil((end.getTime() - hojeTime) / (1000 * 3600 * 24)) };
           }).sort((a,b) => a.diasRestantes - b.diasRestantes);
+
           setTarefasEmAndamento(agenda.filter(t => t.diasRestantes >= 0).slice(0, 5));
         }
       } catch (e) { console.error("Erro ao carregar dados do dashboard:", e); }
@@ -130,10 +140,31 @@ export default function Dashboard() {
     fetchDados();
   }, [escolaSelecionada, instituicoes]);
 
+  async function handleCriarInstituicao(e) {
+    e.preventDefault();
+    if (!nomeNovaInst.trim() || criandoInst) return;
+    setCriandoInst(true);
+    try {
+      const docRef = await addDoc(collection(db, 'instituicoes'), {
+        nome: nomeNovaInst.trim(),
+        professorUid: currentUser.uid,
+        professorEmail: currentUser.email,
+        dataCriacao: serverTimestamp(),
+        status: 'ativa'
+      });
+      const novaInst = { id: docRef.id, nome: nomeNovaInst.trim() };
+      setInstituicoes(prev => [...prev, novaInst].sort((a,b) => a.nome.localeCompare(b.nome)));
+      setEscolaSelecionada(novaInst);
+      localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(novaInst));
+      setShowFormNova(false);
+      setNomeNovaInst('');
+    } catch (err) { console.error(err); } finally { setCriandoInst(false); }
+  }
+
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
   
   // LÓGICA DE PASSOS DO ONBOARDING
-  let passoAtual = 5; 
+  let passoAtual = 5;
   if (!escolaSelecionada?.id || instituicoes.length === 0) passoAtual = 1;
   else if (minhasTurmas.length === 0) passoAtual = 2;
   else if (!temAlunos) passoAtual = 3;
@@ -147,6 +178,7 @@ export default function Dashboard() {
       { id: 4, titulo: 'Tarefas', icone: <FileText size={18} /> }
     ];
     const porcentagem = ((passoAtual - 1) / 3) * 100;
+
     return (
       <div className="max-w-3xl mx-auto mb-10 w-full px-4 pt-6">
         <div className="relative flex items-center justify-between">
@@ -167,19 +199,53 @@ export default function Dashboard() {
 
   if (loading) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
-  // CASO 1: SEM INSTITUIÇÃO (VOLTA À ESTACA ZERO)
+  // CASO 1: SEM INSTITUIÇÃO (ONBOARDING INLINE TOTALMENTE GUIADO)
   if (!escolaSelecionada?.id || instituicoes.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8 text-center animate-in fade-in duration-700">
+      <div className="max-w-5xl mx-auto px-4 py-8 text-center animate-in fade-in duration-700">
         {renderBarraProgresso()}
-        <div className="bg-blue-600 text-white w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 mt-16 shadow-2xl shadow-blue-600/30">
-          <School size={48} />
+        
+        <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-[40px] shadow-2xl max-w-lg mx-auto mt-10">
+           <School size={56} className="mx-auto text-blue-600 mb-6" />
+           <h1 className="text-3xl font-black text-gray-800 mb-3 tracking-tight">Onde você ensina?</h1>
+           <p className="text-gray-500 font-medium mb-8 text-lg leading-relaxed">
+             Selecione sua instituição para acessar turmas já criadas por colegas, ou cadastre uma nova.
+           </p>
+           
+           <div className="space-y-4 text-left">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Instituições Cadastradas</label>
+              <select 
+                 className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-bold text-gray-700 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
+                 defaultValue=""
+                 onChange={(e) => {
+                    if (e.target.value === 'nova') {
+                        setShowFormNova(true);
+                    } else if (e.target.value !== '') {
+                        const inst = instituicoes.find(i => i.id === e.target.value);
+                        setEscolaSelecionada(inst);
+                        localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(inst));
+                    }
+                 }}
+              >
+                 <option value="" disabled>Selecione na lista...</option>
+                 {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                 <option disabled>──────────</option>
+                 <option value="nova">+ Cadastrar Nova Instituição</option>
+              </select>
+
+              {showFormNova && (
+                 <form onSubmit={handleCriarInstituicao} className="mt-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 animate-in slide-in-from-top-4 duration-300">
+                    <input 
+                      autoFocus required placeholder="Nome da nova instituição..." 
+                      className="w-full p-4 bg-white border-2 border-blue-200 rounded-2xl font-bold outline-none focus:border-blue-500 mb-3 text-gray-800"
+                      value={nomeNovaInst} onChange={e => setNomeNovaInst(e.target.value)}
+                    />
+                    <button disabled={criandoInst} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">{criandoInst ? 'Criando...' : 'Salvar Instituição'}</button>
+                    <button type="button" onClick={() => setShowFormNova(false)} className="w-full mt-2 py-2 text-sm font-bold text-gray-400 hover:text-gray-600">Cancelar</button>
+                 </form>
+              )}
+           </div>
         </div>
-        <h1 className="text-4xl font-black text-gray-800 tracking-tight mb-4">Bem-vindo(a) ao seu novo painel!</h1>
-        <p className="text-gray-500 text-lg mb-10 max-w-lg mx-auto font-medium">Para começarmos a organizar sua vida acadêmica, o primeiro passo é nos dizer onde você ensina.</p>
-        <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 hover:-translate-y-1 transition-all text-lg">
-          Passo 1: Criar Instituição <ChevronRight size={20}/>
-        </Link>
       </div>
     );
   }
@@ -216,9 +282,18 @@ export default function Dashboard() {
       {minhasTurmas.length === 0 ? (
         <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12 animate-in zoom-in-95 duration-500">
           <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
-          <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi criada.</h2>
-          <p className="text-gray-500 font-medium mb-8 text-lg">O próximo passo é criar sua primeira turma para gerenciar os alunos.</p>
-          <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg hover:bg-blue-700 transition-all">Passo 2: Criar Turma <ChevronRight size={18}/></Link>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi vinculada.</h2>
+          <p className="text-gray-500 font-medium mb-8 text-lg">O próximo passo é configurar sua primeira turma para gerenciar os alunos.</p>
+          
+          <div className="space-y-4">
+            <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">
+              Passo 2: Configurar Turma <ChevronRight size={18}/>
+            </Link>
+            <div className="flex items-center justify-center gap-2 text-purple-600 font-bold text-sm animate-pulse mt-4">
+              <Sparkles size={16}/>
+              <span>Dica: Você poderá "Copiar turma existente" neste passo!</span>
+            </div>
+          </div>
         </div>
       ) : (
         <>
@@ -251,7 +326,7 @@ export default function Dashboard() {
             </div>
           </div>
           
-          <div className="bg-slate-900 rounded-3xl p-6 md:p-8 text-white border border-slate-800">
+          <div className="bg-slate-900 rounded-3xl p-6 md:p-8 text-white border border-slate-800 shadow-xl">
              <div className="flex items-center gap-3 mb-6">
                 <div className="bg-blue-600 p-2.5 rounded-xl"><Calendar size={22} /></div>
                 <h2 className="text-xl font-black tracking-tight">Próximas Entregas do Cronograma</h2>
@@ -260,12 +335,12 @@ export default function Dashboard() {
                 {tarefasEmAndamento.length > 0 ? (
                   tarefasEmAndamento.map(t => (
                     <div key={t.id} className="flex justify-between items-center p-4 bg-slate-800/50 hover:bg-slate-800 rounded-2xl border border-slate-700/50 transition-colors">
-                      <span className="font-bold text-slate-200">{t.nomeTarefa}</span>
-                      <span className="text-[11px] font-black uppercase text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">Faltam {t.diasRestantes} dias</span>
+                      <span className="font-bold text-slate-200 truncate pr-4">{t.nomeTarefa}</span>
+                      <span className="text-[11px] font-black uppercase text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 shrink-0">Faltam {t.diasRestantes} dias</span>
                     </div>
                   ))
                 ) : (
-                  <p className="text-slate-500 font-medium italic p-4">Nenhuma tarefa ativa no momento.</p>
+                  <p className="text-slate-500 font-medium italic p-4 text-center">Nenhuma tarefa ativa no momento.</p>
                 )}
              </div>
           </div>
