@@ -41,7 +41,6 @@ export default function Dashboard() {
       if (!currentUser) return;
       try {
         const instRef = collection(db, 'instituicoes');
-        // Busca todas para que o professor possa "entrar" numa já existente e copiar turmas
         const snap = await getDocs(instRef);
         const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
         lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
@@ -62,7 +61,7 @@ export default function Dashboard() {
     fetchInst();
   }, [currentUser, setEscolaSelecionada, escolaSelecionada]);
 
-  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
+  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA (COM TRAVA DE QUINTAL PRIVADO)
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id || instituicoes.length === 0) {
@@ -72,21 +71,29 @@ export default function Dashboard() {
       }
       
       try {
-        const qTurmas = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id));
+        // 🔥 A MÁGICA DA BIFURCAÇÃO: Busca APENAS as turmas deste professor (ou todas se for admin)
+        const turmasRef = collection(db, 'turmas');
+        const qTurmas = isAdmin 
+            ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
+            : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+            
         const snapT = await getDocs(qTurmas);
         const turmasVivas = snapT.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
         setMinhasTurmas(turmasVivas);
 
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
+          
+          // Verifica se existem alunos NAS TURMAS DELE
           const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAlunos = await getDocs(qAlunos);
-          const alunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira');
+          const alunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId));
           setTemAlunos(alunosVivos.length > 0);
 
+          // Verifica se existem tarefas NAS TURMAS DELE
           const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTarefas = await getDocs(qTarefas);
-          const tarefasVivas = snapTarefas.docs.map(d => ({id: d.id, ...d.data()})).filter(t => t.status !== 'lixeira');
+          const tarefasVivas = snapTarefas.docs.map(d => ({id: d.id, ...d.data()})).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
           setTemTarefasGeral(tarefasVivas.length > 0);
 
           const hoje = new Date();
@@ -98,6 +105,11 @@ export default function Dashboard() {
           let p = 0, f = 0, ok = 0;
           let iaTotal = 0, iaOriginais = 0;
           let progressoLocal = {};
+
+          const docRefUser = doc(db, 'usuarios', currentUser.uid);
+          const docSnapUser = await getDoc(docRefUser);
+          const dataUser = docSnapUser.data();
+          const timestampPrompt = dataUser?.timestampPrompt || 0;
 
           snapAtiv.docs.forEach(doc => {
             const d = doc.data();
@@ -115,9 +127,13 @@ export default function Dashboard() {
               else if (jaAprovado) { f++; progressoLocal[d.tarefaId] = true; }
               else if (temResposta) { p++; progressoLocal[d.tarefaId] = true; }
 
+              const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
+              const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
+              const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
+
               const fFinal = (d.feedbackFinal || "").trim();
-              const fSugerido = (d.feedbackSugerido || "").trim();
-              if ((jaAprovado || jaPostado) && fSugerido !== "") {
+              const fSugerido = (d.feedbackSugerido || d.feedbackIA || "").trim();
+              if ((jaAprovado || jaPostado) && fSugerido !== "" && ehDessaTemporada) {
                 iaTotal++;
                 if (fFinal === fSugerido) iaOriginais++;
               }
@@ -130,15 +146,31 @@ export default function Dashboard() {
 
           const agenda = tarefasVivas.filter(t => t.dataFim).map(t => {
             const end = t.dataFim.toDate ? t.dataFim.toDate() : new Date(t.dataFim);
-            return { id: t.id, nomeTarefa: t.nomeTarefa || t.titulo, reference: end.getTime(), diasRestantes: Math.ceil((end.getTime() - hojeTime) / (1000 * 3600 * 24)) };
-          }).sort((a,b) => a.diasRestantes - b.diasRestantes);
+            const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
+            const startObj = startRaw ? (startRaw.toDate ? startRaw.toDate() : new Date(startRaw)) : new Date();
+            const timeInicio = startObj.getTime();
+            
+            const referenceTime = timeInicio > hojeTime ? timeInicio : end.getTime();
+            const diasRestantes = Math.ceil((referenceTime - hojeTime) / (1000 * 3600 * 24));
+            
+            return { 
+                id: t.id, 
+                nomeTarefa: t.nomeTarefa || t.titulo, 
+                diasRestantes: diasRestantes,
+                isFutura: timeInicio > hojeTime 
+            };
+          }).sort((a,b) => (a.isFutura === b.isFutura) ? (a.diasRestantes - b.diasRestantes) : (a.isFutura ? 1 : -1));
 
-          setTarefasEmAndamento(agenda.filter(t => t.diasRestantes >= 0).slice(0, 5));
+          setTarefasEmAndamento(agenda.filter(t => t.diasRestantes >= 0 || !t.isFutura).slice(0, 5));
+        } else {
+          // Se o professor não tem turmas, zera os indicadores complementares para forçar a barra de progresso
+          setTemAlunos(false);
+          setTemTarefasGeral(false);
         }
       } catch (e) { console.error("Erro ao carregar dados do dashboard:", e); }
     }
     fetchDados();
-  }, [escolaSelecionada, instituicoes]);
+  }, [escolaSelecionada, instituicoes, currentUser, isAdmin]);
 
   async function handleCriarInstituicao(e) {
     e.preventDefault();
@@ -170,6 +202,7 @@ export default function Dashboard() {
   else if (!temAlunos) passoAtual = 3;
   else if (!temTarefasGeral) passoAtual = 4;
 
+  // A BARRA DE PROGRESSO GLOBAL GUIADA
   const renderBarraProgresso = () => {
     const passos = [
       { id: 1, titulo: 'Instituição', icone: <School size={18} /> },
@@ -277,6 +310,7 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* A BARRA DE PROGRESSO DEVE ESTAR VISÍVEL ENQUANTO ELE NÃO CHEGAR AO PASSO 5 */}
       {passoAtual <= 4 && renderBarraProgresso()}
 
       {minhasTurmas.length === 0 ? (
@@ -294,6 +328,28 @@ export default function Dashboard() {
               <span>Dica: Você poderá "Copiar turma existente" neste passo!</span>
             </div>
           </div>
+        </div>
+      ) : 
+
+      !temAlunos ? (
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12 animate-in zoom-in-95 duration-500">
+          <div className="bg-orange-50 text-orange-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><UserPlus size={40}/></div>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">Turma configurada! Mas e os alunos?</h2>
+          <p className="text-gray-500 font-medium mb-8 text-lg">Uma sala de aula não funciona sem eles. Vamos adicionar a lista de alunos para que eles possam receber as atividades.</p>
+          <Link to="/alunos" className="inline-flex items-center gap-2 bg-orange-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-orange-600/20 hover:bg-orange-700 transition-all">
+            Passo 3: Cadastrar Alunos <ChevronRight size={18}/>
+          </Link>
+        </div>
+      ) : 
+
+      !temTarefasGeral ? (
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12 animate-in zoom-in-95 duration-500">
+          <div className="bg-purple-50 text-purple-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><FileText size={40}/></div>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">Tudo pronto! Vamos ao trabalho.</h2>
+          <p className="text-gray-500 font-medium mb-8 text-lg">Sua turma já tem alunos cadastrados. Que tal lançar o seu primeiro desafio ou atividade para eles?</p>
+          <Link to="/tarefas" className="inline-flex items-center gap-2 bg-purple-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-purple-600/20 hover:bg-purple-700 transition-all">
+            Passo 4: Criar Tarefa <ChevronRight size={18}/>
+          </Link>
         </div>
       ) : (
         <>
