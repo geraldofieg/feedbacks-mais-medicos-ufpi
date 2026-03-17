@@ -4,26 +4,15 @@ import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimest
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Plus, Search, Pencil, Trash2, Calendar, StickyNote, GraduationCap, ArrowRight, Check, X, Clock, Info, RefreshCw, Paperclip, FileUp, FileCheck, ExternalLink, Users, User } from 'lucide-react';
+import { FileText, Plus, Search, Pencil, Trash2, Calendar, CalendarDays, StickyNote, GraduationCap, Check, X, RefreshCw, Paperclip, FileUp, FileCheck, ExternalLink, Users, User } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
-const ordenarTarefas = (lista) => {
-  return [...lista].sort((a, b) => {
-    const timeA = a.dataFim?.toMillis ? a.dataFim.toMillis() : 0;
-    const timeB = b.dataFim?.toMillis ? b.dataFim.toMillis() : 0;
-
-    if (timeA === 0 && timeB !== 0) return 1; 
-    if (timeA !== 0 && timeB === 0) return -1; 
-    if (timeA !== 0 && timeB !== 0) return timeA - timeB; 
-
-    const criaA = a.dataCriacao?.toMillis ? a.dataCriacao.toMillis() : 0;
-    const criaB = b.dataCriacao?.toMillis ? b.dataCriacao.toMillis() : 0;
-    return criaB - criaA;
-  });
-};
+// IMPORTAÇÃO DAS EMENTAS ESTÁTICAS (FICHA TÉCNICA)
+import { ementaMaisMedicos } from '../data/ementaMaisMedicos';
+import { ementaUFPA } from '../data/ementaUFPA';
 
 export default function Tarefas() {
-  const { currentUser, escolaSelecionada } = useAuth();
+  const { currentUser, escolaSelecionada, userProfile } = useAuth();
   const location = useLocation();
   const [turmas, setTurmas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
@@ -31,15 +20,19 @@ export default function Tarefas() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   
+  // 🔥 ESTADOS PARA AS ABAS (AGENDA VS FICHA TÉCNICA)
+  const [abaAtiva, setAbaAtiva] = useState('agenda'); 
+  const [esconderPassados, setEsconderPassados] = useState(true);
+
   const [turmaAtiva, setTurmaAtiva] = useState(() => {
     return location.state?.turmaIdSelecionada || localStorage.getItem('ultimaTurmaAtiva') || '';
   });
+  
   const [novaTarefa, setNovaTarefa] = useState({ titulo: '', enunciado: '', dataInicio: '', horaInicio: '', dataFim: '', horaFim: '', tipo: 'entrega' });
   const [atribuicaoEspecifica, setAtribuicaoEspecifica] = useState(false); 
   const [alunosSelecionados, setAlunosSelecionados] = useState([]); 
   const [salvando, setSalvando] = useState(false);
   
-  // NOVOS ESTADOS PARA UPLOAD DO ENUNCIADO
   const [uploading, setUploading] = useState(false);
   const [enunciadoArquivoUrl, setEnunciadoArquivoUrl] = useState('');
   const [enunciadoArquivoNome, setEnunciadoArquivoNome] = useState('');
@@ -47,6 +40,8 @@ export default function Tarefas() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sucessoMsg, setSucessoMsg] = useState('');
   const tituloInputRef = useRef(null);
+  
+  // ESTADOS DE EDIÇÃO
   const [editandoId, setEditandoId] = useState(null);
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
@@ -55,6 +50,8 @@ export default function Tarefas() {
   const [dataFimEdicao, setDataFimEdicao] = useState('');
   const [horaFimEdicao, setHoraFimEdicao] = useState('');
   const [tipoEdicao, setTipoEdicao] = useState('entrega');
+
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
   useEffect(() => {
     if (location.state?.novoRegistro || location.state?.abrirModal) {
@@ -80,7 +77,10 @@ export default function Tarefas() {
     async function fetchTurmas() {
       if (!currentUser || !escolaSelecionada?.id) return;
       try {
-        const qT = query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        const qT = isAdmin
+          ? query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id))
+          : query(collection(db, 'turmas'), where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        
         const snapT = await getDocs(qT);
         const turmasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         setTurmas(turmasData);
@@ -96,7 +96,7 @@ export default function Tarefas() {
       } catch (error) { console.error("Erro fetch turmas:", error); }
     }
     fetchTurmas();
-  }, [currentUser, escolaSelecionada]);
+  }, [currentUser, escolaSelecionada, isAdmin]);
 
   useEffect(() => {
     async function fetchDadosTurma() {
@@ -107,7 +107,7 @@ export default function Tarefas() {
         const snapT = await getDocs(qT);
         const tarefasData = snapT.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira');
         
-        setTarefas(ordenarTarefas(tarefasData));
+        setTarefas(tarefasData);
 
         const qA = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapA = await getDocs(qA);
@@ -122,35 +122,49 @@ export default function Tarefas() {
     fetchDadosTurma();
   }, [turmaAtiva, escolaSelecionada]);
 
-  async function handleUploadEnunciado(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+  // LÓGICA VISUAL DO CRONOGRAMA
+  const getStatusPrazo = (tsInicio, tsFim) => {
+    let status = 'atual';
+    let dias = 0;
+    let dataFormatada = 'Sem prazo definido';
+    let timestampVal = 0;
+    
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
 
-    setUploading(true);
-    const storageRef = ref(storage, `enunciados/${currentUser.uid}/${Date.now()}_${file.name}`);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const dataInicio = tsInicio ? (tsInicio.toDate ? tsInicio.toDate() : new Date(tsInicio)) : null;
+    const dataFim = tsFim ? (tsFim.toDate ? tsFim.toDate() : new Date(tsFim)) : null;
 
-    uploadTask.on('state_changed', 
-      null, 
-      (error) => { console.error(error); setUploading(false); }, 
-      async () => {
-        const url = await getDownloadURL(uploadTask.snapshot.ref);
-        setEnunciadoArquivoUrl(url);
-        setEnunciadoArquivoNome(file.name);
-        setUploading(false);
-      }
-    );
-  }
+    if (dataInicio) dataInicio.setHours(0, 0, 0, 0);
+    if (dataFim) dataFim.setHours(0, 0, 0, 0);
+
+    if (dataFim) {
+       dias = Math.ceil((dataFim.getTime() - hoje.getTime()) / (1000 * 3600 * 24));
+       if (dias < 0) status = 'passado';
+       else if (dataInicio && hoje.getTime() < dataInicio.getTime()) status = 'futuro';
+       else status = 'atual';
+       timestampVal = dataFim.getTime();
+    } else if (dataInicio) {
+       dias = Math.ceil((dataInicio.getTime() - hoje.getTime()) / (1000 * 3600 * 24));
+       if (dias < 0) status = 'passado';
+       else if (dias > 0) status = 'futuro';
+       else status = 'atual';
+       timestampVal = dataInicio.getTime();
+    }
+
+    if (dataInicio && dataFim) dataFormatada = `${dataInicio.toLocaleDateString('pt-BR')} até ${dataFim.toLocaleDateString('pt-BR')}`;
+    else if (dataFim) dataFormatada = `Até ${dataFim.toLocaleDateString('pt-BR')}`;
+    else if (dataInicio) dataFormatada = `A partir de ${dataInicio.toLocaleDateString('pt-BR')}`;
+
+    return { status, diasRestantes: dias, dataFormatada, timestampVal };
+  };
 
   const tsToDateInput = (ts) => {
     if (!ts) return "";
     try {
       let d = ts.toDate ? ts.toDate() : new Date(ts);
       if (isNaN(d.getTime())) return "";
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
+      return d.toISOString().split('T')[0];
     } catch (e) { return ""; }
   };
 
@@ -200,7 +214,7 @@ export default function Tarefas() {
         tipo: tipoEdicao
       });
       const listaAtualizada = tarefas.map(t => t.id === id ? { ...t, nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(), dataInicio: prazoInicial, dataFim: prazoFinal, tipo: tipoEdicao } : t);
-      setTarefas(ordenarTarefas(listaAtualizada));
+      setTarefas(listaAtualizada);
       setEditandoId(null);
     } catch (error) { console.error("Erro ao salvar:", error); }
   }
@@ -233,7 +247,7 @@ export default function Tarefas() {
         professorUid: currentUser.uid,
         status: 'ativa', 
         dataCriacao: serverTimestamp(),
-        // 🔥 A TRAVA DE SEGURANÇA: Salva no banco quem são os alunos alvo
+        // 🔥 REGRA CRÍTICA DOC (Trava de Atribuição)
         atribuicaoEspecifica: atribuicaoEspecifica,
         alunosSelecionados: atribuicaoEspecifica ? alunosSelecionados : []
       };
@@ -253,7 +267,7 @@ export default function Tarefas() {
             instituicaoId: escolaSelecionada.id,
             tarefaId: novaId,
             
-            // 🔥 CIRURGIA V1: Etiquetas Poliglotas injetadas na criação
+            // 🔥 REGRA CRÍTICA DOC (Retrocompatibilidade Poliglota)
             nomeAluno: aluno.nome,
             aluno: aluno.nome,
             nomeTarefa: tituloSalvo,
@@ -273,7 +287,7 @@ export default function Tarefas() {
       }
 
       const listaComNovo = [{ id: novaId, ...tData, dataCriacao: Timestamp.now() }, ...tarefas];
-      setTarefas(ordenarTarefas(listaComNovo));
+      setTarefas(listaComNovo);
       setSucessoMsg(`"${tituloSalvo}" salvo com sucesso!`);
       
       setTimeout(() => {
@@ -289,6 +303,24 @@ export default function Tarefas() {
     finally { setSalvando(false); }
   }
 
+  async function handleUploadEnunciado(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const storageRef = ref(storage, `enunciados/${currentUser.uid}/${Date.now()}_${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', null, 
+      (error) => { console.error(error); setUploading(false); }, 
+      async () => {
+        const url = await getDownloadURL(uploadTask.snapshot.ref);
+        setEnunciadoArquivoUrl(url);
+        setEnunciadoArquivoNome(file.name);
+        setUploading(false);
+      }
+    );
+  }
+
   const toggleAlunoSelecao = (alunoId) => {
     setAlunosSelecionados(prev => prev.includes(alunoId) ? prev.filter(id => id !== alunoId) : [...prev, alunoId]);
   };
@@ -300,27 +332,12 @@ export default function Tarefas() {
       setTarefas(tarefas.filter(t => t.id !== id));
     } catch (error) { console.error("Erro remover:", error); }
   }
-  
-  const formatarDataLocal = (ts) => {
-    if (!ts) return "";
-    try {
-      let d = ts.toDate ? ts.toDate() : new Date(ts);
-      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch (e) { return ""; }
-  };
 
   const getIconeTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return <Calendar size={20} className="text-purple-500" />;
     if (t === 'lembrete') return <StickyNote size={20} className="text-yellow-500" />;
     return <FileText size={20} className="text-orange-500" />;
-  };
-
-  const getCorTipo = (tipo) => {
-    const t = (tipo || 'entrega').toLowerCase();
-    if (t === 'compromisso') return 'border-purple-200 bg-purple-50/20 hover:border-purple-300';
-    if (t === 'lembrete') return 'border-yellow-300 bg-yellow-50/40 hover:border-yellow-400';
-    return 'border-orange-200 bg-orange-50/20 hover:border-orange-300';
   };
 
   const getNomeVisivelTipo = (tipo) => {
@@ -330,135 +347,188 @@ export default function Tarefas() {
     return 'Tarefa do Aluno';
   };
 
-  const tarefasFiltradas = tarefas.filter(t => (t.nomeTarefa || t.titulo || '').toLowerCase().includes(busca.toLowerCase()));
+  const turmaObj = turmas.find(t => t.id === turmaAtiva);
+  const faculdadeNome = escolaSelecionada?.nome?.trim().toUpperCase();
+  const isTurmaMaisMedicos = (faculdadeNome === 'UFPI' || faculdadeNome === 'UFPA') && turmaObj?.nome?.trim().includes('Facilitador');
+  const ementaParaExibir = faculdadeNome === 'UFPA' ? ementaUFPA : ementaMaisMedicos;
+
+  const itensFiltrados = tarefas.filter(t => (t.nomeTarefa || t.titulo || '').toLowerCase().includes(busca.toLowerCase()));
+  
+  const itensComPrazo = itensFiltrados
+    .map(t => ({ ...t, statusObj: getStatusPrazo(t.dataInicio, t.dataFim) }))
+    .filter(t => !esconderPassados || t.statusObj.status !== 'passado')
+    .sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal);
+
+  if (!escolaSelecionada?.id) {
+    return <div className="p-20 text-center font-bold text-gray-400">Selecione uma instituição no Início...</div>;
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
-      <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Gestão e Cronograma' }]} />
-      
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-8">
-        <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
-          <div className="bg-blue-100 text-blue-600 p-2.5 rounded-xl shadow-sm"><Calendar size={26} /></div>
-          Gestão de Cronograma
-        </h1>
-        {turmas.length > 0 && turmaAtiva && (
-          <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
-            <Plus size={20}/> Novo Registro
-          </button>
-        )}
-      </div>
-
-      {turmas.length > 0 && (
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
-            <input type="text" placeholder="Procurar no radar da turma..." className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-gray-700 transition-all placeholder:font-medium" value={busca} onChange={e => setBusca(e.target.value)} />
-          </div>
-          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-2 min-w-[240px]">
-             <GraduationCap size={20} className="text-gray-400 ml-2" />
-             <select className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-blue-700 cursor-pointer" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
-               <option value="" disabled>Selecione a Turma...</option>
-               {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-             </select>
-          </div>
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans">
+      <div className="max-w-4xl mx-auto px-4 py-6 md:py-8">
+        <Breadcrumb items={[{ label: `Cronograma (${escolaSelecionada.nome})` }]} />
+        
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-6">
+          <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+            <div className="bg-blue-100 text-blue-600 p-2.5 rounded-xl shadow-sm"><CalendarDays size={26} /></div>
+            Tarefas e Cronograma
+          </h1>
+          {turmas.length > 0 && turmaAtiva && (
+            <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
+              <Plus size={20}/> Novo Registro
+            </button>
+          )}
         </div>
-      )}
 
-      <div className="space-y-4">
+        {turmas.length > 0 && (
+          <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm mb-8 flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
+              <input type="text" placeholder="Procurar na agenda..." className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-gray-700 transition-all" value={busca} onChange={e => setBusca(e.target.value)} />
+            </div>
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-2 min-w-[240px]">
+               <GraduationCap size={20} className="text-gray-400 ml-2" />
+               <select className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-blue-700 cursor-pointer" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
+                 <option value="" disabled>Selecione a Turma...</option>
+                 {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+               </select>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 ABA DE AGENDA E FICHA TÉCNICA AQUI 🔥 */}
+        {isTurmaMaisMedicos && turmaAtiva && (
+          <div className="flex bg-gray-200/50 p-1.5 rounded-2xl mb-8 w-fit">
+            <button onClick={() => setAbaAtiva('agenda')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${abaAtiva === 'agenda' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Agenda de Tarefas</button>
+            <button onClick={() => setAbaAtiva('guia')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${abaAtiva === 'guia' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Ficha Técnica (PDF)</button>
+          </div>
+        )}
+
         {loading ? (
           <div className="p-16 text-center animate-pulse font-black text-slate-300 text-lg">Carregando cronograma...</div>
         ) : !turmaAtiva ? (
-          <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm mt-8">
+          <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm">
             <div className="bg-blue-50 text-blue-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><GraduationCap size={40} /></div>
             <h3 className="text-2xl font-black text-slate-800 mb-2">Nenhuma turma selecionada</h3>
-            <p className="text-slate-500 font-medium mb-8 text-lg">Selecione uma turma para gerenciar o cronograma.</p>
+            <p className="text-slate-500 font-medium text-lg">Selecione uma turma para gerenciar o cronograma.</p>
           </div>
-        ) : tarefasFiltradas.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm mt-8">
-            <div className="bg-blue-50 text-blue-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Calendar size={40} /></div>
-            <h3 className="text-2xl font-black text-slate-800 mb-2">Cronograma Vazio!</h3>
-            <p className="text-slate-500 font-medium mb-6 text-lg max-w-lg mx-auto">Sua turma ainda não tem atividades cadastradas.</p>
-            <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2 mx-auto"><Plus size={20}/> Novo Registro</button>
+        ) : abaAtiva === 'agenda' ? (
+          <div>
+            <div className="flex justify-end mb-6">
+              <button onClick={() => setEsconderPassados(!esconderPassados)} className="px-4 py-2 rounded-full text-xs font-bold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors shadow-sm">
+                {esconderPassados ? '👁️ Mostrar Antigos' : '🙈 Ocultar Passados'}
+              </button>
+            </div>
+            
+            {itensComPrazo.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-3xl border border-gray-200 shadow-sm">
+                <div className="bg-blue-50 text-blue-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><CalendarDays size={40} /></div>
+                <h3 className="text-2xl font-black text-slate-800 mb-2">Cronograma Vazio!</h3>
+                <p className="text-slate-500 font-medium mb-6 text-lg">Sua turma ainda não tem atividades na linha do tempo.</p>
+                <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white font-black px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2 mx-auto"><Plus size={20}/> Novo Registro</button>
+              </div>
+            ) : (
+              <div className="relative border-l-2 border-gray-200 ml-4 md:ml-8 pl-6 md:pl-10 space-y-8 py-4">
+                {itensComPrazo.map((item) => {
+                  const { status, dataFormatada } = item.statusObj;
+                  return (
+                    <div key={item.id} className="relative group">
+                      <div className={`absolute -left-[35px] md:-left-[51px] top-6 w-6 h-6 rounded-full border-4 ${status === 'atual' ? 'bg-blue-500 border-blue-100 shadow-lg' : status === 'passado' ? 'bg-gray-400 border-gray-100' : 'bg-gray-300 border-gray-50'}`}></div>
+                      
+                      <div className={`p-6 rounded-2xl border bg-white transition-all ${editandoId === item.id ? 'border-blue-500 ring-4 ring-blue-50 shadow-lg' : status === 'atual' ? 'border-blue-200 shadow-md' : 'opacity-75 hover:opacity-100 border-gray-200'}`}>
+                         
+                         {/* ================= FORMULÁRIO DE EDIÇÃO INLINE ================= */}
+                         {editandoId === item.id ? (
+                           <div className="space-y-4 animate-in fade-in zoom-in duration-200">
+                             <div>
+                               <label className="text-[10px] font-black text-slate-500 uppercase">Título da Tarefa</label>
+                               <input type="text" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)} autoFocus />
+                             </div>
+                             <div>
+                               <label className="text-[10px] font-black text-slate-500 uppercase">Enunciado / Link</label>
+                               <textarea rows="3" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none font-medium text-slate-700" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} />
+                             </div>
+                             <div className="grid grid-cols-2 gap-3">
+                               <div>
+                                 <label className="text-[10px] font-black text-slate-500 uppercase">Data de Início</label>
+                                 <input type="date" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={dataInicioEdicao} onChange={e => setDataInicioEdicao(e.target.value)} />
+                               </div>
+                               <div>
+                                 <label className="text-[10px] font-black text-slate-500 uppercase">Prazo Final</label>
+                                 <input type="date" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)} />
+                               </div>
+                             </div>
+                             <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                               <button onClick={() => handleSalvarEdicao(item.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl text-sm font-black shadow-sm transition-colors">Salvar Alterações</button>
+                               <button onClick={() => setEditandoId(null)} className="sm:w-1/3 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3 rounded-xl text-sm font-black transition-colors">Cancelar</button>
+                             </div>
+                           </div>
+                         ) : (
+
+                         /* ================= VISÃO NORMAL DO CARD ================= */
+                         <div className="flex flex-col md:flex-row justify-between gap-4">
+                           <div className="flex-1">
+                             <div className="flex items-center gap-2 mb-2">
+                               {getIconeTipo(item.tipo)}
+                               <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{getNomeVisivelTipo(item.tipo)}</p>
+                               {status === 'atual' && <span className="bg-blue-100 text-blue-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase ml-2">Em andamento</span>}
+                               {status === 'futuro' && <span className="bg-gray-100 text-gray-500 text-[9px] font-black px-2 py-0.5 rounded-full uppercase ml-2">Em breve</span>}
+                               {status === 'passado' && <span className="bg-red-50 text-red-500 text-[9px] font-black px-2 py-0.5 rounded-full uppercase ml-2">Encerrado</span>}
+                             </div>
+                             
+                             <h3 className="text-xl font-black text-gray-800">{item.nomeTarefa || item.titulo}</h3>
+                             <p className="text-sm font-bold text-gray-500 mt-1"><Calendar size={14} className="inline mr-1" />{dataFormatada}</p>
+                             
+                             {item.enunciado && <p className="text-sm text-gray-600 mt-4 bg-gray-50 border border-gray-100 p-4 rounded-xl whitespace-pre-wrap">{item.enunciado}</p>}
+                             
+                             {item.enunciadoArquivoUrl && (
+                               <a href={item.enunciadoArquivoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider mt-3 hover:bg-blue-100 transition-colors">
+                                 <Paperclip size={12}/> Ver Anexo <ExternalLink size={10}/>
+                               </a>
+                             )}
+                           </div>
+                           
+                           <div className="flex flex-col items-end justify-between shrink-0">
+                             <div className="flex gap-2 mb-4 md:mb-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                               <button onClick={() => iniciarEdicao(item)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar Tarefa"><Pencil size={18}/></button>
+                               <button onClick={() => handleLixeira(item.id, item.nomeTarefa || item.titulo)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir Tarefa"><Trash2 size={18}/></button>
+                             </div>
+                             {(item.tipo === 'entrega' || !item.tipo) && (
+                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all ${status === 'passado' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
+                                 {status === 'passado' ? 'Consultar Histórico' : 'Corrigir Tarefas'}
+                               </Link>
+                             )}
+                           </div>
+                         </div>
+                         )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {tarefasFiltradas.map(tarefa => (
-              <div key={tarefa.id} className={`bg-white p-5 rounded-2xl border transition-all shadow-sm group ${editandoId === tarefa.id ? 'border-blue-500 ring-4 ring-blue-50 shadow-lg' : `${getCorTipo(tarefa.tipo)} hover:shadow-md`}`}>
-                
-                {/* 🔥 FORMULÁRIO DE EDIÇÃO RESTAURADO AQUI 🔥 */}
-                {editandoId === tarefa.id ? (
-                  <div className="space-y-3 animate-in fade-in zoom-in duration-200">
-                    <div>
-                      <label className="text-[10px] font-black text-slate-500 uppercase">Título</label>
-                      <input type="text" className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)} />
+          <div className="space-y-6">
+            {ementaParaExibir.map((eixo, idx) => (
+              <div key={idx} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                <div className="bg-slate-800 p-4"><h3 className="text-white font-black">{eixo.eixo}</h3></div>
+                <div className="divide-y">
+                  {eixo.modulos.map((mod, i) => (
+                    <div key={i} className="p-5">
+                      <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2 py-1 rounded">MÓDULO {mod.num}</span>
+                      <h4 className="font-black text-lg text-gray-800 mt-1">{mod.titulo}</h4>
+                      <p className="text-xs font-bold text-gray-400 uppercase mt-2">{mod.ch}h • {mod.creditos} créditos</p>
                     </div>
-                    <div>
-                      <label className="text-[10px] font-black text-slate-500 uppercase">Enunciado</label>
-                      <textarea rows="3" className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-black text-slate-500 uppercase">Início</label>
-                        <input type="date" className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500" value={dataInicioEdicao} onChange={e => setDataInicioEdicao(e.target.value)} />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black text-slate-500 uppercase">Prazo Final</label>
-                        <input type="date" className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500" value={dataFimEdicao} onChange={e => setDataFimEdicao(e.target.value)} />
-                      </div>
-                    </div>
-                    <div className="pt-2 flex flex-col gap-2">
-                      <button onClick={() => handleSalvarEdicao(tarefa.id)} className="w-full bg-green-600 text-white py-2.5 rounded-lg text-sm font-black shadow-sm">Salvar Alterações</button>
-                      <button onClick={() => setEditandoId(null)} className="w-full bg-gray-100 text-gray-600 py-2.5 rounded-lg text-sm font-black">Cancelar</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col h-full justify-between">
-                    <div>
-                      <div className="flex justify-between items-start gap-3 mb-3">
-                        <div className="flex items-start gap-3 min-w-0 flex-1">
-                          <div className="p-2 bg-white rounded-lg shadow-sm border border-gray-100 shrink-0 mt-0.5">
-                            {getIconeTipo(tarefa.tipo)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            {(tarefa.tipo === 'entrega' || !tarefa.tipo) ? (
-                              <Link to={`/revisar/${tarefa.id}`} className="block font-black text-slate-800 text-base md:text-lg leading-tight hover:text-blue-600 transition-colors group/link truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
-                                {tarefa.nomeTarefa || tarefa.titulo}
-                              </Link>
-                            ) : (
-                              <h3 className="font-black text-slate-800 text-base md:text-lg leading-tight truncate" title={tarefa.nomeTarefa || tarefa.titulo}>
-                                {tarefa.nomeTarefa || tarefa.titulo}
-                              </h3>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
-                          <button onClick={() => iniciarEdicao(tarefa)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Editar"><Pencil size={16}/></button>
-                          <button onClick={() => handleLixeira(tarefa.id, tarefa.nomeTarefa || tarefa.titulo)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors shadow-sm" title="Remover"><Trash2 size={16}/></button>
-                        </div>
-                      </div>
-
-                      {tarefa.enunciado && (
-                        <p className="text-sm text-slate-600 font-medium line-clamp-4 mb-4 bg-white/50 p-3 rounded-lg whitespace-pre-wrap">{tarefa.enunciado}</p>
-                      )}
-
-                      {tarefa.enunciadoArquivoUrl && (
-                        <a href={tarefa.enunciadoArquivoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider mb-4 hover:bg-blue-100 transition-colors">
-                          <Paperclip size={12}/> Ver Anexo <ExternalLink size={10}/>
-                        </a>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white py-1.5 px-3 rounded-lg border border-slate-100 w-fit mt-auto text-slate-500 shadow-sm">
-                      {getNomeVisivelTipo(tarefa.tipo)} • {tarefa.dataFim ? formatarDataLocal(tarefa.dataFim) : 'Sem prazo'}
-                    </div>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
 
+      {/* ================= MODAL DE NOVO REGISTRO ================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
@@ -478,13 +548,13 @@ export default function Tarefas() {
                 <div>
                   <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Tipo de Registro</label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'entrega'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'entrega' ? 'border-orange-500 bg-orange-50' : 'border-slate-100 bg-white'}`}>
-                      <FileText size={20} className="text-orange-500 mb-2"/><h4 className="font-black text-sm">Tarefa</h4>
+                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'entrega'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'entrega' ? 'border-orange-500 bg-orange-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                      <FileText size={20} className="text-orange-500 mb-2"/><h4 className="font-black text-sm">Tarefa / Módulo</h4>
                     </button>
-                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'compromisso'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'compromisso' ? 'border-purple-500 bg-purple-50' : 'border-slate-100 bg-white'}`}>
+                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'compromisso'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'compromisso' ? 'border-purple-500 bg-purple-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
                       <Calendar size={20} className="text-purple-500 mb-2"/><h4 className="font-black text-sm">Compromisso</h4>
                     </button>
-                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'lembrete'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'lembrete' ? 'border-yellow-500 bg-yellow-50' : 'border-slate-100 bg-white'}`}>
+                    <button type="button" onClick={() => setNovaTarefa({...novaTarefa, tipo: 'lembrete'})} className={`p-4 rounded-2xl border-2 transition-all text-left ${novaTarefa.tipo === 'lembrete' ? 'border-yellow-500 bg-yellow-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
                       <StickyNote size={20} className="text-yellow-500 mb-2"/><h4 className="font-black text-sm">Post-it</h4>
                     </button>
                   </div>
@@ -498,7 +568,7 @@ export default function Tarefas() {
 
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">Enunciado da Tarefa</label>
+                      <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">Enunciado ou Links</label>
                       <div className="flex items-center gap-2">
                         {enunciadoArquivoUrl ? (
                           <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 animate-in zoom-in">
@@ -515,17 +585,17 @@ export default function Tarefas() {
                         )}
                       </div>
                     </div>
-                    <textarea placeholder="Cole o texto ou anexe um arquivo acima..." rows="5" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700 resize-none leading-relaxed" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}/>
+                    <textarea placeholder="Cole o texto ou links importantes aqui..." rows="4" className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700 resize-none leading-relaxed" value={novaTarefa.enunciado} onChange={e => setNovaTarefa({...novaTarefa, enunciado: e.target.value})}/>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-black text-slate-800 uppercase mb-2 block">Início</label>
-                      <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={novaTarefa.dataInicio} onChange={e => setNovaTarefa({...novaTarefa, dataInicio: e.target.value})}/>
+                      <label className="text-xs font-black text-slate-800 uppercase mb-2 block">Data de Início</label>
+                      <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.dataInicio} onChange={e => setNovaTarefa({...novaTarefa, dataInicio: e.target.value})}/>
                     </div>
                     <div>
                       <label className="text-xs font-black text-slate-800 uppercase mb-2 block">Prazo Final</label>
-                      <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}/>
+                      <input type="date" className="w-full px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" value={novaTarefa.dataFim} onChange={e => setNovaTarefa({...novaTarefa, dataFim: e.target.value})}/>
                     </div>
                   </div>
 
@@ -576,8 +646,8 @@ export default function Tarefas() {
                   )}
                 </div>
 
-                <button disabled={salvando || uploading} className={`w-full text-white font-black py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 mt-4 text-xl active:scale-95 ${sucessoMsg ? 'bg-green-500' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                  {salvando ? <RefreshCw className="animate-spin" size={24}/> : sucessoMsg ? <><Check size={28}/> Sucesso!</> : 'Salvar no Cronograma'}
+                <button disabled={salvando || uploading} className={`w-full text-white font-black py-5 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 mt-4 text-lg active:scale-95 ${sucessoMsg ? 'bg-green-500' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  {salvando ? <RefreshCw className="animate-spin" size={24}/> : sucessoMsg ? <><Check size={24}/> Cadastrado!</> : 'Salvar no Cronograma'}
                 </button>
               </form>
             </div>
