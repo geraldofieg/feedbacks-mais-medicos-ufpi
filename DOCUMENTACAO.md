@@ -21,14 +21,14 @@ O sistema opera em uma hierarquia plana de 3 níveis protegida por Tenant ID:
 3. **Nível 3 (Tarefas/Alunos):** Itens operacionais vinculados diretamente a uma Turma. A Tarefa é a "mãe" do processo de avaliação; sem ela, não há pendência, cobrança, mapa ou nota.
 
 **Regras de Acesso e Memória (UX):**
-* **Seleção Automática (VIP Onboarding):** Se o professor possuir apenas UMA instituição cadastrada no banco, o sistema a seleciona automaticamente após o login.
+* **Seleção Automática (Bússola Inteligente):** O sistema identifica automaticamente a instituição ativa correta do professor com base na sua turma mais recente, garantindo que o painel abra sempre no contexto de trabalho real.
 * **Persistência de Sessão (Último Uso):** O sistema salva a última instituição acessada no cache do navegador (`localStorage` sob a chave `@SaaS_EscolaSelecionada`).
 * **Memória de Turma Ativa (Sincronização Global):** O sistema salva a última turma manipulada no cache (`localStorage` via chave `ultimaTurmaAtiva`). Isso garante que as abas de Tarefas, Cronograma e Pendências abram sempre sincronizadas na mesma turma.
 
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
-* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role`, `plano`, `promptPersonalizado`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`.
-* **`tarefas`:** Agora possuem **Atribuição Específica** (`atribuicaoEspecifica: boolean`, `alunosSelecionados: array`). Tarefas podem ser exclusivas para certos alunos, prevenindo cobranças indevidas (Falsos Positivos).
+* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` ('admin' | 'professor'), `plano`, `promptPersonalizado`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`, `status` ('ativo' | 'bloqueado').
+* **`tarefas`:** Agora possuem **Atribuição Específica** (`atribuicaoEspecifica: boolean`, `alunosSelecionados: array`). Tarefas podem ser exclusivas para certos alunos, prevenindo cobranças indevidas (Falsos Positivos). Sempre geram `dataInicio` na hora 00:00 e `dataFim` às 23:59.
 * **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` ('pendente'|'aprovado'), `nota`, `feedbackSugerido`, `feedbackFinal`, `postado` (Booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`, `arquivoUrl`, `nomeArquivo`. 
 * **Campos de Retrocompatibilidade V1/V3 (Estratégia Poliglota/Dupla Etiqueta):** Salva simultaneamente `nomeAluno` (V3) e `aluno` (V1), `nomeTarefa` (V3) e `tarefa`/`modulo` (V1), `revisadoPor` (Nome do revisor). 
 * **Regra Crítica de Sincronia (Prevenção de Falsos Positivos na V1):** Em rascunhos (`status: 'pendente'`) ou ao devolver para revisão, o campo `dataAprovacao` não pode ser salvo como `null`. Ele deve ser fisicamente arrancado do banco de dados utilizando a diretriz `deleteField()` do Firestore. Isso impede que a V1 (que valida a mera existência da chave para mudar de funil) jogue o aluno acidentalmente para a caixa de "Falta Postar".
@@ -36,18 +36,25 @@ Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '=='
 
 ## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
 * **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada, o Dashboard exibe a interface de criação de Nível 1.
-* **Atalho VIP de Ação Rápida (Card Multi-Tarefas):** O Dashboard avalia se existem tarefas em andamento cruzando a data atual. Se houver múltiplas tarefas ativas, o card central se adapta transformando-se em uma lista rolável (Cardápio Completo). O texto do botão de cada tarefa possui inteligência: se não houver progresso, exibe **"Iniciar correções"**; se pelo menos uma resposta já foi colada, atualiza para **"Continuar correções"**.
+* **Atalho VIP de Ação Rápida (Card Multi-Tarefas):** A barra preta de topo exibe tarefas **estritamente em andamento hoje** (não futuras, não passadas). Otimizada para mobile com ícone de Lápis para acesso direto à correção, liberando espaço para o título.
+* **Gestão à Vista (Lista de Devedores):** Exibe nominalmente os alunos com pendências cruzando tarefas ativas (Hoje) e **Tarefas Anteriores** criadas a partir de um marco de corte temporal (`05/01/2026`).
 * **A Esteira de Produção (Kanban Matemático Blindado):** Os alunos só entram no funil a partir do momento em que o professor **cola a resposta deles** no sistema (ou anexa arquivo).
     * **Desfragmentador Anti-Clones (Deduplicação Client-Side):** As listagens ignoram versões antigas/fantasmas na memória, agrupando pela chave `Tarefa + Aluno` e processando sempre apenas o documento mais recente.
     * **Caixa 1: Aguardando Revisão (`/aguardandorevisao`):** Resposta colada ou arquivo anexado, mas feedback não aprovado. (Ordenado: Mais recente no topo).
     * **Caixa 2: Aguardando Postar (`/faltapostar`):** Feedback aprovado, mas `postado` é `false`. (Oculta para o Tier 2).
     * **Caixa 3: Histórico Finalizado (`/historico`):** `postado` é `true`. Ciclo encerrado.
-* **Termômetro da IA:** Mede a eficiência do prompt. Regra: A avaliação entra na conta verificando a exata `dataAprovacao` contra o `timestampPrompt`. Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Visível para Tier Premium e Admin.
+* **Termômetro da IA:** Mede a eficiência do prompt. Regra: A avaliação entra na conta verificando a exata `dataAprovacao` contra o `timestampPrompt` do usuário (para zerar estatísticas se o prompt mudar). Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Visível para Tier Premium e Admin.
 
 ## 7. Perfis de Acesso (RBAC SaaS) e Painel Admin
+* **Segurança Clean Code:** Nenhuma verificação de autorização utiliza hardcode de e-mails (`geraldofieg@...`). Toda validação de acesso é baseada unicamente no campo `role === 'admin'` proveniente do AuthContext.
 * **Perfil Professor:** Só enxerga dados onde seu `uid` conste como criador.
 * **Perfil Gestor (Admin):** Possui a **"Chave Mestra"**, ignorando a trava de `professorUid` para auditar a operação completa da Instituição.
-* **Painel SaaS (`/admin`):** Tela gerencial exclusiva para o Super Admin gerenciar planos, expirações e Log de Auditoria financeira (`arrayUnion`).
+* **Painel SaaS (`/admin`):** Tela gerencial de CEO restrita. Permite: 
+    * Gestão visual de assinaturas (Vencido, Vitalício, Ativo).
+    * Ações de faturamento (estender dias, conceder/revogar vitalício, edição manual de datas).
+    * Suspensão instantânea de acesso (bloqueio de usuário).
+    * Botão de Emergência (Hard Delete) apaga todos os rastros de um usuário no banco via `writeBatch`.
+    * Log de Auditoria financeira detalhado (`arrayUnion`).
 
 ## 8. Modelos de Operação (Tiers/Planos de Assinatura)
 * **Tier 1: Básico ("O Organizador Pessoal"):** Focado na Gestão Visual e Cobrança. Faz a operação manual. A interface da IA atua como **Vitrine de Vendas** (Cadeado 🔒) redirecionando para a nova página de `/planos`.
@@ -71,7 +78,7 @@ O sistema orienta o professor através de Ícones Tricolores no buscador de alun
 * ✅ **Lançado:** Trabalho concluído! O feedback e a nota já foram lançados para o portal oficial da instituição. Status blindado no histórico.
 
 ## 11. Gestão de Tarefas, Automação e Motor de Clonagem
-* **Batch Write:** Ao criar uma "Tarefa do Aluno", o sistema distribui automaticamente o registro para todos os alunos (ou apenas para os alvos).
+* **Batch Write:** Ao criar uma "Tarefa do Aluno", o sistema distribui automaticamente o registro para todos os alunos (ou apenas para os alvos selecionados no guardrail preventivo).
 * **Atribuição Específica:** O sistema permite a criação de tarefas restritas a um grupo seleto de alunos, isolando-os da matemática global de inadimplência da turma.
 * **O Motor de Clonagem (Turma Modelo):** Professores podem "Criar Turma a partir de Modelo", replicando 100% das tarefas e enunciados de uma turma master, sem copiar os alunos.
 
@@ -95,7 +102,7 @@ Automatização de cobranças baseada no cruzamento de alunos x tarefas pendente
 * **Importador Mágico (Lote):** Recurso para importar alunos do Excel/Word via "Copiar e Colar" com proteção contra duplicidade em tempo real.
 
 ## 15. Cronograma Dinâmico e Fichas Técnicas SaaS
-* **Aba 1 (Agenda de Entregas):** Processa tarefas em tempo real com agrupamento visual por urgência (Laranja, Azul, Cinza). **O botão de ação rápida na tarefa é inteligente e muda de "Iniciar" para "Continuar correções" conforme o avanço.**
+* **Aba 1 (Agenda de Entregas):** Processa tarefas em tempo real com agrupamento visual por urgência (Laranja, Azul, Cinza). **O botão de ação rápida na tarefa é inteligente e muda de "Lápis (Corrigir)" para "Consultar Histórico" dependendo da vigência da tarefa.**
 * **Aba 2 (Ficha Técnica Oficial):** Exibe documentos curriculares estáticos locais (`src/data/`). Acesso restrito via Trava de Segurança (Strict Match) entre Instituição e Turma.
 
 ## 16. Padrões de Usabilidade e Navegação (Camadas de Defesa UX)
