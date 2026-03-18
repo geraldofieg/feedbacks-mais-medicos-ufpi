@@ -2,9 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   BookOpen, ArrowLeft, Users, CalendarDays, 
   Sparkles, LayoutDashboard, Map, MessageCircle, 
-  Copy, CheckCircle2, Zap
+  CheckCircle2, Zap
 } from 'lucide-react';
-import Breadcrumb from '../components/Breadcrumb';
 
 export default function Guia() {
   const navigate = useNavigate();
@@ -18,36 +17,39 @@ export default function Guia() {
             <ArrowLeft size={24} />
           </button>
           <div>
-            <h1 className="text-3xl font-black text-gray-800 tracking-tight flex items-center gap-3">
-              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><BookOpen size={28}/></div>
-              Como Funciona a Plataforma
+            <h1 className="text-2xl md:text-3xl font-black text-gray-800 tracking-tight flex items-center gap-3">
+              <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><BookOpen size={24} className="md:w-7 md:h-7"/></div>
+              Como Funciona
             </h1>
             <p className="text-sm font-medium text-gray-500 mt-1">Seu manual rápido para dominar o sistema e ganhar tempo.</p>
           </div>
         </div>
 
         {/* HERO SECTION - O MANIFESTO */}
-        <div className="bg-indigo-600 rounded-3xl p-8 md:p-10 text-white shadow-xl mb-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
+        <div className="bg-indigo-600 rounded-3xl p-6 md:p-10 text-white shadow-xl mb-8 md:mb-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
           <div className="relative z-10 max-w-3xl">
-            <h2 className="text-2xl md:text-4xl font-black mb-4 leading-tight">Deixando de ser um "Digitador" para ser um Mentor de Alta Performance.</h2>
-            <p className="text-indigo-100 font-medium text-base md:text-lg leading-relaxed mb-6">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black mb-4 leading-tight">Deixando de ser um "Digitador" para ser um Mentor de Alta Performance.</h2>
+            <p className="text-indigo-100 font-medium text-sm sm:text-base md:text-lg leading-relaxed mb-6">
               A Plataforma não é um Portal do Aluno. Ela é a sua <strong>Esteira de Produção Inteligente</strong>. O objetivo é transformar o caos de planilhas e Word num fluxo fluido, onde a tecnologia organiza a papelada e a Inteligência Artificial sugere avaliações, deixando para você apenas a decisão final.
             </p>
-            <div className="inline-flex items-center gap-2 bg-indigo-500/50 border border-indigo-400 px-4 py-2 rounded-xl text-sm font-bold">
-              <Zap size={18} className="text-yellow-400"/> ROI de Horas: Reduza seu tempo de correção em até 70%.
+            
+            {/* 🔥 AJUSTE MOBILE AQUI: flex, items-start, shrink-0 no ícone e w-fit */}
+            <div className="flex items-start sm:items-center gap-3 bg-indigo-500/50 border border-indigo-400 p-3 sm:px-4 sm:py-2.5 rounded-xl text-sm font-bold w-fit">
+              <Zap size={20} className="text-yellow-400 shrink-0 mt-0.5 sm:mt-0"/> 
+              <span className="leading-snug">ROI de Horas: Reduza seu tempo de correção em até 70%.</span>
             </div>
           </div>
         </div>
 
         {/* GRID DE CARDS EXPLICATIVOS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
           
           {/* CARD 1: FUNDAÇÃO E SETUP */}
-          <div className="bg-white border border-gray-200 p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
-              <Users size={28} />
+          <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+              <Users size={24} className="md:w-7 md:h-7" />
             </div>
-            <h3 className="text-xl font-black text-gray-800 mb-3">1. Fundação (Turmas e Alunos)</h3>
+            <h3 className="text-lg md:text-xl font-black text-gray-800 mb-3">1. Fundação (Turmas e Alunos)</h3>
             <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
               Antes da IA trabalhar por você, configure seu ambiente sem burocracia.
             </p>
@@ -59,11 +61,11 @@ export default function Guia() {
           </div>
 
           {/* CARD 2: GÊNESE DA TAREFA */}
-          <div className="bg-white border border-gray-200 p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-14 h-14 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center mb-6">
-              <CalendarDays size={28} />
+          <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+              <CalendarDays size={24} className="md:w-7 md:h-7" />
             </div>
-            <h3 className="text-xl font-black text-gray-800 mb-3">2. A Inteligência da Tarefa</h3>
+            <h3 className="text-lg md:text-xl font-black text-gray-800 mb-3">2. A Inteligência da Tarefa</h3>
             <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
               Nada acontece sem a Tarefa. Ela é a "mãe" da organização.
             </p>
@@ -74,11 +76,11 @@ export default function Guia() {
           </div>
 
           {/* CARD 3: ESTAÇÃO DE CORREÇÃO E IA */}
-          <div className="bg-white border border-gray-200 p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow md:col-span-2 lg:col-span-1">
-            <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-6">
-              <Sparkles size={28} />
+          <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow md:col-span-2 lg:col-span-1">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+              <Sparkles size={24} className="md:w-7 md:h-7" />
             </div>
-            <h3 className="text-xl font-black text-gray-800 mb-3">3. A Mesa de Correção (Ficha Médica)</h3>
+            <h3 className="text-lg md:text-xl font-black text-gray-800 mb-3">3. A Mesa de Correção (Ficha Médica)</h3>
             <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
               O motor de inteligência onde você ganha tempo real.
             </p>
@@ -90,11 +92,11 @@ export default function Guia() {
           </div>
 
           {/* CARD 4: DASHBOARD KANBAN */}
-          <div className="bg-white border border-gray-200 p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow md:col-span-2 lg:col-span-1">
-            <div className="w-14 h-14 bg-slate-800 text-white rounded-2xl flex items-center justify-center mb-6">
-              <LayoutDashboard size={28} />
+          <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow md:col-span-2 lg:col-span-1">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-slate-800 text-white rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+              <LayoutDashboard size={24} className="md:w-7 md:h-7" />
             </div>
-            <h3 className="text-xl font-black text-gray-800 mb-3">4. O Centro de Comando (Dashboard)</h3>
+            <h3 className="text-lg md:text-xl font-black text-gray-800 mb-3">4. O Centro de Comando (Dashboard)</h3>
             <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
               Sua central de triagem automática e Gestão à Vista.
             </p>
@@ -106,11 +108,11 @@ export default function Guia() {
           </div>
 
           {/* CARD 5: MAPA VS PENDÊNCIAS */}
-          <div className="bg-white border border-gray-200 p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6">
-              <Map size={28} />
+          <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+              <Map size={24} className="md:w-7 md:h-7" />
             </div>
-            <h3 className="text-xl font-black text-gray-800 mb-3">5. Gestão à Vista (O Raio-X)</h3>
+            <h3 className="text-lg md:text-xl font-black text-gray-800 mb-3">5. Gestão à Vista (O Raio-X)</h3>
             <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
               Duas lentes diferentes para enxergar a sua turma:
             </p>
@@ -121,11 +123,11 @@ export default function Guia() {
           </div>
 
           {/* CARD 6: COMUNICAÇÃO */}
-          <div className="bg-white border border-gray-200 p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-14 h-14 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center mb-6">
-              <MessageCircle size={28} />
+          <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+              <MessageCircle size={24} className="md:w-7 md:h-7" />
             </div>
-            <h3 className="text-xl font-black text-gray-800 mb-3">6. Central de Comunicação</h3>
+            <h3 className="text-lg md:text-xl font-black text-gray-800 mb-3">6. Central de Comunicação</h3>
             <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
               Acabe com a inadimplência com disparos inteligentes.
             </p>
