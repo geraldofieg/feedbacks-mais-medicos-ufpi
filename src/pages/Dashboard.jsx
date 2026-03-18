@@ -34,7 +34,10 @@ export default function Dashboard() {
 
   const radarExecutado = useRef(false);
 
-  // 1. A BÚSSOLA DE LOGIN
+  // ✅ CORREÇÃO DO ERRO (F5): Variável declarada
+  const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
+
+  // 1. A BÚSSOLA DE LOGIN (Inteligência Restaurada: Identifica a Instituição correta do Professor)
   useEffect(() => {
     if (!currentUser || radarExecutado.current) return;
     async function setupRadarGlobal() {
@@ -52,16 +55,39 @@ export default function Dashboard() {
           return;
         }
 
-        const escolaCache = JSON.parse(localStorage.getItem('@SaaS_EscolaSelecionada'));
-        if (escolaCache && lista.some(i => i.id === escolaCache.id)) {
-            setEscolaSelecionada(escolaCache);
-        } else if (lista.length > 0) {
-            setEscolaSelecionada(lista[0]);
+        // BUSCA AS TURMAS REAIS DO PROFESSOR PARA SELECIONAR A ESCOLA CERTA
+        const turmasRef = collection(db, 'turmas');
+        const qTurmasGlobais = isAdmin 
+          ? turmasRef 
+          : query(turmasRef, where('professorUid', '==', currentUser.uid));
+        
+        const snapTurmas = await getDocs(qTurmasGlobais);
+        const turmasGlobais = snapTurmas.docs
+            .map(d => ({ ...d.data(), tsCriacao: d.data().dataCriacao?.toMillis ? d.data().dataCriacao.toMillis() : 0 }))
+            .filter(t => t.status !== 'lixeira')
+            .sort((a, b) => b.tsCriacao - a.tsCriacao);
+
+        const escolaCacheStr = localStorage.getItem('@SaaS_EscolaSelecionada');
+        const escolaCache = escolaCacheStr ? JSON.parse(escolaCacheStr) : null;
+        const escolaCacheValida = escolaCache && lista.some(i => i.id === escolaCache.id);
+
+        let escolaAlvo = null;
+
+        if (turmasGlobais.length > 0) {
+            const idCerta = turmasGlobais[0].instituicaoId; // Pega a escola da turma mais recente
+            escolaAlvo = lista.find(i => i.id === idCerta) || null;
+            if (escolaAlvo) localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaAlvo));
+        } else {
+            if (escolaCacheValida) escolaAlvo = lista.find(i => i.id === escolaCache.id);
+            else if (lista.length > 0) escolaAlvo = lista[0];
         }
+
+        if (escolaAlvo) setEscolaSelecionada(escolaAlvo);
+
       } catch (e) { console.error(e); } finally { setLoadingInst(false); }
     }
     setupRadarGlobal();
-  }, [currentUser]);
+  }, [currentUser, isAdmin, setEscolaSelecionada]);
 
   // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
   useEffect(() => {
@@ -77,15 +103,29 @@ export default function Dashboard() {
 
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
+          
+          // Alunos para Gestão à Vista
+          const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
+          const snapAlunos = await getDocs(qAlunos);
+          const listaAlunosVivos = snapAlunos.docs
+            .filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId))
+            .map(d => ({id: d.id, nome: d.data().nome, turmaId: d.data().turmaId}));
+          setTemAlunos(listaAlunosVivos.length > 0);
+
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
           const activities = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira' && tIds.includes(a.turmaId));
           
-          let p = 0, f = 0, ok = 0;
+          let p = 0, f = 0, ok = 0, iaTotal = 0, iaOriginais = 0;
           activities.forEach(d => {
             if (d.postado) ok++; else if (d.status === 'aprovado') f++; else if (d.resposta) p++;
+            if ((d.status === 'aprovado' || d.postado) && (d.feedbackSugerido || d.feedbackIA)) {
+               iaTotal++;
+               if (d.feedbackFinal === (d.feedbackSugerido || d.feedbackIA)) iaOriginais++;
+            }
           });
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
+          setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
 
           const qTar = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTar = await getDocs(qTar);
@@ -93,10 +133,23 @@ export default function Dashboard() {
           const tarefasVivas = snapTar.docs.map(d => {
             const data = d.data();
             const timeFim = data.dataFim?.toDate ? data.dataFim.toDate().getTime() : 0;
-            return { id: d.id, ...data, diasRestantes: Math.ceil((timeFim - hoje) / (1000 * 3600 * 24)) };
-          }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId) && t.diasRestantes >= 0);
+            return { id: d.id, ...data, timeFim, diasRestantes: Math.ceil((timeFim - hoje) / (1000 * 3600 * 24)) };
+          }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
           
-          setTarefasEmAndamento(tarefasVivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
+          setTarefasEmAndamento(tarefasVivas.filter(t => t.diasRestantes >= 0).sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
+
+          // GESTÃO À VISTA (Cálculo de Devedores)
+          const calcularDevedores = (tarefa) => {
+            let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
+            if (tarefa.atribuicaoEspecifica) alvo = alvo.filter(a => tarefa.alunosSelecionados?.includes(a.id));
+            const devedores = alvo.filter(aluno => !activities.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id && (e.resposta || e.arquivoUrl)));
+            return { id: tarefa.id, nome: tarefa.nomeTarefa || tarefa.titulo, devedores: devedores.map(d => d.nome).sort() };
+          };
+
+          setGestaoVista({
+            atuais: tarefasVivas.filter(t => t.diasRestantes >= 0).map(calcularDevedores),
+            anteriores: tarefasVivas.filter(t => t.diasRestantes < 0).sort((a,b) => b.timeFim - a.timeFim).slice(0, 2).map(calcularDevedores)
+          });
         }
       } catch (e) { console.error(e); } finally { setLoadingDados(false); } 
     }
@@ -134,7 +187,7 @@ export default function Dashboard() {
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
           <div className="flex items-center gap-2 mt-2 max-w-full">
             <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
-            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg outline-none cursor-pointer truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}>
+            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}>
               {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
             </select>
           </div>
@@ -150,7 +203,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {/* 🔥 BARRA PRETA - MAIS DISCRETA, CURTA E COMPACTA 🔥 */}
+          {/* 🔥 BARRA PRETA COMPACTA COM BOLINHA VERDE E BOTÃO CORRIGIR 🔥 */}
           <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
              <div className="flex items-center gap-2.5 mb-3">
                 <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
@@ -161,13 +214,10 @@ export default function Dashboard() {
                   tarefasEmAndamento.map(t => (
                     <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
                       <div className="flex items-center gap-3 min-w-0 flex-1 pr-4">
-                        {/* Bolinha verde piscando */}
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0"></div>
                         <span className="text-sm font-bold text-slate-200 truncate">{t.nomeTarefa}</span>
                         <span className="text-xs font-black text-green-500 shrink-0">Faltam {t.diasRestantes} dias</span>
                       </div>
-                      
-                      {/* Botão direto para a correção */}
                       <Link to={`/revisar/${t.id}`} className="text-[10px] font-black uppercase text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all shrink-0 flex items-center gap-1">
                         Corrigir Tarefa <ChevronRight size={12}/>
                       </Link>
@@ -197,6 +247,30 @@ export default function Dashboard() {
               <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
               <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
             </div>
+          </div>
+
+          {/* GESTÃO À VISTA - LISTA DE DEVEDORES */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
+              {gestaoVista.atuais.map((gv, idx) => (
+                <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
+                    <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl shrink-0"><AlertTriangle size={20}/></div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">Faltam Entregar <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span></h3>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate">Atual: {gv.nome}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
+                    {gv.devedores.length === 0 ? (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>) : (
+                      gv.devedores.map((nome, i) => (
+                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
           </div>
         </>
       )}
