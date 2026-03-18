@@ -118,9 +118,10 @@ export default function Navbar() {
                       <Trash2 size={18} /> Lixeira (Recuperar)
                     </Link>
 
-                    <button onClick={() => { setMenuAberto(false); alert('O Guia de Uso será liberado em breve!'); }} className="w-full text-left flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
-                      <BookOpen size={18} /> Como Funciona o SaaS
-                    </button>
+                    {/* 🔥 AQUI ESTÁ A MUDANÇA: Link para a página do Guia! */}
+                    <Link to="/guia" onClick={() => setMenuAberto(false)} className="w-full text-left flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
+                      <BookOpen size={18} /> Como Funciona
+                    </Link>
                     
                     <button onClick={() => { setMenuAberto(false); window.open('https://wa.me/', '_blank'); }} className="w-full text-left flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
                       <LifeBuoy size={18} /> Ajuda e Suporte
@@ -166,6 +167,11 @@ export default function Navbar() {
 
           <Link to="/configuracoes" className="shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
             <Settings size={14} /> Ajustes
+          </Link>
+
+          {/* 🔥 ADICIONADO NO CELULAR */}
+          <Link to="/guia" className="shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
+            <BookOpen size={14} /> Guia
           </Link>
 
           <Link to="/lixeira" className="shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
