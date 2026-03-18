@@ -427,17 +427,29 @@ export default function Dashboard() {
       ) : (
         <>
           {/* 🔥 BARRA PRETA - MAIS DISCRETA E COMPACTA 🔥 */}
-          <div className="bg-slate-900 rounded-2xl p-4 md:p-5 text-white border border-slate-800 shadow-xl mb-6">
-             <div className="flex items-center gap-2.5 mb-4">
-                <div className="bg-blue-600 p-2 rounded-lg"><Calendar size={18} /></div>
-                <h2 className="text-base font-black tracking-tight">Próximas Entregas do Cronograma</h2>
+          <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-6">
+             <div className="flex items-center gap-2.5 mb-3">
+                <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
+                <h2 className="text-base font-black tracking-tight">Tarefas em andamento</h2>
              </div>
              <div className="space-y-2">
                 {tarefasEmAndamento.length > 0 ? (
                   tarefasEmAndamento.map(t => (
-                    <div key={t.id} className="flex justify-between items-center px-4 py-2.5 bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
-                      <span className="text-sm font-bold text-slate-200 truncate pr-4">{t.nomeTarefa}</span>
-                      <span className="text-[10px] font-black uppercase text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/20 shrink-0">Faltam {t.diasRestantes} dias</span>
+                    <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
+                      
+                      <div className="flex items-center gap-2 min-w-0 flex-1 pr-4">
+                        {/* 🔥 Bolinha verde piscando */}
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></div>
+                        {/* 🔥 Nome da tarefa e Dias mais próximos */}
+                        <span className="text-sm font-bold text-slate-200 truncate">{t.nomeTarefa}</span>
+                        <span className="text-xs font-bold text-green-400 shrink-0 ml-1">Faltam {t.diasRestantes} dias</span>
+                      </div>
+                      
+                      {/* 🔥 Novo botão direto para correção */}
+                      <Link to={`/revisar/${t.id}`} className="text-[10px] font-black uppercase text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all shrink-0 flex items-center gap-1">
+                        Corrigir Tarefa <ChevronRight size={12}/>
+                      </Link>
+
                     </div>
                   ))
                 ) : (
