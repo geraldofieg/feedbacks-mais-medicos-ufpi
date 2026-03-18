@@ -4,13 +4,15 @@ import { collection, query, getDocs, doc, updateDoc, arrayUnion, where, writeBat
 import { useAuth } from '../contexts/AuthContext';
 import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History, Ban, UserCheck, XCircle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import { Navigate } from 'react-router-dom';
 
 export default function Admin() {
   const { currentUser, userProfile } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  // 🔥 SEGURANÇA PROFISSIONAL: Trava baseada exclusivamente no Role do banco de dados
+  const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
     async function fetchUsuarios() {
@@ -130,7 +132,6 @@ export default function Admin() {
     }
   }
 
-  // AJUSTE: Transformado em um Interruptor Inteligente (Conceder / Revogar)
   async function handleToggleVitalicio(user) {
     const isAtualVitalicio = user.isVitalicio === true;
     const acaoTexto = isAtualVitalicio ? "REVOGAR" : "conceder acesso permanente e";
@@ -144,7 +145,7 @@ export default function Admin() {
 
       await updateDoc(doc(db, 'usuarios', user.id), { 
         isVitalicio: !isAtualVitalicio,
-        dataExpiracao: isAtualVitalicio ? hoje : user.dataExpiracao || hoje, // Se revogar, bota a data de hoje pra vencer na hora
+        dataExpiracao: isAtualVitalicio ? hoje : user.dataExpiracao || hoje,
         historicoAssinatura: arrayUnion(logAuditoria)
       });
 
@@ -214,30 +215,22 @@ export default function Admin() {
       const uidParaApagar = user.id; 
       const batch = writeBatch(db); 
 
-      // 1. Apagar Atividades
       const ativSnap = await getDocs(query(collection(db, 'atividades'), where('professorUid', '==', uidParaApagar)));
       ativSnap.forEach(doc => batch.delete(doc.ref));
 
-      // 2. Apagar Tarefas
       const tarefasSnap = await getDocs(query(collection(db, 'tarefas'), where('professorUid', '==', uidParaApagar)));
       tarefasSnap.forEach(doc => batch.delete(doc.ref));
 
-      // 3. Apagar Alunos
       const alunosSnap = await getDocs(query(collection(db, 'alunos'), where('professorUid', '==', uidParaApagar)));
       alunosSnap.forEach(doc => batch.delete(doc.ref));
 
-      // 4. Apagar Turmas
       const turmasSnap = await getDocs(query(collection(db, 'turmas'), where('professorUid', '==', uidParaApagar)));
       turmasSnap.forEach(doc => batch.delete(doc.ref));
 
-      // 5. Apagar Instituições
       const instSnap = await getDocs(query(collection(db, 'instituicoes'), where('professorUid', '==', uidParaApagar)));
       instSnap.forEach(doc => batch.delete(doc.ref));
 
-      // 6. Finalmente, Apagar o Perfil
       batch.delete(doc(db, 'usuarios', uidParaApagar));
-
-      // Executa o apocalipse
       await batch.commit();
 
       setUsuarios(usuarios.filter(u => u.id !== uidParaApagar));
@@ -249,14 +242,7 @@ export default function Admin() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-        <AlertTriangle className="mx-auto text-red-500 mb-6" size={64}/>
-        <h1 className="text-3xl font-black text-slate-800">Acesso Restrito</h1>
-      </div>
-    );
-  }
+  if (!isAdmin) return <Navigate to="/" />;
 
   if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse">Carregando usuários...</div>;
 
@@ -269,7 +255,7 @@ export default function Admin() {
           <ShieldCheck size={32} />
         </div>
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Painel SaaS (Super Admin)</h1>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Painel SaaS (CEO)</h1>
           <p className="text-slate-500 font-medium">Gestão de assinaturas, acessos e faturamento.</p>
         </div>
       </div>
@@ -413,7 +399,6 @@ export default function Admin() {
                             <CalendarPlus size={14} /> +1a
                           </button>
                           
-                          {/* AJUSTE: Botão de Vitalício agora é um "Interruptor Inteligente" (Toggle) */}
                           <button 
                             onClick={() => handleToggleVitalicio(user)} 
                             className={`flex items-center gap-1 text-[11px] font-bold py-1.5 px-2 rounded-lg shadow-sm transition-colors ${
@@ -425,7 +410,6 @@ export default function Admin() {
                           >
                             {user.isVitalicio ? <><XCircle size={14} /> Revogar</> : <><Infinity size={14} /> Vitalício</>}
                           </button>
-
                         </div>
                       </div>
                     </td>
