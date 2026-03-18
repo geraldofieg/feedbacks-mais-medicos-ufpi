@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User } from 'lucide-react';
@@ -9,11 +9,13 @@ export default function Dashboard() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   const navigate = useNavigate(); 
   
-  // 🔥 SEGURANÇA PROFISSIONAL: Trava baseada no Role do banco
+  // 🔥 SEGURANÇA PROFISSIONAL: Trava baseada exclusivamente no Role do banco
   const isAdmin = userProfile?.role === 'admin';
   
+  // 🔥 LEITURA DE PLANOS 100% ESTrita e Limpa
   const planoUsuario = (userProfile?.plano || 'basico').toLowerCase().trim();
   const isTier1 = planoUsuario === 'basico' || planoUsuario === 'trial';
+  const isTier2 = planoUsuario === 'intermediario';
   const isTier3 = planoUsuario === 'premium';
 
   const mostrarFaltaPostar = isAdmin || isTier1 || isTier3; 
@@ -32,10 +34,7 @@ export default function Dashboard() {
 
   const radarExecutado = useRef(false);
 
-  // ✅ VARIÁVEL DE SEGURANÇA PARA O KANBAN
-  const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
-
-  // 1. A BÚSSOLA DE LOGIN (Identifica a Instituição correta do Professor)
+  // 1. A BÚSSOLA DE LOGIN
   useEffect(() => {
     if (!currentUser || radarExecutado.current) return;
     async function setupRadarGlobal() {
@@ -47,36 +46,24 @@ export default function Dashboard() {
         lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
         setInstituicoes(lista);
 
-        if (lista.length === 0) { setLoadingInst(false); return; }
-
-        const turmasRef = collection(db, 'turmas');
-        const qT = isAdmin ? turmasRef : query(turmasRef, where('professorUid', '==', currentUser.uid));
-        const snapTurmas = await getDocs(qT);
-        const turmasGlobais = snapTurmas.docs
-            .map(d => ({ ...d.data(), tsCriacao: d.data().dataCriacao?.toMillis ? d.data().dataCriacao.toMillis() : 0 }))
-            .filter(t => t.status !== 'lixeira')
-            .sort((a, b) => b.tsCriacao - a.tsCriacao);
-
-        const escolaCache = JSON.parse(localStorage.getItem('@SaaS_EscolaSelecionada'));
-        let escolaAlvo = null;
-
-        if (turmasGlobais.length > 0) {
-            const idCerta = turmasGlobais[0].instituicaoId;
-            escolaAlvo = lista.find(i => i.id === idCerta) || null;
-        } else {
-            escolaAlvo = (escolaCache && lista.some(i => i.id === escolaCache.id)) ? escolaCache : lista[0];
+        if (lista.length === 0) {
+          if (escolaSelecionada !== null) setEscolaSelecionada(null);
+          setLoadingInst(false);
+          return;
         }
 
-        if (escolaAlvo) {
-          setEscolaSelecionada(escolaAlvo);
-          localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaAlvo));
+        const escolaCache = JSON.parse(localStorage.getItem('@SaaS_EscolaSelecionada'));
+        if (escolaCache && lista.some(i => i.id === escolaCache.id)) {
+            setEscolaSelecionada(escolaCache);
+        } else if (lista.length > 0) {
+            setEscolaSelecionada(lista[0]);
         }
       } catch (e) { console.error(e); } finally { setLoadingInst(false); }
     }
     setupRadarGlobal();
-  }, [currentUser, isAdmin, setEscolaSelecionada]);
+  }, [currentUser]);
 
-  // 2. BUSCA DADOS E GESTÃO À VISTA
+  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id) return;
@@ -90,27 +77,15 @@ export default function Dashboard() {
 
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
-          
-          // Alunos e Tarefas para Devedores
-          const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
-          const snapAlunos = await getDocs(qAlunos);
-          const listaAlunosVivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId)).map(d => ({id: d.id, nome: d.data().nome, turmaId: d.data().turmaId}));
-          setTemAlunos(listaAlunosVivos.length > 0);
-
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
           const activities = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira' && tIds.includes(a.turmaId));
           
-          let p = 0, f = 0, ok = 0, iaTotal = 0, iaOriginais = 0;
+          let p = 0, f = 0, ok = 0;
           activities.forEach(d => {
             if (d.postado) ok++; else if (d.status === 'aprovado') f++; else if (d.resposta) p++;
-            if ((d.status === 'aprovado' || d.postado) && (d.feedbackSugerido || d.feedbackIA)) {
-               iaTotal++;
-               if (d.feedbackFinal === (d.feedbackSugerido || d.feedbackIA)) iaOriginais++;
-            }
           });
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
-          setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais/iaTotal)*100) : 0 });
 
           const qTar = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTar = await getDocs(qTar);
@@ -118,23 +93,10 @@ export default function Dashboard() {
           const tarefasVivas = snapTar.docs.map(d => {
             const data = d.data();
             const timeFim = data.dataFim?.toDate ? data.dataFim.toDate().getTime() : 0;
-            return { id: d.id, ...data, timeFim, diasRestantes: Math.ceil((timeFim - hoje) / (1000 * 3600 * 24)) };
-          }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
+            return { id: d.id, ...data, diasRestantes: Math.ceil((timeFim - hoje) / (1000 * 3600 * 24)) };
+          }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId) && t.diasRestantes >= 0);
           
-          setTarefasEmAndamento(tarefasVivas.filter(t => t.diasRestantes >= 0).sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
-
-          // GESTÃO À VISTA
-          const calcularDevedores = (tarefa) => {
-            let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
-            if (tarefa.atribuicaoEspecifica) alvo = alvo.filter(a => tarefa.alunosSelecionados?.includes(a.id));
-            const devedores = alvo.filter(aluno => !activities.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id && (e.resposta || e.arquivoUrl)));
-            return { id: tarefa.id, nome: tarefa.nomeTarefa || tarefa.titulo, devedores: devedores.map(d => d.nome).sort() };
-          };
-
-          setGestaoVista({
-            atuais: tarefasVivas.filter(t => t.diasRestantes >= 0).map(calcularDevedores),
-            anteriores: tarefasVivas.filter(t => t.diasRestantes < 0).sort((a,b) => b.timeFim - a.timeFim).slice(0, 2).map(calcularDevedores)
-          });
+          setTarefasEmAndamento(tarefasVivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
         }
       } catch (e) { console.error(e); } finally { setLoadingDados(false); } 
     }
@@ -144,11 +106,12 @@ export default function Dashboard() {
   const renderBarraProgresso = () => {
     const passos = [{ id: 1, titulo: 'Instituição', icone: <School size={18} /> }, { id: 2, titulo: 'Turma', icone: <Building2 size={18} /> }, { id: 3, titulo: 'Alunos', icone: <UserPlus size={18} /> }, { id: 4, titulo: 'Tarefas', icone: <FileText size={18} /> }];
     let pAt = 5; if (!escolaSelecionada?.id) pAt = 1; else if (minhasTurmas.length === 0) pAt = 2; else if (!temAlunos) pAt = 3; else if (!temTarefasGeral) pAt = 4;
+    const porcentagem = ((pAt - 1) / 3) * 100;
     return (
       <div className="max-w-3xl mx-auto mb-10 w-full px-4 pt-6">
         <div className="relative flex items-center justify-between">
           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1.5 bg-gray-200 rounded-full"></div>
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full transition-all duration-700" style={{ width: `${((pAt - 1) / 3) * 100}%` }}></div>
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full transition-all duration-700" style={{ width: `${porcentagem}%` }}></div>
           {passos.map(p => (
             <div key={p.id} className="relative z-10 flex flex-col items-center">
               <div className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${p.id < pAt ? "bg-green-500 border-green-500 text-white" : p.id === pAt ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/30" : "bg-white border-gray-200 text-gray-400"}`}>
@@ -171,7 +134,7 @@ export default function Dashboard() {
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
           <div className="flex items-center gap-2 mt-2 max-w-full">
             <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
-            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}>
+            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg outline-none cursor-pointer truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}>
               {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
             </select>
           </div>
@@ -187,7 +150,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {/* 🔥 BARRA PRETA - COMPACTA E DISCRETA 🔥 */}
+          {/* 🔥 BARRA PRETA - MAIS DISCRETA, CURTA E COMPACTA 🔥 */}
           <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
              <div className="flex items-center gap-2.5 mb-3">
                 <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
@@ -198,10 +161,13 @@ export default function Dashboard() {
                   tarefasEmAndamento.map(t => (
                     <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
                       <div className="flex items-center gap-3 min-w-0 flex-1 pr-4">
+                        {/* Bolinha verde piscando */}
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0"></div>
                         <span className="text-sm font-bold text-slate-200 truncate">{t.nomeTarefa}</span>
                         <span className="text-xs font-black text-green-500 shrink-0">Faltam {t.diasRestantes} dias</span>
                       </div>
+                      
+                      {/* Botão direto para a correção */}
                       <Link to={`/revisar/${t.id}`} className="text-[10px] font-black uppercase text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all shrink-0 flex items-center gap-1">
                         Corrigir Tarefa <ChevronRight size={12}/>
                       </Link>
@@ -231,29 +197,6 @@ export default function Dashboard() {
               <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
               <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
-              {gestaoVista.atuais.map((gv, idx) => (
-                <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
-                    <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl shrink-0"><AlertTriangle size={20}/></div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">Faltam Entregar <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span></h3>
-                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate">Atual: {gv.nome}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
-                    {gv.devedores.length === 0 ? (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>) : (
-                      gv.devedores.map((nome, i) => (
-                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
-                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ))}
           </div>
         </>
       )}
