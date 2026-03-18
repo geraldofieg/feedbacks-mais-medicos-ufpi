@@ -1,182 +1,323 @@
-import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, Send, ChevronRight, CalendarDays } from 'lucide-react';
+import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, Pencil } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
-export default function FaltaPostar() {
-  const { currentUser, userProfile, escolaSelecionada } = useAuth();
-  const navigate = useNavigate();
+export default function Dashboard() {
+  const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
+  const navigate = useNavigate(); 
   
-  const [loading, setLoading] = useState(true);
-  const [listaPendencias, setListaPendencias] = useState([]);
-
-  // LEITURA DE CRACHÁ (Segurança Clean Code)
   const isAdmin = userProfile?.role === 'admin';
-  const isTier2 = userProfile?.plano === 'intermediario';
+  
+  const planoUsuario = (userProfile?.plano || 'basico').toLowerCase().trim();
+  const isTier1 = planoUsuario === 'basico' || planoUsuario === 'trial';
+  const isTier2 = planoUsuario === 'intermediario';
+  const isTier3 = planoUsuario === 'premium';
+
+  const mostrarFaltaPostar = isAdmin || isTier1 || isTier3; 
+  const mostrarTermometroIA = isAdmin || isTier3;
+
+  const [instituicoes, setInstituicoes] = useState([]);
+  const [minhasTurmas, setMinhasTurmas] = useState([]);
+  const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]);
+  const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
+  const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
+  const [temAlunos, setTemAlunos] = useState(true); 
+  const [temTarefasGeral, setTemTarefasGeral] = useState(true);
+  const [gestaoVista, setGestaoVista] = useState({ atuais: [], anteriores: [] });
+  const [loadingInst, setLoadingInst] = useState(true);
+  const [loadingDados, setLoadingDados] = useState(false);
+
+  const radarExecutado = useRef(false);
+
+  const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   useEffect(() => {
-    async function fetchFaltaPostar() {
-      if (!currentUser || !escolaSelecionada?.id) return;
-      setLoading(true);
+    if (!currentUser || radarExecutado.current) return;
+    async function setupRadarGlobal() {
+      radarExecutado.current = true; 
       try {
-        // 1. Busca todas as turmas que esse usuário tem acesso na Instituição
-        const turmasRef = collection(db, 'turmas');
-        const qTurmas = isAdmin
-          ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
-          : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
-          
-        const snapTurmas = await getDocs(qTurmas);
-        const turmasIds = snapTurmas.docs.map(t => t.id);
+        const instRef = collection(db, 'instituicoes');
+        const snap = await getDocs(instRef);
+        const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
+        lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+        setInstituicoes(lista);
 
-        if (turmasIds.length === 0) {
-          setListaPendencias([]);
-          setLoading(false);
+        if (lista.length === 0) {
+          if (escolaSelecionada !== null) setEscolaSelecionada(null);
+          setLoadingInst(false);
           return;
         }
 
-        // Divide o array de turmas em pedaços de no máximo 30 para o operador 'in' do Firestore
-        const maxItemsPerQuery = 30;
-        const turmasChunks = [];
-        for (let i = 0; i < turmasIds.length; i += maxItemsPerQuery) {
-          turmasChunks.push(turmasIds.slice(i, i + maxItemsPerQuery));
+        const turmasRef = collection(db, 'turmas');
+        const qTurmasGlobais = isAdmin 
+          ? turmasRef 
+          : query(turmasRef, where('professorUid', '==', currentUser.uid));
+        
+        const snapTurmas = await getDocs(qTurmasGlobais);
+        const turmasGlobais = snapTurmas.docs
+            .map(d => ({ ...d.data(), tsCriacao: d.data().dataCriacao?.toMillis ? d.data().dataCriacao.toMillis() : 0 }))
+            .filter(t => t.status !== 'lixeira')
+            .sort((a, b) => b.tsCriacao - a.tsCriacao);
+
+        const escolaCacheStr = localStorage.getItem('@SaaS_EscolaSelecionada');
+        const escolaCache = escolaCacheStr ? JSON.parse(escolaCacheStr) : null;
+        const escolaCacheValida = escolaCache && lista.some(i => i.id === escolaCache.id);
+
+        let escolaAlvo = null;
+
+        if (turmasGlobais.length > 0) {
+            const idCerta = turmasGlobais[0].instituicaoId; 
+            escolaAlvo = lista.find(i => i.id === idCerta) || null;
+            if (escolaAlvo) localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaAlvo));
+        } else {
+            if (escolaCacheValida) escolaAlvo = lista.find(i => i.id === escolaCache.id);
+            else if (lista.length > 0) escolaAlvo = lista[0];
         }
 
-        let pendenciasTemporarias = [];
+        if (escolaAlvo) setEscolaSelecionada(escolaAlvo);
 
-        // 2. Busca atividades com status='aprovado' para essas turmas
-        for (const chunk of turmasChunks) {
-          // 🔥 CORREÇÃO: Tiramos a trava where('postado', '==', false) daqui. 
-          // O Firebase ignora documentos onde o campo não existe. Vamos filtrar no JS igual ao Dashboard.
-          const qPendencias = query(
-            collection(db, 'atividades'),
-            where('turmaId', 'in', chunk),
-            where('status', '==', 'aprovado')
-          );
+      } catch (e) { console.error(e); } finally { setLoadingInst(false); }
+    }
+    setupRadarGlobal();
+  }, [currentUser, isAdmin, setEscolaSelecionada]);
 
-          const snapPendencias = await getDocs(qPendencias);
+  useEffect(() => {
+    async function fetchDados() {
+      if (!escolaSelecionada?.id) return;
+      setLoadingDados(true); 
+      try {
+        const tRef = collection(db, 'turmas');
+        const qT = isAdmin ? query(tRef, where('instituicaoId', '==', escolaSelecionada.id)) : query(tRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        const snapT = await getDocs(qT);
+        const turmasVivas = snapT.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
+        setMinhasTurmas(turmasVivas);
 
-          snapPendencias.docs.forEach(d => {
-            const data = d.data();
-            // 🔥 LÓGICA DE DEDUPLICAÇÃO DO DASHBOARD: Se NÃO foi postado (seja false ou campo inexistente), entra na lista.
-            if (!data.postado && data.status !== 'lixeira') {
-               pendenciasTemporarias.push({ id: d.id, ...data });
+        if (turmasVivas.length > 0) {
+          const tIds = turmasVivas.map(t => t.id);
+          
+          const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
+          const snapAlunos = await getDocs(qAlunos);
+          const listaAlunosVivos = snapAlunos.docs
+            .filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId))
+            .map(d => ({id: d.id, nome: d.data().nome, turmaId: d.data().turmaId}));
+          setTemAlunos(listaAlunosVivos.length > 0);
+
+          const docRefUser = doc(db, 'usuarios', currentUser.uid);
+          const docSnapUser = await getDoc(docRefUser);
+          const tsPromptRaw = docSnapUser.data()?.timestampPrompt;
+          const timestampPrompt = tsPromptRaw?.toDate ? tsPromptRaw.toDate().getTime() : (tsPromptRaw || 0);
+
+          const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
+          const snapAtiv = await getDocs(qAtiv);
+          const activities = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira' && tIds.includes(a.turmaId));
+          
+          let p = 0, f = 0, ok = 0, iaTotal = 0, iaOriginais = 0;
+          activities.forEach(d => {
+            // 🔥 CORREÇÃO DO RASCUNHO: Agora avalia arquivo anexado e rascunhos salvos, não apenas texto na resposta!
+            const temEntregaOuRascunho = (d.resposta && String(d.resposta).trim() !== '') || d.arquivoUrl || (d.feedbackFinal && String(d.feedbackFinal).trim() !== '');
+
+            if (d.postado) ok++; 
+            else if (d.status === 'aprovado') f++; 
+            else if (temEntregaOuRascunho) p++;
+            
+            const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
+            const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
+            const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
+
+            if ((d.status === 'aprovado' || d.postado) && (d.feedbackSugerido || d.feedbackIA) && ehDessaTemporada) {
+               iaTotal++;
+               if (d.feedbackFinal === (d.feedbackSugerido || d.feedbackIA)) iaOriginais++;
             }
           });
+          setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
+          setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
+
+          const qTar = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
+          const snapTar = await getDocs(qTar);
+          const hojeTime = new Date().getTime();
+          
+          const tarefasProcessadas = snapTar.docs.map(d => {
+            const data = d.data();
+            const timeFim = data.dataFim?.toDate ? data.dataFim.toDate().getTime() : 0;
+            const timeInicio = data.dataInicio?.toDate ? data.dataInicio.toDate().getTime() : 0;
+            const timeCriacao = data.dataCriacao?.toDate ? data.dataCriacao.toDate().getTime() : (data.dataCriacao?.seconds ? data.dataCriacao.seconds * 1000 : 0);
+            
+            return { 
+              id: d.id, 
+              ...data, 
+              timeFim,
+              timeInicio,
+              timeCriacao,
+              isFutura: timeInicio > hojeTime,
+              isPassada: timeFim > 0 && timeFim < hojeTime,
+              diasRestantes: Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24)) 
+            };
+          }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
+          
+          const tarefasAtivas = tarefasProcessadas.filter(t => !t.isFutura && !t.isPassada);
+          setTarefasEmAndamento(tarefasAtivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
+
+          const calcularDevedores = (tarefa) => {
+            let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
+            if (tarefa.atribuicaoEspecifica) alvo = alvo.filter(a => tarefa.alunosSelecionados?.includes(a.id));
+            
+            // 🔥 CORREÇÃO AQUI TAMBÉM: Devedor é só quem não tem texto, nem anexo, nem rascunho
+            const devedores = alvo.filter(aluno => !activities.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id && ((e.resposta && String(e.resposta).trim() !== '') || e.arquivoUrl || (e.feedbackFinal && String(e.feedbackFinal).trim() !== ''))));
+            return { id: tarefa.id, nome: tarefa.nomeTarefa || tarefa.titulo, devedores: devedores.map(d => d.nome).sort() };
+          };
+
+          const corteCriacao = new Date(2026, 0, 4, 0, 0, 0).getTime(); 
+
+          setGestaoVista({
+            atuais: tarefasAtivas.map(calcularDevedores).filter(gv => gv.devedores.length > 0),
+            anteriores: tarefasProcessadas
+              .filter(t => t.isPassada && t.timeCriacao >= corteCriacao)
+              .sort((a,b) => b.timeFim - a.timeFim)
+              .map(calcularDevedores)
+              .filter(gv => gv.devedores.length > 0)
+              .slice(0, 4) 
+          });
         }
-
-        // 3. Ordenação decrescente pela data de aprovação (mais recentes primeiro)
-        pendenciasTemporarias.sort((a, b) => {
-          const timeA = a.dataAprovacao?.toMillis ? a.dataAprovacao.toMillis() : 0;
-          const timeB = b.dataAprovacao?.toMillis ? b.dataAprovacao.toMillis() : 0;
-          return timeB - timeA;
-        });
-
-        setListaPendencias(pendenciasTemporarias);
-      } catch (error) {
-        console.error("Erro ao buscar pendências Aguardando Postar:", error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (e) { console.error(e); } finally { setLoadingDados(false); } 
     }
+    fetchDados();
+  }, [escolaSelecionada, currentUser, isAdmin]);
 
-    fetchFaltaPostar();
-  }, [currentUser, escolaSelecionada, isAdmin]);
-
-  // Função utilitária para formatar a data na tela
-  const formatarData = (timestamp) => {
-    if (!timestamp) return 'Sem data';
-    // Verifica se é timestamp do Firestore
-    const data = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  };
-
-  // Se for o plano Intermediário (Tier 2), a Patrícia não deve ter acesso a essa tela (só o Admin avalia e posta)
-  if (isTier2) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-        <div className="bg-white rounded-3xl p-10 shadow-sm border border-red-100">
-          <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Send size={32} />
-          </div>
-          <h2 className="text-2xl font-black text-gray-800 mb-3">Acesso Restrito</h2>
-          <p className="text-gray-500 font-medium mb-8">O lançamento oficial no sistema da faculdade é realizado exclusivamente pela gestão do programa.</p>
-          <Link to="/" className="inline-flex items-center gap-2 bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-all">
-            <ArrowLeft size={18}/> Voltar ao Início
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  if (loadingInst || loadingDados) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      
-      {/* CABEÇALHO */}
-      <div className="flex items-center gap-4 mb-8 border-b border-gray-200 pb-6">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
-          <ArrowLeft size={24} />
-        </button>
-        <div>
-          <h1 className="text-2xl md:text-3xl font-black text-gray-800 flex items-center gap-3">
-            <div className="bg-blue-100 text-blue-600 p-2 rounded-xl"><Send size={24}/></div>
-            Aguardando Postar
-          </h1>
-          <p className="text-sm font-medium text-gray-500 mt-1">Feedbacks aprovados que precisam ser copiados para o sistema da instituição.</p>
+    <div className="max-w-7xl mx-auto px-4 py-8 overflow-hidden">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
+          <div className="flex items-center gap-2 mt-2 max-w-full">
+            <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
+            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}>
+              {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* ÁREA DE CONTEÚDO */}
-      {loading ? (
-        <div className="py-20 text-center flex flex-col items-center gap-3 animate-pulse">
-          <Send className="text-blue-200" size={48}/>
-          <p className="text-blue-500 font-bold">Localizando pendências...</p>
-        </div>
-      ) : listaPendencias.length === 0 ? (
-        <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-3xl p-12 text-center">
-          <CheckCircle2 size={48} className="text-blue-400 mx-auto mb-4" />
-          <h3 className="text-xl font-black text-blue-800 mb-2">Tudo em dia!</h3>
-          <p className="text-blue-600 font-medium">Nenhum feedback aguardando para ser postado no sistema.</p>
+      {minhasTurmas.length === 0 ? (
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12">
+          <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi vinculada.</h2>
+          <p className="text-gray-500 font-medium mb-8 text-lg">O próximo passo é configurar sua primeira turma.</p>
+          <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 2: Configurar Turma <ChevronRight size={18}/></Link>
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="bg-blue-50 text-blue-800 text-sm font-bold p-4 rounded-xl border border-blue-100 mb-6">
-            Você tem {listaPendencias.length} {listaPendencias.length === 1 ? 'atividade pronta' : 'atividades prontas'} para colar no sistema oficial.
+        <>
+          <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
+             <div className="flex items-center gap-2.5 mb-3">
+                <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
+                <h2 className="text-base font-black tracking-tight">Tarefas em andamento</h2>
+             </div>
+             <div className="space-y-2">
+                {tarefasEmAndamento.length > 0 ? (
+                  tarefasEmAndamento.map(t => (
+                    <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors group">
+                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0"></div>
+                        <span className="text-sm font-bold text-slate-200 truncate" title={t.nomeTarefa}>{t.nomeTarefa}</span>
+                        <span className="text-xs font-black text-green-500 shrink-0 whitespace-nowrap">Faltam {t.diasRestantes} dias</span>
+                      </div>
+                      <Link to={`/revisar/${t.id}`} className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-600 border border-blue-500/30 text-blue-400 hover:text-white transition-all shrink-0 ml-2" title="Corrigir Tarefa">
+                        <Pencil size={16} />
+                      </Link>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500 font-medium italic p-2 text-center">Nenhuma tarefa ativa no cronograma.</p>
+                )}
+             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
-            {listaPendencias.map((item) => (
-              <Link 
-                key={item.id} 
-                to={`/revisar/${item.tarefaId}`} 
-                state={{ alunoId: item.alunoId }}
-                className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-400 transition-all group"
-              >
-                <div className="bg-blue-50 text-blue-600 p-4 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
-                  <Send size={24} />
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-black text-gray-800 text-base md:text-lg uppercase tracking-wide truncate group-hover:text-blue-700 transition-colors">
-                    {item.nomeAluno}
-                  </h3>
-                  <p className="text-sm font-bold text-gray-500 truncate mt-0.5">
-                    {item.nomeTarefa}
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${mostrarFaltaPostar ? 'lg:grid-cols-3' : ''} gap-5 mb-10`}>
+            <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-2"><h3 className="text-[11px] font-black text-yellow-600 uppercase mt-1">Aguardando Revisão</h3><div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div></div>
+              <span className="text-4xl font-black text-gray-800">{kanban.pendentes}</span>
+              <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
+            </div>
+            {mostrarFaltaPostar && (
+              <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+                <div className="flex justify-between items-start mb-2"><h3 className="text-[11px] font-black text-blue-600 uppercase mt-1">Aguardando Postar</h3><div className="text-blue-500 bg-blue-50 p-1.5 rounded-lg"><Send size={20}/></div></div>
+                <span className="text-4xl font-black text-gray-800">{kanban.faltaLancar}</span>
+                <Link to="/faltapostar" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Copiar p/ Site <ChevronRight size={14}/></Link>
+              </div>
+            )}
+            <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-2"><h3 className="text-[11px] font-black text-green-600 uppercase mt-1">Histórico Finalizado</h3><div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div></div>
+              <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
+              <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
+            </div>
+          </div>
+
+          {mostrarTermometroIA && (
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl shrink-0"><Sparkles size={22}/></div>
+                <div>
+                  <h3 className="text-xs font-black text-purple-700 uppercase tracking-widest">Termômetro de Autonomia da IA</h3>
+                  <p className="text-xs font-medium text-purple-600 mt-1 leading-relaxed max-w-xl">
+                    Mede a eficácia da IA. Mostra a porcentagem de feedbacks que a IA gerou e você aprovou para enviar ao aluno <strong>sem precisar fazer nenhuma edição</strong> no texto original.
                   </p>
-                  <div className="flex items-center gap-1.5 mt-2 text-xs font-bold text-gray-400 bg-gray-50 inline-flex px-2 py-1 rounded-lg border border-gray-100">
-                    <CalendarDays size={14} />
-                    <span>Aprovado em: {formatarData(item.dataAprovacao)}</span>
+                </div>
+              </div>
+              <div className="flex flex-col items-start sm:items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-purple-100 shadow-sm w-full sm:w-auto text-right">
+                <span className="text-3xl font-black text-purple-700 w-full">{metricasIA.percentual}%</span>
+                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest w-full">{metricasIA.originais} de {metricasIA.total} exatos</span>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
+              {gestaoVista.atuais.map((gv, idx) => (
+                <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
+                    <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl shrink-0"><AlertTriangle size={20}/></div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">Faltam Entregar <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span></h3>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={gv.nome}>Atual: {gv.nome}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
+                    {gv.devedores.length === 0 ? (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>) : (
+                      gv.devedores.map((nome, i) => (
+                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
+              ))}
 
-                <div className="text-gray-300 group-hover:text-blue-600 transition-colors shrink-0">
-                  <ChevronRight size={24} />
+              {gestaoVista.anteriores.map((gv, idx) => (
+                <div key={`ant-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
+                    <div className="bg-red-100 text-red-600 p-2.5 rounded-xl shrink-0"><Clock size={20}/></div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">Pendências <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span></h3>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={gv.nome}>Anterior: {gv.nome}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
+                    {gv.devedores.length === 0 ? (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>) : (
+                      gv.devedores.map((nome, i) => (
+                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </Link>
-            ))}
+              ))}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
