@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-// 🔥 CIRURGIA V1: Importado o deleteField do firestore
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, deleteField } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
@@ -68,7 +67,6 @@ export default function RevisarAtividade() {
           id: d.id, ...d.data() 
         })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome));
 
-        // 🔥 CORREÇÃO: Filtra o Dropdown se a tarefa for restrita a alunos específicos
         if (tarefaData.atribuicaoEspecifica && Array.isArray(tarefaData.alunosSelecionados) && tarefaData.alunosSelecionados.length > 0) {
             listaAlunos = listaAlunos.filter(a => tarefaData.alunosSelecionados.includes(a.id));
         }
@@ -225,6 +223,7 @@ export default function RevisarAtividade() {
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
+  // 🔥 CORREÇÃO: Agora ele cria a atividade direto se ela não existir (Aprovação Direta)
   async function handleAprovar(copiarAoAprovar = false) {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
@@ -239,8 +238,26 @@ export default function RevisarAtividade() {
         modulo: tarefa.nomeTarefa,
         revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
       };
-      await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
-      setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
+      
+      if (atividadeAtual) {
+        // Se já era um rascunho, apenas atualiza
+        await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
+        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
+      } else {
+        // Se o professor veio direto para a aprovação (virgem), ele cria a atividade direto como aprovada
+        const novaAtiv = { 
+          alunoId: alunoAtual.id, 
+          turmaId: tarefa.turmaId, 
+          instituicaoId: tarefa.instituicaoId, 
+          tarefaId: tarefa.id, 
+          dataCriacao: serverTimestamp(), 
+          postado: false, 
+          ...payload 
+        };
+        const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
+        setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
+      }
+
       if (copiarAoAprovar) { 
         navigator.clipboard.writeText(feedbackEditado.trim()); 
         setCopiado(true); 
@@ -443,7 +460,6 @@ export default function RevisarAtividade() {
                       <div className="w-full bg-green-500/20 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2 border border-green-500/30"><CheckCheck size={18}/> LANÇADO OFICIALMENTE</div>
                   ) : atividadeAtual?.status === 'aprovado' ? (
                         <div className="pt-4 border-t border-slate-800 space-y-4">
-                          {/* 🔥 NOVO: BANNER VISUAL DE CONFIRMAÇÃO DO PASSO 3 */}
                           <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
                             <div className="bg-green-500 text-white rounded-full p-1.5 shrink-0 mt-0.5">
                               <CheckCircle size={18} />
