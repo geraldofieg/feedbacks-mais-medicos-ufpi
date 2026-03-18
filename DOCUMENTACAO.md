@@ -46,7 +46,7 @@ Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '=='
 * **Termômetro da IA:** Mede a eficiência do prompt. Regra: A avaliação entra na conta verificando a exata `dataAprovacao` contra o `timestampPrompt` do usuário (para zerar estatísticas se o prompt mudar). Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Visível para Tier Premium e Admin.
 
 ## 7. Perfis de Acesso (RBAC SaaS) e Painel Admin
-* **Segurança Clean Code:** Nenhuma verificação de autorização utiliza hardcode de e-mails (`geraldofieg@...`). Toda validação de acesso é baseada unicamente no campo `role === 'admin'` proveniente do AuthContext.
+* **Segurança Clean Code:** Nenhuma verificação de autorização utiliza hardcode de e-mails. Toda validação de acesso é baseada unicamente no campo `role === 'admin'` proveniente do AuthContext.
 * **Perfil Professor:** Só enxerga dados onde seu `uid` conste como criador.
 * **Perfil Gestor (Admin):** Possui a **"Chave Mestra"**, ignorando a trava de `professorUid` para auditar a operação completa da Instituição.
 * **Painel SaaS (`/admin`):** Tela gerencial de CEO restrita. Permite: 
@@ -58,7 +58,7 @@ Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '=='
 
 ## 8. Modelos de Operação (Tiers/Planos de Assinatura)
 * **Tier 1: Básico ("O Organizador Pessoal"):** Focado na Gestão Visual e Cobrança. Faz a operação manual. A interface da IA atua como **Vitrine de Vendas** (Cadeado 🔒) redirecionando para a nova página de `/planos`.
-* **Tier 2: Intermediário ("SaaS Assistido" / Patrícia):** Operação terceirizada. O professor atua apenas como Revisor. O botão de Lançar Oficialmente é removido de sua tela. **Blindagem física:** Este usuário é impedido de acessar a página `/faltapostar` (URL direta), garantindo que apenas o Administrador finalize o processo.
+* **Tier 2: Intermediário ("SaaS Assistido"):** Operação terceirizada. O professor atua apenas como Revisor. O botão de Lançar Oficialmente é removido de sua tela. **Blindagem física:** Este usuário é impedido de acessar a página `/faltapostar` (URL direta), garantindo que apenas o Administrador finalize o processo.
 * **Tier 3: Premium ("O Lobo Solitário Turbo"):** Automação completa integrada via IA Gemini 3.1 Flash. 
     * **Configuração Privada:** O campo `promptPersonalizado` aparece na página de Configurações para treinar a personalidade da IA.
 
@@ -87,15 +87,17 @@ O sistema orienta o professor através de Ícones Tricolores no buscador de alun
 * **O Motor de Clonagem (Turma Modelo):** Professores podem "Criar Turma a partir de Modelo", replicando 100% das tarefas e enunciados de uma turma master, sem copiar os alunos.
 
 ## 12. Módulo de Comunicação e Cobrança
-Automatização de cobranças baseada no cruzamento de alunos x tarefas pendentes, protegida por um **Filtro Temporal V3** (Oculta o passado) e **Trava de Atribuição** (Isenta não-participantes). Dividida em duas "Mesas de Trabalho":
+Automatização de cobranças baseada no cruzamento de alunos x tarefas pendentes, protegida por um **Filtro Temporal V3** (Oculta o passado) e **Trava de Atribuição** (Isenta não-participantes). 
 
-### Redação de Mentoria e Apoio (Regras de Data):
-* **Grupo Geral da Turma (Coluna Esquerda):** Mensagens contextuais com base nos dias restantes (Vencido, Início, Meio, Reta Final).
-* **Templates Individuais:** Utilizam o primeiro nome do aluno e listam nominalmente as tarefas em atraso.
+### Inteligência de Urgência e Resumo Geral:
+* **O "Resumo Geral" (Padrão):** O sistema carrega por padrão focado no botão "Resumo Geral". Ele varre, compila e consolida todas as tarefas ativas atrasadas de cada aluno em uma única mensagem, exibindo-as em formato de lista.
+* **Algoritmo de Maior Urgência:** Ao consolidar várias pendências de um aluno, o sistema calcula nos bastidores qual delas está mais perto de vencer (menor número de dias restantes). A mensagem gerada adapta o seu "senso de urgência" (Reta final, Fase intermediária, Prazo Encerrado) baseando-se estritamente nesta tarefa mais crítica.
+* **Foco Específico:** O professor ainda pode clicar no botão de uma única tarefa no topo da tela para isolar a cobrança e os textos exclusivamente para aquele módulo.
 
-### Ações de Disparo:
-* **Copiar para a Plataforma (Coluna Direita):** Textos gerados para colagem manual em sistemas oficiais (Ex: Gov.br).
-* **Zap Direto (Coluna Esquerda):** Abre link direto do `wa.me` utilizando o telefone cadastrado. Oculta devedores sem telefone válido.
+### Ações de Disparo e Templates:
+* **Grupo Geral da Turma (Coluna Esquerda):** Mensagens contextuais dinâmicas para copiar para o grupo. Também utiliza o algoritmo de maior urgência para avisar a turma (ex: "a entrega mais próxima encerra em X dias").
+* **Copiar para a Plataforma (Coluna Direita):** Textos gerados individualmente utilizando o primeiro nome do aluno para colagem manual em sistemas oficiais (Ex: Gov.br).
+* **Zap Direto (Coluna Esquerda):** Abre link direto do `wa.me`. Possui um **Filtro Curinga de Telefone** que busca pelas chaves `whatsapp`, `telefone` ou `celular`, garantindo que alunos importados via cópia em lote da V1 não fiquem ocultos na cobrança.
 
 ## 13. Mapa de Entregas e Pendências
 * **Mapa de Entregas:** Tabela dinâmica indicando o status através de ícones (✅ Entregue, ❌ Pendente, ⚪ Isento/Traço). Possui uma **Cortina de Tempo V3** controlada via Toggle, permitindo ao professor esconder legado antigo (tarefas anteriores a Jan/2026). No mobile, o contador X/Y não penaliza alunos isentos de atividades específicas.
