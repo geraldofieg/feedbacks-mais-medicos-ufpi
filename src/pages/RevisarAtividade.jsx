@@ -45,7 +45,6 @@ export default function RevisarAtividade() {
   const isTier1 = !isPremium && !isTier2;
   const respostaEstaVazia = novaResposta.trim().length === 0 && !arquivoUrl;
 
-  // 🔥 NOVO: Estado para o prompt ser sincronizado em tempo real entre abas
   const [promptVivo, setPromptVivo] = useState(userProfile?.promptPersonalizado || localStorage.getItem('@SaaS_PromptVivo') || '');
   
   useEffect(() => {
@@ -60,13 +59,20 @@ export default function RevisarAtividade() {
       try {
         const snapTarefa = await getDoc(doc(db, 'tarefas', id));
         if (!snapTarefa.exists()) return navigate('/');
-        setTarefa({ id: snapTarefa.id, ...snapTarefa.data() });
+        const tarefaData = snapTarefa.data();
+        setTarefa({ id: snapTarefa.id, ...tarefaData });
 
-        const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', snapTarefa.data().turmaId));
+        const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', tarefaData.turmaId));
         const snapAlunos = await getDocs(qAlunos);
-        const listaAlunos = snapAlunos.docs.map(d => ({ 
+        let listaAlunos = snapAlunos.docs.map(d => ({ 
           id: d.id, ...d.data() 
         })).filter(a => a.status !== 'lixeira').sort((a, b) => a.nome.localeCompare(b.nome));
+
+        // 🔥 CORREÇÃO: Filtra o Dropdown se a tarefa for restrita a alunos específicos
+        if (tarefaData.atribuicaoEspecifica && Array.isArray(tarefaData.alunosSelecionados) && tarefaData.alunosSelecionados.length > 0) {
+            listaAlunos = listaAlunos.filter(a => tarefaData.alunosSelecionados.includes(a.id));
+        }
+
         setAlunos(listaAlunos);
 
         const qAtividades = query(collection(db, 'atividades'), where('tarefaId', '==', id));
@@ -83,7 +89,6 @@ export default function RevisarAtividade() {
     buscarDadosDaEstacao();
   }, [id, navigate]);
 
-  // 🔥 NOVO: Monitor de Sincronização do Prompt
   useEffect(() => {
     if (userProfile?.promptPersonalizado) {
       setPromptVivo(userProfile.promptPersonalizado);
@@ -111,7 +116,6 @@ export default function RevisarAtividade() {
     setNomeArquivo(atividadeAtual?.nomeArquivo || '');
   }, [alunoSelecionadoId, atividadeAtual]);
 
-  // 🔥 CAÇADOR DE LINKS NO ENUNCIADO
   const renderizarComLinks = (texto) => {
     if (!texto) return "Sem enunciado.";
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -129,7 +133,6 @@ export default function RevisarAtividade() {
     });
   };
 
-  // 🔥 RADAR DE LINKS NA RESPOSTA
   const extrairLinksDaResposta = (texto) => {
     if (!texto) return [];
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -274,7 +277,6 @@ export default function RevisarAtividade() {
     } catch (e) { console.error(e); } finally { setSalvando(false); }
   }
 
-  // 🔥 LÓGICA DA BARRA DE EVOLUÇÃO (STEPPER)
   const isStep1Done = !!(novaResposta || arquivoUrl);
   const isStep2Done = atividadeAtual?.status === 'aprovado' || atividadeAtual?.postado;
   const isStep3Done = atividadeAtual?.postado;
@@ -324,17 +326,14 @@ export default function RevisarAtividade() {
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6 md:mt-10">
         
-        {/* 🔥 NOVA BARRA DE EVOLUÇÃO (SEMPRE VISÍVEL) */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 mb-6">
           <div className="flex items-center justify-between relative px-4 md:px-12">
             <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
             
-            {/* Linha de progresso preenchida */}
             <div className={`absolute left-10 top-1/2 -translate-y-1/2 h-1 transition-all duration-500 -z-10 rounded-full ${
               isStep2Done ? 'w-[calc(100%-5rem)] bg-green-500' : (isStep1Done ? 'w-1/2 bg-green-500' : 'w-0')
             }`}></div>
 
-            {/* Passo 1: Resposta do Aluno */}
             <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!alunoAtual ? 'text-slate-400' : (isStep1Done ? 'text-green-600' : 'text-blue-600')}`}>
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!alunoAtual ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep1Done ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg ring-4 ring-blue-50')}`}>
                 {isStep1Done ? '✓' : '1'}
@@ -342,7 +341,6 @@ export default function RevisarAtividade() {
               <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">1. Resposta do Aluno</span>
             </div>
 
-            {/* Passo 2: Área de Feedback */}
             <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!isStep1Done ? 'text-slate-400' : (isStep2Done ? 'text-green-600' : 'text-amber-500')}`}>
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!isStep1Done ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep2Done ? 'bg-green-500 text-white shadow-lg' : 'bg-amber-400 text-white shadow-lg ring-4 ring-amber-50')}`}>
                 {isStep2Done ? '✓' : '2'}
@@ -350,7 +348,6 @@ export default function RevisarAtividade() {
               <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">2. Área de Feedback</span>
             </div>
 
-            {/* Passo 3: Pronto para Postar */}
             <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!isStep2Done ? 'text-slate-400' : (isStep3Done ? 'text-green-600' : 'text-blue-600')}`}>
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!isStep2Done ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep3Done ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-500 text-white shadow-lg ring-4 ring-blue-50')}`}>
                 {isStep3Done ? '✓' : '3'}
@@ -361,7 +358,6 @@ export default function RevisarAtividade() {
         </div>
 
         {!alunoAtual ? (
-          /* 🔥 NOVO EMPTY STATE EDUCATIVO */
           <div className="bg-white p-12 md:p-24 rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
             <div className="flex flex-col items-center mb-10 text-center animate-in fade-in slide-in-from-top-4 duration-700">
               <div className="bg-blue-100 text-blue-600 p-4 rounded-full mb-4">
@@ -449,18 +445,14 @@ export default function RevisarAtividade() {
                         <div className="pt-2 border-t border-slate-800 space-y-3">
                           <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"><Copy size={18}/> {copiado ? 'Copiado!' : '1. Copiar Feedback'}</button>
                       
-                          {/* 🔥 BOTÃO FINAL CORRIGIDO */}
                           <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl hover:bg-indigo-700 transition-colors"><Send size={18}/> 2. Marcar Oficial (Move p/ Histórico)</button>
                         </div>
                   ) : (
                         <div className="grid grid-cols-2 gap-3">
-     
-                           {/* 🔥 BOTÃO RASCUNHO CORRIGIDO */}
                            <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700 hover:bg-slate-700 transition-colors leading-tight px-2">
                               {salvoFeedback ? '✅ Salvo!' : '💾 Salvar (Mantém na Revisão)'}
                            </button>
 
-                          {/* 🔥 BOTÃO APROVAR CORRIGIDO */}
                           <button onClick={() => handleAprovar(true)} disabled={salvando || !feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black hover:bg-blue-700 transition-colors leading-tight px-2">🚀 Aprovar (Move p/ Postar)</button>
                         </div>
                   )}
