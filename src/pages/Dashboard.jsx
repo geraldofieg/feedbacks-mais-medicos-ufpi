@@ -9,10 +9,8 @@ export default function Dashboard() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   const navigate = useNavigate(); 
   
-  // 🔥 SEGURANÇA PROFISSIONAL: Trava baseada exclusivamente no Role do banco
   const isAdmin = userProfile?.role === 'admin';
   
-  // 🔥 LEITURA DE PLANOS 100% ESTrita e Limpa
   const planoUsuario = (userProfile?.plano || 'basico').toLowerCase().trim();
   const isTier1 = planoUsuario === 'basico' || planoUsuario === 'trial';
   const isTier2 = planoUsuario === 'intermediario';
@@ -34,10 +32,8 @@ export default function Dashboard() {
 
   const radarExecutado = useRef(false);
 
-  // ✅ CORREÇÃO DO ERRO (F5): Variável declarada
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
-  // 1. A BÚSSOLA DE LOGIN (Inteligência Restaurada: Identifica a Instituição correta do Professor)
   useEffect(() => {
     if (!currentUser || radarExecutado.current) return;
     async function setupRadarGlobal() {
@@ -55,7 +51,6 @@ export default function Dashboard() {
           return;
         }
 
-        // BUSCA AS TURMAS REAIS DO PROFESSOR PARA SELECIONAR A ESCOLA CERTA
         const turmasRef = collection(db, 'turmas');
         const qTurmasGlobais = isAdmin 
           ? turmasRef 
@@ -74,7 +69,7 @@ export default function Dashboard() {
         let escolaAlvo = null;
 
         if (turmasGlobais.length > 0) {
-            const idCerta = turmasGlobais[0].instituicaoId; // Pega a escola da turma mais recente
+            const idCerta = turmasGlobais[0].instituicaoId; 
             escolaAlvo = lista.find(i => i.id === idCerta) || null;
             if (escolaAlvo) localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaAlvo));
         } else {
@@ -89,7 +84,6 @@ export default function Dashboard() {
     setupRadarGlobal();
   }, [currentUser, isAdmin, setEscolaSelecionada]);
 
-  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA E REGRAS DE NEGÓCIO
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id) return;
@@ -104,7 +98,6 @@ export default function Dashboard() {
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
           
-          // Alunos para Gestão à Vista
           const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAlunos = await getDocs(qAlunos);
           const listaAlunosVivos = snapAlunos.docs
@@ -112,7 +105,6 @@ export default function Dashboard() {
             .map(d => ({id: d.id, nome: d.data().nome, turmaId: d.data().turmaId}));
           setTemAlunos(listaAlunosVivos.length > 0);
 
-          // Buscar Configurações do Usuário (Para o Termômetro IA)
           const docRefUser = doc(db, 'usuarios', currentUser.uid);
           const docSnapUser = await getDoc(docRefUser);
           const tsPromptRaw = docSnapUser.data()?.timestampPrompt;
@@ -124,9 +116,13 @@ export default function Dashboard() {
           
           let p = 0, f = 0, ok = 0, iaTotal = 0, iaOriginais = 0;
           activities.forEach(d => {
-            if (d.postado) ok++; else if (d.status === 'aprovado') f++; else if (d.resposta) p++;
+            // 🔥 CORREÇÃO DO RASCUNHO: Agora avalia arquivo anexado e rascunhos salvos, não apenas texto na resposta!
+            const temEntregaOuRascunho = (d.resposta && String(d.resposta).trim() !== '') || d.arquivoUrl || (d.feedbackFinal && String(d.feedbackFinal).trim() !== '');
+
+            if (d.postado) ok++; 
+            else if (d.status === 'aprovado') f++; 
+            else if (temEntregaOuRascunho) p++;
             
-            // TERMÔMETRO DA IA: Respeita o timestampPrompt
             const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
             const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
             const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
@@ -147,69 +143,48 @@ export default function Dashboard() {
             const data = d.data();
             const timeFim = data.dataFim?.toDate ? data.dataFim.toDate().getTime() : 0;
             const timeInicio = data.dataInicio?.toDate ? data.dataInicio.toDate().getTime() : 0;
+            const timeCriacao = data.dataCriacao?.toDate ? data.dataCriacao.toDate().getTime() : (data.dataCriacao?.seconds ? data.dataCriacao.seconds * 1000 : 0);
             
             return { 
               id: d.id, 
               ...data, 
               timeFim,
               timeInicio,
+              timeCriacao,
               isFutura: timeInicio > hojeTime,
               isPassada: timeFim > 0 && timeFim < hojeTime,
               diasRestantes: Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24)) 
             };
           }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
           
-          // TAREFAS EM ANDAMENTO: Vigentes HOJE
           const tarefasAtivas = tarefasProcessadas.filter(t => !t.isFutura && !t.isPassada);
           setTarefasEmAndamento(tarefasAtivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
 
-          // GESTÃO À VISTA (Cálculo de Devedores)
           const calcularDevedores = (tarefa) => {
             let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
             if (tarefa.atribuicaoEspecifica) alvo = alvo.filter(a => tarefa.alunosSelecionados?.includes(a.id));
-            const devedores = alvo.filter(aluno => !activities.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id && (e.resposta || e.arquivoUrl)));
+            
+            // 🔥 CORREÇÃO AQUI TAMBÉM: Devedor é só quem não tem texto, nem anexo, nem rascunho
+            const devedores = alvo.filter(aluno => !activities.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id && ((e.resposta && String(e.resposta).trim() !== '') || e.arquivoUrl || (e.feedbackFinal && String(e.feedbackFinal).trim() !== ''))));
             return { id: tarefa.id, nome: tarefa.nomeTarefa || tarefa.titulo, devedores: devedores.map(d => d.nome).sort() };
           };
 
-          // ✅ CORREÇÃO PENDÊNCIAS ANTERIORES: Usa o timeInicio (00:00:00) a partir do dia 05/01/2026.
-          const corteDataInicio = new Date(2026, 0, 5, 0, 0, 0).getTime();
+          const corteCriacao = new Date(2026, 0, 4, 0, 0, 0).getTime(); 
 
           setGestaoVista({
             atuais: tarefasAtivas.map(calcularDevedores).filter(gv => gv.devedores.length > 0),
             anteriores: tarefasProcessadas
-              .filter(t => t.isPassada && t.timeInicio >= corteDataInicio)
+              .filter(t => t.isPassada && t.timeCriacao >= corteCriacao)
               .sort((a,b) => b.timeFim - a.timeFim)
               .map(calcularDevedores)
               .filter(gv => gv.devedores.length > 0)
-              .slice(0, 4)
+              .slice(0, 4) 
           });
         }
       } catch (e) { console.error(e); } finally { setLoadingDados(false); } 
     }
     fetchDados();
   }, [escolaSelecionada, currentUser, isAdmin]);
-
-  const renderBarraProgresso = () => {
-    const passos = [{ id: 1, titulo: 'Instituição', icone: <School size={18} /> }, { id: 2, titulo: 'Turma', icone: <Building2 size={18} /> }, { id: 3, titulo: 'Alunos', icone: <UserPlus size={18} /> }, { id: 4, titulo: 'Tarefas', icone: <FileText size={18} /> }];
-    let pAt = 5; if (!escolaSelecionada?.id) pAt = 1; else if (minhasTurmas.length === 0) pAt = 2; else if (!temAlunos) pAt = 3; else if (!temTarefasGeral) pAt = 4;
-    const porcentagem = ((pAt - 1) / 3) * 100;
-    return (
-      <div className="max-w-3xl mx-auto mb-10 w-full px-4 pt-6">
-        <div className="relative flex items-center justify-between">
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1.5 bg-gray-200 rounded-full"></div>
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full transition-all duration-700" style={{ width: `${porcentagem}%` }}></div>
-          {passos.map(p => (
-            <div key={p.id} className="relative z-10 flex flex-col items-center">
-              <div className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${p.id < pAt ? "bg-green-500 border-green-500 text-white" : p.id === pAt ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/30" : "bg-white border-gray-200 text-gray-400"}`}>
-                {p.id < pAt ? <CheckCheck size={20} /> : p.icone}
-              </div>
-              <span className={`absolute -bottom-7 text-[10px] sm:text-xs uppercase tracking-widest whitespace-nowrap ${p.id < pAt ? "text-green-600 font-bold" : p.id === pAt ? "text-blue-700 font-black" : "text-gray-400 font-medium"}`}>{p.titulo}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
 
   if (loadingInst || loadingDados) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
@@ -236,7 +211,6 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {/* 🔥 BARRA PRETA - LÁPIS (Para evitar corte no nome da tarefa) 🔥 */}
           <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
              <div className="flex items-center gap-2.5 mb-3">
                 <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
@@ -282,7 +256,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* 🔥 TERMÔMETRO IA 🔥 */}
           {mostrarTermometroIA && (
             <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
               <div className="flex items-start sm:items-center gap-3">
@@ -301,7 +274,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* GESTÃO À VISTA - LISTA DE DEVEDORES */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
               {gestaoVista.atuais.map((gv, idx) => (
                 <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
