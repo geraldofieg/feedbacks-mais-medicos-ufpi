@@ -31,7 +31,7 @@ export default function RevisarAtividade() {
   
   const [salvando, setSalvando] = useState(false);
   const [copiado, setCopiado] = useState(false);
-  const [salvoFeedback, setSalvoFeedback] = useState(false); // 🔥 Novo estado para feedback visual do rascunho
+  const [salvoFeedback, setSalvoFeedback] = useState(false);
   const [gerandoIA, setGerandoIA] = useState(false);
   const [marcandoPostado, setMarcandoPostado] = useState(false);
 
@@ -75,7 +75,8 @@ export default function RevisarAtividade() {
         snapAtividades.docs.forEach(d => { mapa[d.data().alunoId] = { id: d.id, ...d.data() }; });
         
         setAtividadesMap(mapa);
-      } catch (error) { console.error(error);
+      } catch (error) { 
+        console.error(error);
       } 
       finally { setLoading(false); }
     }
@@ -157,7 +158,6 @@ export default function RevisarAtividade() {
       if (window.confirm("🔒 Deseja conhecer o Plano Premium para usar IA?")) navigate('/planos');
       return;
     }
-    // 🔥 Agora usa o promptVivo (Sincronizado)
     if (!promptVivo) {
       if (window.confirm("Configure suas instruções de correção antes.")) navigate('/configuracoes');
       return;
@@ -167,7 +167,6 @@ export default function RevisarAtividade() {
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
-      
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
       
       const promptCompleto = `Aja como um preceptor médico.
@@ -178,8 +177,7 @@ export default function RevisarAtividade() {
       console.error(e);
       alert("Erro ao conectar com a IA da Google. Tenta novamente.");
     }
-    finally { setGerandoIA(false);
-    }
+    finally { setGerandoIA(false); }
   }
 
   async function handleSalvarRascunho() {
@@ -191,19 +189,15 @@ export default function RevisarAtividade() {
         arquivoUrl: arquivoUrl,
         nomeArquivo: nomeArquivo,
         feedbackFinal: feedbackEditado.trim(), 
-        feedbackSugerido: atividadeAtual?.feedbackSugerido ||
-        (isPremium || isTier2 ? feedbackEditado.trim() : ''),
-        nota: notaAluno.trim() ||
-        null, 
-        status: atividadeAtual?.status === 'aprovado' ?
-        'aprovado' : 'pendente',
+        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
+        nota: notaAluno.trim() || null, 
+        status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente',
         nomeAluno: alunoAtual.nome, 
         nomeTarefa: tarefa.nomeTarefa,
         aluno: alunoAtual.nome,
         tarefa: tarefa.nomeTarefa,
         modulo: tarefa.nomeTarefa,
-        revisadoPor: userProfile?.nome ||
-        currentUser?.email || 'Professor'
+        revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
       };
 
       if (atividadeAtual?.status === 'aprovado') {
@@ -225,8 +219,7 @@ export default function RevisarAtividade() {
       
       setSalvoFeedback(true);
       setTimeout(() => setSalvoFeedback(false), 2000);
-    } catch (error) { console.error(error); } finally { setSalvando(false);
-    }
+    } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
   async function handleAprovar(copiarAoAprovar = false) {
@@ -241,15 +234,16 @@ export default function RevisarAtividade() {
         aluno: alunoAtual.nome,
         tarefa: tarefa.nomeTarefa,
         modulo: tarefa.nomeTarefa,
-        revisadoPor: userProfile?.nome ||
-        currentUser?.email || 'Professor'
+        revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
       };
       await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
-      if (copiarAoAprovar) { navigator.clipboard.writeText(feedbackEditado.trim()); setCopiado(true); setTimeout(() => setCopiado(false), 2000);
+      if (copiarAoAprovar) { 
+        navigator.clipboard.writeText(feedbackEditado.trim()); 
+        setCopiado(true); 
+        setTimeout(() => setCopiado(false), 2000);
       }
-    } catch (error) { console.error(error);
-    } finally { setSalvando(false); }
+    } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
   async function handleMarcarPostado() {
@@ -258,8 +252,7 @@ export default function RevisarAtividade() {
     try {
       await updateDoc(doc(db, 'atividades', atividadeAtual.id), { postado: true, dataPostagem: serverTimestamp() });
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], postado: true } }));
-    } catch (error) { console.error(error);
-    } finally { setMarcandoPostado(false); }
+    } catch (error) { console.error(error); } finally { setMarcandoPostado(false); }
   }
 
   async function handleDevolverRevisao() {
@@ -268,8 +261,7 @@ export default function RevisarAtividade() {
     try {
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: deleteField() });
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false, dataAprovacao: null } }));
-    } catch (e) { console.error(e);
-    } finally { setSalvando(false); }
+    } catch (e) { console.error(e); } finally { setSalvando(false); }
   }
 
   async function handleExcluirAtividade() {
@@ -281,6 +273,11 @@ export default function RevisarAtividade() {
         setNovaResposta(''); setFeedbackEditado(''); setNotaAluno(''); setArquivoUrl('');
     } catch (e) { console.error(e); } finally { setSalvando(false); }
   }
+
+  // 🔥 LÓGICA DA BARRA DE EVOLUÇÃO (STEPPER)
+  const isStep1Done = !!(novaResposta || arquivoUrl);
+  const isStep2Done = atividadeAtual?.status === 'aprovado' || atividadeAtual?.postado;
+  const isStep3Done = atividadeAtual?.postado;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans">
@@ -296,15 +293,13 @@ export default function RevisarAtividade() {
              </div>
           </div>
           
-          <div className="flex items-center gap-2 bg-slate-100 border 
-          border-slate-200 px-4 py-2.5 rounded-2xl w-full md:w-[450px]">
+          <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-2xl w-full md:w-[450px]">
             <Search size={16} className="text-blue-500" />
             <select 
               className="bg-transparent font-black text-slate-700 outline-none w-full cursor-pointer text-xs md:text-sm"
               value={alunoSelecionadoId}
               onChange={(e) => setAlunoSelecionadoId(e.target.value)}
             >
-    
               <option value="">Buscar Aluno na Lista...</option>
               {alunos.map(a => {
                 const registro = atividadesMap[a.id];
@@ -316,8 +311,7 @@ export default function RevisarAtividade() {
                   } else if (registro.status === 'aprovado') {
                     icone = '🟡';
                   } else {
-                    const temConteudo = (registro.resposta && registro.resposta.trim() !== '') ||
-                    registro.arquivoUrl;
+                    const temConteudo = (registro.resposta && registro.resposta.trim() !== '') || registro.arquivoUrl;
                     icone = temConteudo ? '🟡' : '🔴';
                   }
                 }
@@ -329,155 +323,119 @@ export default function RevisarAtividade() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6 md:mt-10">
-        {!alunoAtual ?
-        (
+        
+        {/* 🔥 NOVA BARRA DE EVOLUÇÃO (SEMPRE VISÍVEL) */}
+        <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 mb-6">
+          <div className="flex items-center justify-between relative px-4 md:px-12">
+            <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
+            
+            {/* Linha de progresso preenchida */}
+            <div className={`absolute left-10 top-1/2 -translate-y-1/2 h-1 transition-all duration-500 -z-10 rounded-full ${
+              isStep2Done ? 'w-[calc(100%-5rem)] bg-green-500' : (isStep1Done ? 'w-1/2 bg-green-500' : 'w-0')
+            }`}></div>
+
+            {/* Passo 1: Resposta do Aluno */}
+            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!alunoAtual ? 'text-slate-400' : (isStep1Done ? 'text-green-600' : 'text-blue-600')}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!alunoAtual ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep1Done ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg ring-4 ring-blue-50')}`}>
+                {isStep1Done ? '✓' : '1'}
+              </div>
+              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">1. Resposta do Aluno</span>
+            </div>
+
+            {/* Passo 2: Área de Feedback */}
+            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!isStep1Done ? 'text-slate-400' : (isStep2Done ? 'text-green-600' : 'text-amber-500')}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!isStep1Done ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep2Done ? 'bg-green-500 text-white shadow-lg' : 'bg-amber-400 text-white shadow-lg ring-4 ring-amber-50')}`}>
+                {isStep2Done ? '✓' : '2'}
+              </div>
+              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">2. Área de Feedback</span>
+            </div>
+
+            {/* Passo 3: Pronto para Postar */}
+            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!isStep2Done ? 'text-slate-400' : (isStep3Done ? 'text-green-600' : 'text-blue-600')}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!isStep2Done ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep3Done ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-500 text-white shadow-lg ring-4 ring-blue-50')}`}>
+                {isStep3Done ? '✓' : '3'}
+              </div>
+              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">3. Pronto p/ Postar</span>
+            </div>
+          </div>
+        </div>
+
+        {!alunoAtual ? (
+          /* 🔥 NOVO EMPTY STATE EDUCATIVO */
           <div className="bg-white p-12 md:p-24 rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
-             <div className="flex flex-col items-center mb-10 text-center animate-in fade-in slide-in-from-top-4 duration-700">
-                <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-xl shadow-blue-600/20 mb-4">
-                  <MousePointer2 size={32} />
-              
-                </div>
-                <h3 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">Primeiro Passo</h3>
-                <p className="text-slate-500 font-medium text-lg mt-2 max-w-sm">Para iniciar uma correção, selecione um aluno no menu de busca acima.</p>
-             </div>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl text-center">
-           
-                 <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col items-center">
-                   <span className="text-3xl mb-3">🔴</span>
-                   <h4 className="font-black text-slate-700 text-sm uppercase mb-1">Aguardando</h4>
-                   <p className="text-[11px] text-slate-500 font-bold leading-tight">Sem resposta cadastrada.</p>
-                </div>
- 
-                <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex flex-col items-center">
-                   <span className="text-3xl mb-3">🟡</span>
-                   <h4 className="font-black text-amber-700 text-sm uppercase mb-1">Em Revisão</h4>
-                   <p className="text-[11px] text-amber-600 font-bold leading-tight">Já existe um rascunho de resposta aqui.</p>
-  
-               </div>
-                <div className="bg-green-50 p-6 rounded-3xl border border-green-100 flex flex-col items-center">
-                   <span className="text-3xl mb-3">✅</span>
-                   <h4 className="font-black text-green-700 text-sm uppercase mb-1">Lançado</h4>
-                 
-                   <p className="text-[11px] text-green-600 font-bold leading-tight">Trabalho finalizado.</p>
-                </div>
-             </div>
+            <div className="flex flex-col items-center mb-10 text-center animate-in fade-in slide-in-from-top-4 duration-700">
+              <div className="bg-blue-100 text-blue-600 p-4 rounded-full mb-4">
+                <MousePointer2 size={32} />
+              </div>
+              <h3 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight mb-4">A esteira de revisão está vazia</h3>
+              <div className="text-slate-600 max-w-md text-left space-y-3 bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm text-lg font-medium">
+                <p><strong className="text-blue-600">1.</strong> Selecione um aluno pendente ao lado.</p>
+                <p><strong className="text-amber-500">2.</strong> Cole a resposta dele aqui no sistema.</p>
+                <p><strong className="text-green-600">3.</strong> Avalie e aprove para movê-lo para a lista final.</p>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div className="lg:col-span-8 space-y-6">
-              
- 
-              <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 mb-6">
-                <div className="flex items-center justify-between relative px-4 md:px-12">
-                   <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
-                   <div className={`absolute left-10 top-1/2 -translate-y-1/2 h-1 bg-blue-500 -z-10 rounded-full transition-all duration-500 
-                   ${
-                     atividadeAtual?.postado ?
-                     'w-[calc(100%-5rem)] bg-green-500' : (atividadeAtual?.status === 'aprovado' ? 'w-1/2 bg-amber-400' : 'w-0')
-                   }`}></div>
-                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${novaResposta ||
-                   arquivoUrl ? 'text-blue-600' : 'text-slate-400'}`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${novaResposta ||
-                      arquivoUrl ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>1</div>
-                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Resposta</span>
-                   </div>
-                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${atividadeAtual?.status === 'aprovado' ?
-                   'text-amber-500' : 'text-slate-400'}`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${atividadeAtual?.status === 'aprovado' ?
-                      (atividadeAtual?.postado ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-amber-400 text-white shadow-lg shadow-amber-400/30') : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>2</div>
-                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Feedback</span>
-                   </div>
-                   <div className={`flex flex-col items-center gap-2 bg-white px-3 ${atividadeAtual?.postado ?
-                   'text-green-600' : 'text-slate-400'}`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${atividadeAtual?.postado ?
-                      'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-slate-100 text-slate-400 border-2 border-slate-200'}`}>3</div>
-                      <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">Oficial</span>
-                   </div>
-                </div>
-              </div>
-
-              
               <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-6 md:p-10 space-y-12">
                   <section>
-                    <h4 className="text-xs font-black text-slate-900 uppercase mb-4">1.
-                    Enunciado</h4>
+                    <h4 className="text-xs font-black text-slate-900 uppercase mb-4">1. Enunciado</h4>
                     <div className="bg-slate-50 p-6 md:p-8 rounded-2xl text-slate-700 leading-relaxed font-medium text-lg whitespace-pre-wrap">
-                      {/* 🔥 APLICAÇÃO DO CAÇADOR DE LINKS NO ENUNCIADO */}
                       {renderizarComLinks(tarefa?.enunciado)}
-                  
                     </div>
                   </section>
                   
                   <section>
                     <div className="flex items-center gap-3 mb-4">
-                    
                       <h4 className="text-xs font-black text-slate-900 uppercase flex-1">2. Resposta do Aluno</h4>
                       <div className="flex items-center gap-4">
-                        {arquivoUrl ?
-                        (
+                        {arquivoUrl ? (
                           <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 shadow-sm">
                             <a href={arquivoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:underline cursor-pointer" title="Clique para visualizar/baixar o arquivo">
-                     
                               <FileCheck size={14}/>
                               <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{nomeArquivo || "Arquivo Anexado"}</span>
                             </a>
-                        
                             <button onClick={() => { setArquivoUrl(''); setNomeArquivo(''); }} className="hover:text-red-500 ml-1 border-l border-green-200 pl-2" title="Remover anexo"><Trash2 size={14}/></button>
                           </div>
                         ) : (
-                          <label className={`flex items-center gap-2 
-                          px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
-                            {uploading ?
-                            <RefreshCw size={14} className="animate-spin"/> : <FileUp size={14}/>}
-                            <span className="text-[10px] font-black uppercase">{uploading ?
-                            'Subindo...' : 'Anexar PDF'}</span>
+                          <label className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
+                            {uploading ? <RefreshCw size={14} className="animate-spin"/> : <FileUp size={14}/>}
+                            <span className="text-[10px] font-black uppercase">{uploading ? 'Subindo...' : 'Anexar PDF'}</span>
                             <input type="file" className="hidden" accept=".pdf,.doc,.docx,.rtf,.txt" onChange={handleUploadArquivo} disabled={uploading}/>
                           </label>
                         )}
-              
-                        <button onClick={() => { setNovaResposta(''); setArquivoUrl(''); setNomeArquivo('');
-                        }} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center gap-1"><Eraser size={14}/> Limpar</button>
+                        <button onClick={() => { setNovaResposta(''); setArquivoUrl(''); setNomeArquivo(''); }} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center gap-1"><Eraser size={14}/> Limpar</button>
                       </div>
                     </div>
                     
-                    <textarea rows="14" placeholder="Cole a resposta aqui..." className="w-full p-6 md:p-8 
-                    rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-lg" value={novaResposta} onChange={(e) => setNovaResposta(e.target.value)}/>
+                    <textarea rows="14" placeholder="Cole a resposta aqui..." className="w-full p-6 md:p-8 rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-lg" value={novaResposta} onChange={(e) => setNovaResposta(e.target.value)}/>
                     
-                    {/* 🔥 RADAR DE LINKS (Agora com mais destaque visual para você clicar fácil) */}
                     {linksNaResposta.length > 0 && (
-          
                       <div className="mt-4 p-5 bg-indigo-50 border border-indigo-100 rounded-2xl flex flex-col gap-3 shadow-inner">
                         <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-2">
                           <ExternalLink size={14} /> Links detectados na resposta do aluno:
-            
                         </span>
                         <div className="flex flex-wrap gap-2">
                           {linksNaResposta.map((link, idx) => (
-                            <a key={idx} href={link} target="_blank" 
-                            rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-white hover:bg-indigo-600 bg-white px-4 py-2 rounded-xl border border-indigo-200 shadow-sm transition-all truncate max-w-full">
-                              Abrir Link {linksNaResposta.length > 1 ?
-                              idx + 1 : ''} <ArrowLeft size={14} className="rotate-180"/>
+                            <a key={idx} href={link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-white hover:bg-indigo-600 bg-white px-4 py-2 rounded-xl border border-indigo-200 shadow-sm transition-all truncate max-w-full">
+                              Abrir Link {linksNaResposta.length > 1 ? idx + 1 : ''} <ArrowLeft size={14} className="rotate-180"/>
                             </a>
                           ))}
                         </div>
-               
-                         <p className="text-[9px] text-indigo-400 font-bold italic">Nota: Caixas de texto não permitem cliques diretos.
-                         Use os botões acima para abrir os arquivos do aluno.</p>
+                         <p className="text-[9px] text-indigo-400 font-bold italic">Nota: Caixas de texto não permitem cliques diretos. Use os botões acima para abrir os arquivos do aluno.</p>
                       </div>
                     )}
                   </section>
               </div>
             </div>
 
-     
              <div className="lg:col-span-4 lg:sticky lg:top-24">
               <div className="bg-slate-900 rounded-[32px] p-6 md:p-8 text-white shadow-2xl">
                 <div className="mb-6">
                   <h3 className="text-xl font-black flex items-center gap-3 mb-6"><CheckCircle className="text-green-400" size={24}/>Avaliação</h3>
-                  <button onClick={handleGerarIA} disabled={gerandoIA ||
-                  respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-600 to-blue-600 mb-4 flex items-center justify-center gap-3 shadow-lg shadow-indigo-500/20 active:scale-95 transition-transform">
-                    {gerandoIA ?
-                    <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>} Gerar Feedback IA
+                  <button onClick={handleGerarIA} disabled={gerandoIA || respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-600 to-blue-600 mb-4 flex items-center justify-center gap-3 shadow-lg shadow-indigo-500/20 active:scale-95 transition-transform">
+                    {gerandoIA ? <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>} Gerar Feedback IA
                   </button>
                 </div>
                 <div className="space-y-6">
@@ -485,34 +443,33 @@ export default function RevisarAtividade() {
     
                    <input type="text" placeholder="Nota" className="bg-slate-800 p-4 rounded-2xl font-black text-white w-full outline-none focus:ring-2 focus:ring-indigo-500 transition-all" value={notaAluno} onChange={e => setNotaAluno(e.target.value)}/>
                   
-                  {atividadeAtual?.postado ?
-                  (
+                  {atividadeAtual?.postado ? (
                       <div className="w-full bg-green-500/20 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2 border border-green-500/30"><CheckCheck size={18}/> LANÇADO OFICIALMENTE</div>
-                  ) : atividadeAtual?.status === 'aprovado' ?
-                  (
+                  ) : atividadeAtual?.status === 'aprovado' ? (
                         <div className="pt-2 border-t border-slate-800 space-y-3">
                           <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"><Copy size={18}/> {copiado ? 'Copiado!' : '1. Copiar Feedback'}</button>
                       
-                          <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl hover:bg-indigo-700 transition-colors"><Send size={18}/> 2. Confirmar Lançamento</button>
+                          {/* 🔥 BOTÃO FINAL CORRIGIDO */}
+                          <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl hover:bg-indigo-700 transition-colors"><Send size={18}/> 2. Marcar Oficial (Move p/ Histórico)</button>
                         </div>
                   ) : (
                         <div className="grid grid-cols-2 gap-3">
      
-                           <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700 hover:bg-slate-700 transition-colors">
-                              {salvoFeedback ? '✅ Salvo!' : '💾 Rascunho'}
+                           {/* 🔥 BOTÃO RASCUNHO CORRIGIDO */}
+                           <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700 hover:bg-slate-700 transition-colors leading-tight px-2">
+                              {salvoFeedback ? '✅ Salvo!' : '💾 Salvar (Mantém na Revisão)'}
                            </button>
-                          <button onClick={() => handleAprovar(true)} disabled={salvando ||
-                          !feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black hover:bg-blue-700 transition-colors">🚀 Aprovar</button>
+
+                          {/* 🔥 BOTÃO APROVAR CORRIGIDO */}
+                          <button onClick={() => handleAprovar(true)} disabled={salvando || !feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black hover:bg-blue-700 transition-colors leading-tight px-2">🚀 Aprovar (Move p/ Postar)</button>
                         </div>
                   )}
 
                   {atividadeAtual && (
                     <div className="mt-8 border-t border-slate-800 pt-8 space-y-3">
-     
                        <button onClick={handleDevolverRevisao} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-[10px] font-bold text-amber-500 py-2 hover:bg-amber-500/10 rounded-lg transition-colors"><RotateCcw size={14}/> Devolver p/ Revisão</button>
                         <button onClick={handleExcluirAtividade} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-[10px] font-bold text-red-500 py-2 hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 size={14}/> Excluir Resposta</button>
                     </div>
-  
                  )}
                 </div>
               </div>
