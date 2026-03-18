@@ -18,7 +18,6 @@ export default function Comunicacao() {
   });
   
   const [tarefasDaTurma, setTarefasDaTurma] = useState([]);
-  // ✅ COMEÇA SEMPRE NO "RESUMO GERAL" DE TODAS AS PENDÊNCIAS
   const [tarefaAtivaId, setTarefaAtivaId] = useState('todas');
   const [devedores, setDevedores] = useState([]);
   const [loadingTurmas, setLoadingTurmas] = useState(true);
@@ -100,7 +99,6 @@ export default function Comunicacao() {
         const snapAlunos = await getDocs(qAlunos);
         const alunosData = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira');
 
-        // Puxa as atividades da TURMA toda para podermos cruzar dados se o modo for "Todas"
         const qAtividades = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
         const snapAtividades = await getDocs(qAtividades);
         const entregasFeitasMap = new Set();
@@ -114,19 +112,30 @@ export default function Comunicacao() {
 
         let listaDevedores = [];
 
-        // ✅ LÓGICA CONSOLIDADA: TODAS AS PENDÊNCIAS
+        // ✅ LÓGICA DE RESUMO GERAL COM INTELIGÊNCIA DE URGÊNCIA (minDiasRestantes)
         if (tarefaAtualId === 'todas') {
             alunosData.forEach(aluno => {
                 let tarefasDevidasDesseAluno = [];
+                let minDiasRestantes = null;
+
                 tarefasData.forEach(tarefa => {
                     const isAlvoDaTarefa = !tarefa.atribuicaoEspecifica || (tarefa.alunosSelecionados && tarefa.alunosSelecionados.includes(aluno.id));
                     if (isAlvoDaTarefa && !entregasFeitasMap.has(`${aluno.id}_${tarefa.id}`)) {
                         tarefasDevidasDesseAluno.push(tarefa.nomeTarefa || tarefa.titulo);
+
+                        // Calcula qual tarefa está mais urgente
+                        if (tarefa.dataFim) {
+                            const timeFim = tarefa.dataFim.toDate ? tarefa.dataFim.toDate().getTime() : new Date(tarefa.dataFim).getTime();
+                            const dias = Math.ceil((timeFim - hoje) / (1000 * 3600 * 24));
+                            if (minDiasRestantes === null || dias < minDiasRestantes) {
+                                minDiasRestantes = dias;
+                            }
+                        }
                     }
                 });
 
                 if (tarefasDevidasDesseAluno.length > 0) {
-                    listaDevedores.push({ ...aluno, tarefasDevidas: tarefasDevidasDesseAluno });
+                    listaDevedores.push({ ...aluno, tarefasDevidas: tarefasDevidasDesseAluno, minDiasRestantes });
                 }
             });
         } 
@@ -166,7 +175,7 @@ export default function Comunicacao() {
     return nomeCompleto.trim().split(' ')[0].charAt(0).toUpperCase() + nomeCompleto.trim().split(' ')[0].slice(1).toLowerCase();
   };
 
-  // ✅ CORREÇÃO: Captura telefones importados da V1
+  // ✅ Busca telefones importados
   const getTelefone = (aluno) => {
     return aluno.whatsapp || aluno.telefone || aluno.celular || '';
   };
@@ -176,7 +185,21 @@ export default function Comunicacao() {
   const nomeTarefa = tarefaAtualObj?.nomeTarefa || tarefaAtualObj?.titulo || '';
 
   const gerarMensagemGeral = () => {
+    // ✅ TEXTO INTELIGENTE PARA "TODAS AS PENDÊNCIAS" DO GRUPO
     if (tarefaAtivaId === 'todas') {
+      let minDiasGeral = null;
+      devedores.forEach(d => {
+          if (d.minDiasRestantes !== null && d.minDiasRestantes !== undefined) {
+              if (minDiasGeral === null || d.minDiasRestantes < minDiasGeral) minDiasGeral = d.minDiasRestantes;
+          }
+      });
+
+      if (minDiasGeral !== null) {
+          if (minDiasGeral < 0) return `Olá, pessoal!\nNotei no sistema que temos atividades com o prazo já encerrado e outras pendências acumuladas na turma.\n\nPor favor, deem uma olhada no portal e regularizem imediatamente para evitarmos problemas com a aprovação. Fico no aguardo!`;
+          if (minDiasGeral >= 20) return `Olá, pessoal! 🌟\nPassando para lembrar das nossas atividades em andamento. Temos algumas pendências na turma.\n\nAinda temos um bom prazo (a entrega mais próxima encerra em ${minDiasGeral} dias), mas recomendamos ir adiantando as atividades.\nQualquer coisa, podem contar comigo.`;
+          if (minDiasGeral >= 8) return `Olá, pessoal!\nNosso lembrete de acompanhamento. Notei algumas pendências no sistema.\n\nA entrega mais próxima encerra em ${minDiasGeral} dias. Vamos aproveitar os próximos dias para colocar tudo em dia!\nQualquer dúvida, estou à disposição.`;
+          return `Olá, colegas!\n🚨 Passando para alertar que entramos na reta final de algumas atividades!\nA entrega mais próxima vence em apenas ${minDiasGeral} dias e ainda temos pendências.\n\nPeço a regularização o quanto antes para evitarmos problemas.`;
+      }
       return `Olá, pessoal!\nNotei no sistema que temos algumas pendências acumuladas nas entregas.\n\nPor favor, deem uma olhada no portal e regularizem as atividades o quanto antes para evitarmos problemas com a aprovação. Fico no aguardo!`;
     }
 
@@ -193,9 +216,18 @@ export default function Comunicacao() {
   const gerarMensagemIndividual = (aluno) => {
     const primeiroNome = getPrimeiroNome(aluno.nome);
 
-    // ✅ MENSAGEM CONSOLIDADA (Lista todas as pendências daquele aluno)
+    // ✅ TEXTO INTELIGENTE INDIVIDUAL PARA "TODAS AS PENDÊNCIAS"
     if (tarefaAtivaId === 'todas') {
         const listaFormatada = aluno.tarefasDevidas.map(t => `- *${t}*`).join('\n');
+        const dias = aluno.minDiasRestantes;
+
+        if (dias !== null && dias !== undefined) {
+            if (dias < 0) return `Olá, ${primeiroNome}!\nTudo bem?\nNotei no sistema que você possui atividades com o prazo já encerrado e outras pendências:\n\n${listaFormatada}\n\nPor favor, regularize essas entregas imediatamente para evitarmos problemas com a aprovação.\nFico no aguardo!`;
+            if (dias >= 20) return `Olá, ${primeiroNome}! Tudo bem?\n🌟\nPassando para avisar que você tem as seguintes atividades em andamento:\n\n${listaFormatada}\n\nAinda temos um bom prazo (a mais próxima encerra em ${dias} dias), mas recomendo adiantar a execução para não acumular.\nQualquer coisa, pode contar comigo!`;
+            if (dias >= 8) return `Olá, ${primeiroNome}! Tudo bem?\nNosso lembrete de acompanhamento. Você possui as seguintes pendências:\n\n${listaFormatada}\n\nA atividade mais próxima encerra em ${dias} dias. Vamos aproveitar os próximos dias para colocar tudo em dia!\nQualquer dúvida, pode me chamar.`;
+            return `Olá, ${primeiroNome}! Tudo bem?\n🚨 Passando para alertar que entramos na reta final para algumas de suas pendências:\n\n${listaFormatada}\n\nA entrega mais próxima vence em apenas ${dias} dias! Recomendo que regularize o quanto antes para não acumular nem termos problemas. Qualquer coisa, me chame.`;
+        }
+        
         return `Olá, ${primeiroNome}! Tudo bem?\nNotei no sistema que você possui pendências nas seguintes atividades:\n\n${listaFormatada}\n\nPor favor, regularize essa situação o quanto antes para não acumular e evitarmos problemas com a aprovação. Qualquer dúvida, estou à disposição!`;
     }
 
@@ -296,7 +328,6 @@ export default function Comunicacao() {
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
-                {/* ✅ NOVO BOTÃO: TODAS AS PENDÊNCIAS */}
                 <button
                   onClick={() => setTarefaAtivaId('todas')}
                   className={`px-5 py-3 rounded-xl font-black uppercase text-sm transition-all flex items-center gap-2 border ${tarefaAtivaId === 'todas' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md transform scale-[1.02]' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}`}
