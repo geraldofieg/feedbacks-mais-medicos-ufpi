@@ -12,8 +12,8 @@ export default function FaltaPostar() {
   const [loading, setLoading] = useState(true);
   const [listaPendencias, setListaPendencias] = useState([]);
 
-  // LEITURA DE CRACHÁ
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  // LEITURA DE CRACHÁ (Segurança Clean Code)
+  const isAdmin = userProfile?.role === 'admin';
   const isTier2 = userProfile?.plano === 'intermediario';
 
   useEffect(() => {
@@ -36,163 +36,146 @@ export default function FaltaPostar() {
           return;
         }
 
-        // 2. Busca Tarefas e Alunos para cruzar os nomes (Dicionários)
-        const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
-        const snapTarefas = await getDocs(qTarefas);
-        const mapaTarefas = {};
-        snapTarefas.docs.forEach(d => { mapaTarefas[d.id] = d.data().nomeTarefa || d.data().titulo; });
+        // Divide o array de turmas em pedaços de no máximo 30 para o operador 'in' do Firestore
+        const maxItemsPerQuery = 30;
+        const turmasChunks = [];
+        for (let i = 0; i < turmasIds.length; i += maxItemsPerQuery) {
+          turmasChunks.push(turmasIds.slice(i, i + maxItemsPerQuery));
+        }
 
-        const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
-        const snapAlunos = await getDocs(qAlunos);
-        const mapaAlunos = {};
-        snapAlunos.docs.forEach(d => { mapaAlunos[d.id] = d.data().nome; });
+        let pendenciasTemporarias = [];
 
-        // 3. Busca as Atividades
-        const qAtividades = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
-        const snapAtividades = await getDocs(qAtividades);
-        
-        const pendencias = [];
-        
-        // 🔥 O DESFRAGMENTADOR ANTICLONES (V3)
-        // Agrupa por (Nome da Tarefa + ID do Aluno) e mantém APENAS a versão mais recente!
-        const mapaDocsValidos = {};
-        
-        snapAtividades.docs.forEach(doc => {
-          const ativ = doc.data();
-          if (!turmasIds.includes(ativ.turmaId)) return;
-          
-          const nomeOriginalTarefa = ativ.nomeTarefa || ativ.tarefa || ativ.modulo || 'Tarefa';
-          const nomeLimpoAtividade = nomeOriginalTarefa.toLowerCase().replace(/[\s-]/g, '');
-          const chaveUnica = `${nomeLimpoAtividade}_${ativ.alunoId}`;
-          
-          const timeAtual = ativ.dataModificacao?.toMillis() || ativ.dataAprovacao?.toMillis() || ativ.dataCriacao?.toMillis() || 0;
+        // 2. Busca atividades com status='aprovado' para essas turmas
+        for (const chunk of turmasChunks) {
+          // 🔥 CORREÇÃO: Tiramos a trava where('postado', '==', false) daqui. 
+          // O Firebase ignora documentos onde o campo não existe. Vamos filtrar no JS igual ao Dashboard.
+          const qPendencias = query(
+            collection(db, 'atividades'),
+            where('turmaId', 'in', chunk),
+            where('status', '==', 'aprovado')
+          );
 
-          // Se a chave não existe OU se este documento é mais recente que o guardado, substitui
-          if (!mapaDocsValidos[chaveUnica] || timeAtual > mapaDocsValidos[chaveUnica].time) {
-            mapaDocsValidos[chaveUnica] = { id: doc.id, ativ: ativ, time: timeAtual };
-          }
+          const snapPendencias = await getDocs(qPendencias);
+
+          snapPendencias.docs.forEach(d => {
+            const data = d.data();
+            // 🔥 LÓGICA DE DEDUPLICAÇÃO DO DASHBOARD: Se NÃO foi postado (seja false ou campo inexistente), entra na lista.
+            if (!data.postado && data.status !== 'lixeira') {
+               pendenciasTemporarias.push({ id: d.id, ...data });
+            }
+          });
+        }
+
+        // 3. Ordenação decrescente pela data de aprovação (mais recentes primeiro)
+        pendenciasTemporarias.sort((a, b) => {
+          const timeA = a.dataAprovacao?.toMillis ? a.dataAprovacao.toMillis() : 0;
+          const timeB = b.dataAprovacao?.toMillis ? b.dataAprovacao.toMillis() : 0;
+          return timeB - timeA;
         });
 
-        // 4. Agora sim, avaliamos apenas os documentos que sobreviveram (os reais e atualizados)
-        Object.values(mapaDocsValidos).forEach(item => {
-          const ativ = item.ativ;
-          
-          const jaPostado = ativ.postado === true || ativ.enviado === true || ativ.status === 'finalizado' || ativ.status === 'postado';
-          const jaAprovado = ativ.status === 'aprovado' || ativ.status === 'revisado';
-
-          // Só entra na lista se estiver aprovado E NUNCA tiver sido postado
-          if (!jaPostado && jaAprovado) {
-            pendencias.push({
-              id: item.id,
-              tarefaId: ativ.tarefaId,
-              alunoId: ativ.alunoId, 
-              nomeAluno: mapaAlunos[ativ.alunoId] || ativ.nomeAluno || 'Aluno Removido',
-              nomeTarefa: mapaTarefas[ativ.tarefaId] || ativ.nomeTarefa || 'Tarefa Removida',
-              dataAprovacao: ativ.dataAprovacao || ativ.dataCriacao
-            });
-          }
-        });
-
-        // AJUSTE: Ordena da mais NOVA para a mais ANTIGA
-        pendencias.sort((a, b) => {
-          const tempoA = a.dataAprovacao?.toMillis ? a.dataAprovacao.toMillis() : 0;
-          const tempoB = b.dataAprovacao?.toMillis ? b.dataAprovacao.toMillis() : 0;
-          return tempoB - tempoA; 
-        });
-
-        setListaPendencias(pendencias);
+        setListaPendencias(pendenciasTemporarias);
       } catch (error) {
-        console.error("Erro ao buscar lista:", error);
+        console.error("Erro ao buscar pendências Aguardando Postar:", error);
       } finally {
         setLoading(false);
       }
     }
 
     fetchFaltaPostar();
-  }, [currentUser, userProfile, escolaSelecionada, isAdmin]);
+  }, [currentUser, escolaSelecionada, isAdmin]);
 
-  // BLINDAGEM DA PATRÍCIA (Tier 2)
-  if (isTier2 && !isAdmin) {
+  // Função utilitária para formatar a data na tela
+  const formatarData = (timestamp) => {
+    if (!timestamp) return 'Sem data';
+    // Verifica se é timestamp do Firestore
+    const data = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Se for o plano Intermediário (Tier 2), a Patrícia não deve ter acesso a essa tela (só o Admin avalia e posta)
+  if (isTier2) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-        <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-3xl p-12 shadow-sm max-w-2xl mx-auto">
-          <Send className="mx-auto text-blue-400 mb-4" size={56} />
-          <h2 className="text-2xl font-black text-blue-800 mb-2">Acesso Restrito</h2>
-          <p className="text-blue-600 font-medium mb-6">Como Revisor(a), você não precisa se preocupar com as postagens. O administrador do sistema cuidará do lançamento oficial por você!</p>
-          <Link to="/" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-3 px-8 rounded-xl shadow-lg hover:bg-blue-700 transition-all">
-            <ArrowLeft size={18}/> Voltar ao Dashboard
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <div className="bg-white rounded-3xl p-10 shadow-sm border border-red-100">
+          <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Send size={32} />
+          </div>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">Acesso Restrito</h2>
+          <p className="text-gray-500 font-medium mb-8">O lançamento oficial no sistema da faculdade é realizado exclusivamente pela gestão do programa.</p>
+          <Link to="/" className="inline-flex items-center gap-2 bg-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-700 transition-all">
+            <ArrowLeft size={18}/> Voltar ao Início
           </Link>
         </div>
       </div>
     );
   }
 
-  const formatarData = (ts) => {
-    if (!ts) return "";
-    try {
-      let d = ts.toDate ? ts.toDate() : new Date(ts);
-      if (isNaN(d.getTime())) return "";
-      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    } catch (e) { return ""; }
-  };
-
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Cabeçalho */}
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-blue-600 transition-colors p-2 -ml-2">
-          <ArrowLeft size={28} />
+      
+      {/* CABEÇALHO */}
+      <div className="flex items-center gap-4 mb-8 border-b border-gray-200 pb-6">
+        <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+          <ArrowLeft size={24} />
         </button>
-        <h1 className="text-2xl font-black text-gray-800 tracking-tight">Falta Postar No Site</h1>
+        <div>
+          <h1 className="text-2xl md:text-3xl font-black text-gray-800 flex items-center gap-3">
+            <div className="bg-blue-100 text-blue-600 p-2 rounded-xl"><Send size={24}/></div>
+            Aguardando Postar
+          </h1>
+          <p className="text-sm font-medium text-gray-500 mt-1">Feedbacks aprovados que precisam ser copiados para o sistema da instituição.</p>
+        </div>
       </div>
 
+      {/* ÁREA DE CONTEÚDO */}
       {loading ? (
-        <div className="text-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-500 font-bold">Buscando pendências...</p>
+        <div className="py-20 text-center flex flex-col items-center gap-3 animate-pulse">
+          <Send className="text-blue-200" size={48}/>
+          <p className="text-blue-500 font-bold">Localizando pendências...</p>
         </div>
       ) : listaPendencias.length === 0 ? (
-        <div className="bg-green-50 border-2 border-dashed border-green-200 rounded-3xl p-12 text-center">
-          <div className="bg-green-100 text-green-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-            <Send size={40} />
-          </div>
-          <h2 className="text-2xl font-black text-green-800 mb-2">Tudo zerado!</h2>
-          <p className="text-green-700 font-medium">Nenhum feedback aguardando lançamento no portal oficial.</p>
-          <Link to="/" className="inline-block mt-6 bg-white text-green-700 font-bold px-6 py-3 rounded-xl border border-green-200 hover:bg-green-100 transition-all shadow-sm">
-            Voltar ao Dashboard
-          </Link>
+        <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-3xl p-12 text-center">
+          <CheckCircle2 size={48} className="text-blue-400 mx-auto mb-4" />
+          <h3 className="text-xl font-black text-blue-800 mb-2">Tudo em dia!</h3>
+          <p className="text-blue-600 font-medium">Nenhum feedback aguardando para ser postado no sistema.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {listaPendencias.map((item) => (
-            <Link 
-              key={item.id} 
-              to={`/revisar/${item.tarefaId}`} 
-              state={{ alunoId: item.alunoId }}
-              className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-400 transition-all group"
-            >
-              <div className="bg-blue-50 text-blue-600 p-4 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
-                <Send size={24} />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <h3 className="font-black text-gray-800 text-base md:text-lg uppercase tracking-wide truncate group-hover:text-blue-700 transition-colors">
-                  {item.nomeAluno}
-                </h3>
-                <p className="text-sm font-bold text-gray-500 truncate mt-0.5">
-                  {item.nomeTarefa}
-                </p>
-                <div className="flex items-center gap-1.5 mt-2 text-xs font-bold text-gray-400 bg-gray-50 inline-flex px-2 py-1 rounded-lg border border-gray-100">
-                  <CalendarDays size={14} />
-                  <span>Aprovado em: {formatarData(item.dataAprovacao)}</span>
-                </div>
-              </div>
+          <div className="bg-blue-50 text-blue-800 text-sm font-bold p-4 rounded-xl border border-blue-100 mb-6">
+            Você tem {listaPendencias.length} {listaPendencias.length === 1 ? 'atividade pronta' : 'atividades prontas'} para colar no sistema oficial.
+          </div>
 
-              <div className="text-gray-300 group-hover:text-blue-600 transition-colors shrink-0">
-                <ChevronRight size={24} />
-              </div>
-            </Link>
-          ))}
+          <div className="grid grid-cols-1 gap-4">
+            {listaPendencias.map((item) => (
+              <Link 
+                key={item.id} 
+                to={`/revisar/${item.tarefaId}`} 
+                state={{ alunoId: item.alunoId }}
+                className="flex items-center gap-4 p-5 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-400 transition-all group"
+              >
+                <div className="bg-blue-50 text-blue-600 p-4 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
+                  <Send size={24} />
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-black text-gray-800 text-base md:text-lg uppercase tracking-wide truncate group-hover:text-blue-700 transition-colors">
+                    {item.nomeAluno}
+                  </h3>
+                  <p className="text-sm font-bold text-gray-500 truncate mt-0.5">
+                    {item.nomeTarefa}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-2 text-xs font-bold text-gray-400 bg-gray-50 inline-flex px-2 py-1 rounded-lg border border-gray-100">
+                    <CalendarDays size={14} />
+                    <span>Aprovado em: {formatarData(item.dataAprovacao)}</span>
+                  </div>
+                </div>
+
+                <div className="text-gray-300 group-hover:text-blue-600 transition-colors shrink-0">
+                  <ChevronRight size={24} />
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </div>
