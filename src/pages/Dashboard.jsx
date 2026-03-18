@@ -34,7 +34,7 @@ export default function Dashboard() {
 
   const radarExecutado = useRef(false);
 
-  // ✅ CORREÇÃO DO ERRO (F5): Variável declarada
+  // ✅ CORREÇÃO DO ERRO (F5): Variável declarada corretamente no topo do componente
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   // 1. A BÚSSOLA DE LOGIN (Inteligência Restaurada: Identifica a Instituição correta do Professor)
@@ -204,7 +204,7 @@ export default function Dashboard() {
       ) : (
         <>
           {/* 🔥 BARRA PRETA COMPACTA COM BOLINHA VERDE E BOTÃO CORRIGIR 🔥 */}
-          <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
+          <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-6">
              <div className="flex items-center gap-2.5 mb-3">
                 <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
                 <h2 className="text-base font-black tracking-tight">Tarefas em andamento</h2>
@@ -229,6 +229,25 @@ export default function Dashboard() {
              </div>
           </div>
 
+          {/* 🔥 TERMÔMETRO IA DE VOLTA 🔥 */}
+          {mostrarTermometroIA && (
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl shrink-0"><Sparkles size={22}/></div>
+                <div>
+                  <h3 className="text-xs font-black text-purple-700 uppercase tracking-widest">Termômetro de Autonomia da IA</h3>
+                  <p className="text-xs font-medium text-purple-600 mt-1 leading-relaxed max-w-xl">
+                    Mede a eficácia da IA. Mostra a porcentagem de feedbacks que a IA gerou e você aprovou para enviar ao aluno <strong>sem precisar fazer nenhuma edição</strong> no texto original.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col items-start sm:items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-purple-100 shadow-sm w-full sm:w-auto text-right">
+                <span className="text-3xl font-black text-purple-700 w-full">{metricasIA.percentual}%</span>
+                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest w-full">{metricasIA.originais} de {metricasIA.total} exatos</span>
+              </div>
+            </div>
+          )}
+
           <div className={`grid grid-cols-1 md:grid-cols-2 ${mostrarFaltaPostar ? 'lg:grid-cols-3' : ''} gap-5 mb-10`}>
             <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
               <div className="flex justify-between items-start mb-2"><h3 className="text-[11px] font-black text-yellow-600 uppercase mt-1">Aguardando Revisão</h3><div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div></div>
@@ -249,7 +268,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* GESTÃO À VISTA - LISTA DE DEVEDORES */}
+          {/* GESTÃO À VISTA - LISTA DE DEVEDORES ATUAIS E PENDÊNCIAS ANTERIORES */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
               {gestaoVista.atuais.map((gv, idx) => (
                 <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
@@ -262,6 +281,27 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
                     {gv.devedores.length === 0 ? (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>) : (
+                      gv.devedores.map((nome, i) => (
+                        <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
+                          <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {gestaoVista.anteriores.map((gv, idx) => (
+                <div key={`ant-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
+                    <div className="bg-red-100 text-red-600 p-2.5 rounded-xl shrink-0"><Clock size={20}/></div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">Pendências <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span></h3>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate">Anterior: {gv.nome}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
+                    {gv.devedores.length === 0 ? (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>) : (
                       gv.devedores.map((nome, i) => (
                         <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
                           <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
