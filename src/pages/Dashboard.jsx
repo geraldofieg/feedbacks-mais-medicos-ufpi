@@ -209,19 +209,9 @@ export default function Dashboard() {
             const fFinal = (d.feedbackFinal || "").trim();
             const fSugerido = (d.feedbackSugerido || d.feedbackIA || "").trim();
             
-            // 🔥 AQUI ESTÁ A AUDITORIA SILENCIOSA ATIVADA 🔥
             if ((jaAprovado || jaPostado) && fSugerido !== "" && ehDessaTemporada) {
               iaTotal++;
-              const isIgual = (fFinal === fSugerido);
-              if (isIgual) {
-                iaOriginais++;
-              } else {
-                // 🕵️ AUDITORIA: Mostra no F12 os que falharam e o porquê!
-                console.log(`[AUDITORIA IA] Falha no Aluno: ${d.alunoId}`);
-                console.log(`-> IA Sugeriu (${fSugerido.length} letras): "${fSugerido}"`);
-                console.log(`-> Prof Salvou (${fFinal.length} letras): "${fFinal}"`);
-                console.log('--------------------------------------------------');
-              }
+              if (fFinal === fSugerido) iaOriginais++;
             }
           });
 
@@ -456,7 +446,7 @@ export default function Dashboard() {
              </div>
           </div>
 
-          {/* 🔥 NOVO TERMÔMETRO IA - BANNER HORIZONTAL E EXPLICATIVO 🔥 */}
+          {/* 🔥 TERMÔMETRO IA 🔥 */}
           {mostrarTermometroIA && (
             <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
               <div className="flex items-start sm:items-center gap-3">
