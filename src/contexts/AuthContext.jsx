@@ -106,8 +106,8 @@ export function AuthProvider({ children }) {
   // --- AVALIAÇÃO DE BLOQUEIO DO SAAS ---
   let isAcessoExpirado = false;
 
-  // Se é o Super Admin, o acesso NUNCA expira
-  const isSuperAdmin = currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  // 🔥 SEGURANÇA PROFISSIONAL: Agora o Super Admin é identificado apenas pelo cargo no banco de dados
+  const isSuperAdmin = userProfile?.role === 'admin';
 
   if (!isSuperAdmin && userProfile) {
     if (userProfile.isVitalicio === true) {
@@ -130,8 +130,8 @@ export function AuthProvider({ children }) {
     logout,
     escolaSelecionada,
     setEscolaSelecionada,
-    isAcessoExpirado, // NOVO: Exportando a trava para o App.jsx usar
-    isSuperAdmin // NOVO: Facilita identificar o dono em qualquer tela
+    isAcessoExpirado, // Exportando a trava para o App.jsx usar
+    isSuperAdmin // Facilita identificar o dono em qualquer tela via banco de dados
   };
 
   return (
