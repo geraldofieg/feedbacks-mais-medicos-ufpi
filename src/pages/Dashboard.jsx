@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User } from 'lucide-react';
+import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, Pencil } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
@@ -126,7 +126,7 @@ export default function Dashboard() {
           activities.forEach(d => {
             if (d.postado) ok++; else if (d.status === 'aprovado') f++; else if (d.resposta) p++;
             
-            // ✅ TERMÔMETRO DA IA: Respeita o timestampPrompt (avalia só o que foi gerado após a mudança)
+            // TERMÔMETRO DA IA: Respeita o timestampPrompt
             const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
             const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
             const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
@@ -147,21 +147,19 @@ export default function Dashboard() {
             const data = d.data();
             const timeFim = data.dataFim?.toDate ? data.dataFim.toDate().getTime() : 0;
             const timeInicio = data.dataInicio?.toDate ? data.dataInicio.toDate().getTime() : 0;
-            const timeCriacao = data.dataCriacao?.toDate ? data.dataCriacao.toDate().getTime() : (data.dataCriacao?.seconds ? data.dataCriacao.seconds * 1000 : 0);
             
             return { 
               id: d.id, 
               ...data, 
               timeFim,
               timeInicio,
-              timeCriacao,
               isFutura: timeInicio > hojeTime,
               isPassada: timeFim > 0 && timeFim < hojeTime,
               diasRestantes: Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24)) 
             };
           }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
           
-          // ✅ TAREFAS EM ANDAMENTO: Filtra rigorosamente o que está vigente HOJE (!isFutura e !isPassada)
+          // TAREFAS EM ANDAMENTO: Vigentes HOJE
           const tarefasAtivas = tarefasProcessadas.filter(t => !t.isFutura && !t.isPassada);
           setTarefasEmAndamento(tarefasAtivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
 
@@ -173,17 +171,17 @@ export default function Dashboard() {
             return { id: tarefa.id, nome: tarefa.nomeTarefa || tarefa.titulo, devedores: devedores.map(d => d.nome).sort() };
           };
 
-          // ✅ PENDÊNCIAS ANTERIORES: Módulos encerrados a partir de 5 de Janeiro de 2026 E que tenham pendência
-          const corteCriacao = new Date('2026-01-05T00:00:00').getTime();
+          // ✅ CORREÇÃO PENDÊNCIAS ANTERIORES: Usa o timeInicio (00:00:00) a partir do dia 05/01/2026.
+          const corteDataInicio = new Date(2026, 0, 5, 0, 0, 0).getTime();
 
           setGestaoVista({
-            atuais: tarefasAtivas.map(calcularDevedores),
+            atuais: tarefasAtivas.map(calcularDevedores).filter(gv => gv.devedores.length > 0),
             anteriores: tarefasProcessadas
-              .filter(t => t.isPassada && t.timeCriacao >= corteCriacao)
+              .filter(t => t.isPassada && t.timeInicio >= corteDataInicio)
               .sort((a,b) => b.timeFim - a.timeFim)
               .map(calcularDevedores)
-              .filter(gv => gv.devedores.length > 0) // Só exibe se houver alunos devendo
-              .slice(0, 2)
+              .filter(gv => gv.devedores.length > 0)
+              .slice(0, 4)
           });
         }
       } catch (e) { console.error(e); } finally { setLoadingDados(false); } 
@@ -238,7 +236,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {/* 🔥 BARRA PRETA - COMPACTA E COM TEXTO PROTEGIDO 🔥 */}
+          {/* 🔥 BARRA PRETA - LÁPIS (Para evitar corte no nome da tarefa) 🔥 */}
           <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
              <div className="flex items-center gap-2.5 mb-3">
                 <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
@@ -247,14 +245,14 @@ export default function Dashboard() {
              <div className="space-y-2">
                 {tarefasEmAndamento.length > 0 ? (
                   tarefasEmAndamento.map(t => (
-                    <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
+                    <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors group">
                       <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0"></div>
                         <span className="text-sm font-bold text-slate-200 truncate" title={t.nomeTarefa}>{t.nomeTarefa}</span>
                         <span className="text-xs font-black text-green-500 shrink-0 whitespace-nowrap">Faltam {t.diasRestantes} dias</span>
                       </div>
-                      <Link to={`/revisar/${t.id}`} className="text-[10px] font-black uppercase text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all shrink-0 flex items-center gap-1 ml-2">
-                        Corrigir Tarefa <ChevronRight size={12}/>
+                      <Link to={`/revisar/${t.id}`} className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-600 border border-blue-500/30 text-blue-400 hover:text-white transition-all shrink-0 ml-2" title="Corrigir Tarefa">
+                        <Pencil size={16} />
                       </Link>
                     </div>
                   ))
@@ -284,7 +282,26 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* GESTÃO À VISTA - LISTA DE DEVEDORES ATUAIS E PENDÊNCIAS ANTERIORES */}
+          {/* 🔥 TERMÔMETRO IA 🔥 */}
+          {mostrarTermometroIA && (
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl shrink-0"><Sparkles size={22}/></div>
+                <div>
+                  <h3 className="text-xs font-black text-purple-700 uppercase tracking-widest">Termômetro de Autonomia da IA</h3>
+                  <p className="text-xs font-medium text-purple-600 mt-1 leading-relaxed max-w-xl">
+                    Mede a eficácia da IA. Mostra a porcentagem de feedbacks que a IA gerou e você aprovou para enviar ao aluno <strong>sem precisar fazer nenhuma edição</strong> no texto original.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col items-start sm:items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-purple-100 shadow-sm w-full sm:w-auto text-right">
+                <span className="text-3xl font-black text-purple-700 w-full">{metricasIA.percentual}%</span>
+                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest w-full">{metricasIA.originais} de {metricasIA.total} exatos</span>
+              </div>
+            </div>
+          )}
+
+          {/* GESTÃO À VISTA - LISTA DE DEVEDORES */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
               {gestaoVista.atuais.map((gv, idx) => (
                 <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
