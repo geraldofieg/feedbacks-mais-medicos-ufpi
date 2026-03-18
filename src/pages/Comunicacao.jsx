@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Megaphone, Copy, CheckCircle2, MessageCircle, Send, MonitorSmartphone, GraduationCap, BookOpen, Target, CalendarClock, User } from 'lucide-react';
+import { Megaphone, Copy, CheckCircle2, MessageCircle, Send, MonitorSmartphone, GraduationCap, BookOpen, Target, CalendarClock, User, Layers } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Comunicacao() {
@@ -18,13 +18,14 @@ export default function Comunicacao() {
   });
   
   const [tarefasDaTurma, setTarefasDaTurma] = useState([]);
-  const [tarefaAtivaId, setTarefaAtivaId] = useState('');
+  // ✅ COMEÇA SEMPRE NO "RESUMO GERAL" DE TODAS AS PENDÊNCIAS
+  const [tarefaAtivaId, setTarefaAtivaId] = useState('todas');
   const [devedores, setDevedores] = useState([]);
   const [loadingTurmas, setLoadingTurmas] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
   const [copiado, setCopiado] = useState(null);
 
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
     if (location.state?.turmaIdSelecionada && location.state.turmaIdSelecionada !== turmaAtiva) {
@@ -64,12 +65,11 @@ export default function Comunicacao() {
       } catch (error) { console.error(error); } finally { setLoadingTurmas(false); }
     }
     fetchTurmas();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, escolaSelecionada, isAdmin]);
 
   useEffect(() => {
     async function fetchDadosComunicacao() {
-      if (!turmaAtiva) { setTarefasDaTurma([]); setDevedores([]); setTarefaAtivaId(''); return; }
+      if (!turmaAtiva) { setTarefasDaTurma([]); setDevedores([]); return; }
       setLoadingDados(true);
       try {
         const qTarefas = query(collection(db, 'tarefas'), where('turmaId', '==', turmaAtiva));
@@ -83,39 +83,65 @@ export default function Comunicacao() {
           .filter(t => {
              if (t.status === 'lixeira') return false;
              if (t.tipo && t.tipo !== 'entrega') return false;
-             
              const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
              const timeInicio = startRaw ? (startRaw.toDate ? startRaw.toDate().getTime() : new Date(startRaw).getTime()) : 0;
-             
              return timeInicio >= limiteInferior && timeInicio <= hoje;
           });
         
         tarefasData.sort((a, b) => (a.dataFim?.toMillis() || 0) - (b.dataFim?.toMillis() || 0));
         setTarefasDaTurma(tarefasData);
         
-        const tarefaAtualId = tarefaAtivaId && tarefasData.some(t => t.id === tarefaAtivaId) ? tarefaAtivaId : (tarefasData[0]?.id || '');
+        const tarefaAtualId = tarefaAtivaId && (tarefasData.some(t => t.id === tarefaAtivaId) || tarefaAtivaId === 'todas') ? tarefaAtivaId : 'todas';
         setTarefaAtivaId(tarefaAtualId);
 
-        if (!tarefaAtualId) { setDevedores([]); setLoadingDados(false); return; }
+        if (tarefasData.length === 0) { setDevedores([]); setLoadingDados(false); return; }
 
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapAlunos = await getDocs(qAlunos);
         const alunosData = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira');
 
-        const qAtividades = query(collection(db, 'atividades'), where('tarefaId', '==', tarefaAtualId));
+        // Puxa as atividades da TURMA toda para podermos cruzar dados se o modo for "Todas"
+        const qAtividades = query(collection(db, 'atividades'), where('turmaId', '==', turmaAtiva));
         const snapAtividades = await getDocs(qAtividades);
-        const entregasFeitas = new Set(snapAtividades.docs.map(d => d.data().alunoId));
-
-        // 🔥 TRAVA ANTI-FALSOS POSITIVOS APLICADA AQUI
-        const tarefaAtualObjetoLocal = tarefasData.find(t => t.id === tarefaAtualId);
-        const tarefaRestrita = tarefaAtualObjetoLocal?.alunosSelecionados && tarefaAtualObjetoLocal.alunosSelecionados.length > 0;
-
-        const listaDevedores = alunosData.filter(aluno => {
-            if (tarefaRestrita && !tarefaAtualObjetoLocal.alunosSelecionados.includes(aluno.id)) {
-                return false; // Ignora o aluno se ele não for o alvo
+        const entregasFeitasMap = new Set();
+        
+        snapAtividades.docs.forEach(d => {
+            const ativ = d.data();
+            if ((ativ.resposta && String(ativ.resposta).trim() !== '') || ativ.arquivoUrl) {
+                entregasFeitasMap.add(`${ativ.alunoId}_${ativ.tarefaId}`);
             }
-            return !entregasFeitas.has(aluno.id);
         });
+
+        let listaDevedores = [];
+
+        // ✅ LÓGICA CONSOLIDADA: TODAS AS PENDÊNCIAS
+        if (tarefaAtualId === 'todas') {
+            alunosData.forEach(aluno => {
+                let tarefasDevidasDesseAluno = [];
+                tarefasData.forEach(tarefa => {
+                    const isAlvoDaTarefa = !tarefa.atribuicaoEspecifica || (tarefa.alunosSelecionados && tarefa.alunosSelecionados.includes(aluno.id));
+                    if (isAlvoDaTarefa && !entregasFeitasMap.has(`${aluno.id}_${tarefa.id}`)) {
+                        tarefasDevidasDesseAluno.push(tarefa.nomeTarefa || tarefa.titulo);
+                    }
+                });
+
+                if (tarefasDevidasDesseAluno.length > 0) {
+                    listaDevedores.push({ ...aluno, tarefasDevidas: tarefasDevidasDesseAluno });
+                }
+            });
+        } 
+        // LÓGICA ANTIGA: TAREFA ESPECÍFICA
+        else {
+            const tarefaAtualObjetoLocal = tarefasData.find(t => t.id === tarefaAtualId);
+            const tarefaRestrita = tarefaAtualObjetoLocal?.alunosSelecionados && tarefaAtualObjetoLocal.alunosSelecionados.length > 0;
+
+            alunosData.forEach(aluno => {
+                const isAlvo = !tarefaRestrita || tarefaAtualObjetoLocal.alunosSelecionados.includes(aluno.id);
+                if (isAlvo && !entregasFeitasMap.has(`${aluno.id}_${tarefaAtualId}`)) {
+                    listaDevedores.push({ ...aluno, tarefasDevidas: [tarefaAtualObjetoLocal.nomeTarefa || tarefaAtualObjetoLocal.titulo] });
+                }
+            });
+        }
 
         listaDevedores.sort((a, b) => {
           if (a.nome === alunoAlvo) return -1;
@@ -127,7 +153,7 @@ export default function Comunicacao() {
       } catch (error) { console.error(error); } finally { setLoadingDados(false); }
     }
     fetchDadosComunicacao();
-  }, [turmaAtiva, tarefaAtivaId, alunoAlvo]);
+  }, [turmaAtiva, tarefaAtivaId, alunoAlvo, escolaSelecionada]);
 
   const getDiasRestantes = (timestampFim) => {
     if (!timestampFim || !timestampFim.toDate) return null;
@@ -140,11 +166,20 @@ export default function Comunicacao() {
     return nomeCompleto.trim().split(' ')[0].charAt(0).toUpperCase() + nomeCompleto.trim().split(' ')[0].slice(1).toLowerCase();
   };
 
-  const tarefaAtualObj = tarefasDaTurma.find(t => t.id === tarefaAtivaId);
+  // ✅ CORREÇÃO: Captura telefones importados da V1
+  const getTelefone = (aluno) => {
+    return aluno.whatsapp || aluno.telefone || aluno.celular || '';
+  };
+
+  const tarefaAtualObj = tarefaAtivaId === 'todas' ? null : tarefasDaTurma.find(t => t.id === tarefaAtivaId);
   const diasRestantesVisual = tarefaAtualObj ? getDiasRestantes(tarefaAtualObj.dataFim) : null;
-  const nomeTarefa = tarefaAtualObj?.nomeTarefa || tarefaAtualObj?.titulo || 'a tarefa';
+  const nomeTarefa = tarefaAtualObj?.nomeTarefa || tarefaAtualObj?.titulo || '';
 
   const gerarMensagemGeral = () => {
+    if (tarefaAtivaId === 'todas') {
+      return `Olá, pessoal!\nNotei no sistema que temos algumas pendências acumuladas nas entregas.\n\nPor favor, deem uma olhada no portal e regularizem as atividades o quanto antes para evitarmos problemas com a aprovação. Fico no aguardo!`;
+    }
+
     if (!tarefaAtualObj) return '';
     if (diasRestantesVisual !== null) {
       if (diasRestantesVisual < 0) return `Olá, pessoal!\nO prazo oficial de *${nomeTarefa}* foi encerrado.\nNotei algumas pendências no sistema.\n\nPor favor, regularizem as entregas imediatamente para evitarmos problemas com a aprovação. Fico no aguardo.`;
@@ -155,8 +190,16 @@ export default function Comunicacao() {
     return `Olá, pessoal!\nPassando para lembrar do nosso acompanhamento sobre *${nomeTarefa}*.\nPeço a regularização das tarefas pendentes o quanto antes para não acumular.\nQualquer dúvida, estou por aqui!`;
   };
 
-  const gerarMensagemIndividual = (nomeAluno) => {
-    const primeiroNome = getPrimeiroNome(nomeAluno);
+  const gerarMensagemIndividual = (aluno) => {
+    const primeiroNome = getPrimeiroNome(aluno.nome);
+
+    // ✅ MENSAGEM CONSOLIDADA (Lista todas as pendências daquele aluno)
+    if (tarefaAtivaId === 'todas') {
+        const listaFormatada = aluno.tarefasDevidas.map(t => `- *${t}*`).join('\n');
+        return `Olá, ${primeiroNome}! Tudo bem?\nNotei no sistema que você possui pendências nas seguintes atividades:\n\n${listaFormatada}\n\nPor favor, regularize essa situação o quanto antes para não acumular e evitarmos problemas com a aprovação. Qualquer dúvida, estou à disposição!`;
+    }
+
+    // MENSAGEM ESPECÍFICA
     if (diasRestantesVisual !== null) {
       if (diasRestantesVisual < 0) return `Olá, ${primeiroNome}!\nTudo bem?\nO prazo oficial de *${nomeTarefa}* foi encerrado. Notei no sistema que ainda consta pendência para a entrega desta atividade.\n\nPor favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação.\nFico no aguardo!`;
       if (diasRestantesVisual >= 20) return `Olá, ${primeiroNome}! Tudo bem?\n🌟\nPassando para avisar que a etapa de *${nomeTarefa}* já está em andamento.\nFaltam ${diasRestantesVisual} dias para o encerramento e notei pendência na sua entrega.\n\nRecomendo adiantar a execução, pra não ficar para a última hora.\nQualquer coisa, pode contar comigo!`;
@@ -179,15 +222,14 @@ export default function Comunicacao() {
   };
 
   const handleEnviarWhatsAppIndividual = (alunoObjeto, idCopia) => {
-    const textoFinal = gerarMensagemIndividual(alunoObjeto.nome);
+    const textoFinal = gerarMensagemIndividual(alunoObjeto);
     navigator.clipboard.writeText(textoFinal);
-    const numeroLimpo = alunoObjeto.whatsapp ? alunoObjeto.whatsapp.replace(/\D/g, '') : '';
+    const numeroLimpo = getTelefone(alunoObjeto).replace(/\D/g, '');
     const textoCodificado = encodeURIComponent(textoFinal);
     const url = numeroLimpo ? `https://wa.me/${numeroLimpo}?text=${textoCodificado}` : `https://wa.me/?text=${textoCodificado}`;
     aplicarFeedback(idCopia, () => window.open(url, '_blank'));
   };
 
-  const getNomeTurmaAtiva = () => turmas.find(t => t.id === turmaAtiva)?.nome || '...';
   const msgGeralPronta = gerarMensagemGeral();
 
   if (!escolaSelecionada?.id) {
@@ -219,7 +261,7 @@ export default function Comunicacao() {
               <GraduationCap size={20} className="text-gray-400 ml-2" />
               <select 
                 className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-gray-700 cursor-pointer"
-                value={turmaAtiva} onChange={e => { setTurmaAtiva(e.target.value); setTarefaAtivaId(''); }}
+                value={turmaAtiva} onChange={e => { setTurmaAtiva(e.target.value); setTarefaAtivaId('todas'); }}
               >
                 {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
               </select>
@@ -245,7 +287,7 @@ export default function Comunicacao() {
               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-1 flex items-center gap-2">
                 <Target size={16} /> Tarefa em Foco
               </h3>
-              <p className="text-xs text-gray-400 font-medium">Selecione abaixo a tarefa ou módulo que você deseja gerenciar e cobrar neste momento.</p>
+              <p className="text-xs text-gray-400 font-medium">Selecione abaixo a tarefa ou consolide todas para cobrança.</p>
             </div>
 
             {tarefasDaTurma.length === 0 ? (
@@ -254,6 +296,14 @@ export default function Comunicacao() {
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
+                {/* ✅ NOVO BOTÃO: TODAS AS PENDÊNCIAS */}
+                <button
+                  onClick={() => setTarefaAtivaId('todas')}
+                  className={`px-5 py-3 rounded-xl font-black uppercase text-sm transition-all flex items-center gap-2 border ${tarefaAtivaId === 'todas' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md transform scale-[1.02]' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}`}
+                >
+                  <Layers size={16} /> Resumo Geral
+                </button>
+
                 {tarefasDaTurma.map(t => (
                   <button
                     key={t.id}
@@ -267,7 +317,7 @@ export default function Comunicacao() {
               </div>
             )}
 
-            {tarefaAtivaId && (
+            {tarefaAtivaId !== 'todas' && tarefaAtivaId && (
               <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
                 {diasRestantesVisual !== null ? (
                   <div className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap shadow-sm ${diasRestantesVisual < 0 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
@@ -283,14 +333,13 @@ export default function Comunicacao() {
             )}
           </div>
 
-          {/* DUAS COLUNAS V1-STYLE */}
+          {/* DUAS COLUNAS */}
           {tarefaAtivaId && (
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
               
               {/* COLUNA ESQUERDA: ZAP E GRUPO */}
               <div className="xl:col-span-1 space-y-6 xl:sticky xl:top-24">
                 
-                {/* CARD 1: GRUPO DA TURMA */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-200">
                   <h3 className="text-lg font-black text-green-900 mb-1 flex items-center gap-2">
                     <MessageCircle size={20} className="text-green-600"/> Grupo da Turma
@@ -310,7 +359,6 @@ export default function Comunicacao() {
                   </button>
                 </div>
 
-                {/* CARD 2: ZAP DIRETO */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                   <h3 className="text-lg font-black text-gray-800 mb-1 flex items-center gap-2">
                     <User size={20} className="text-green-600"/> Zap Direto
@@ -318,30 +366,32 @@ export default function Comunicacao() {
                   <p className="text-xs text-gray-500 mb-4 font-medium">Envie mensagens privadas para o WhatsApp de cada aluno.</p>
 
                   <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                    {devedores.filter(a => a.whatsapp).length === 0 ? (
+                    {devedores.filter(a => getTelefone(a)).length === 0 ? (
                       <p className="text-sm text-gray-400 italic text-center py-4 bg-gray-50 rounded-xl border border-gray-100">Nenhum aluno com WhatsApp cadastrado possui pendência.</p>
                     ) : (
-                      devedores.filter(a => a.whatsapp).map((pend, idx) => {
+                      devedores.filter(a => getTelefone(a)).map((pend, idx) => {
                         const idCopiaZap = `zap-${idx}`;
                         return (
                           <div key={idx} className="bg-gray-50 border border-gray-100 p-4 rounded-xl flex flex-col gap-3 hover:border-green-200 transition-colors">
                             <div>
                               <h4 className="font-black text-gray-800 text-sm truncate" title={pend.nome}>{getPrimeiroNome(pend.nome)} <span className="font-medium text-xs text-gray-500">({pend.nome})</span></h4>
-                              <p className="text-[10px] font-black text-red-500 uppercase mt-0.5 tracking-widest truncate">Deve: {nomeTarefa}</p>
+                              <p className="text-[10px] font-black text-red-500 uppercase mt-1 tracking-widest leading-tight">
+                                Deve: {tarefaAtivaId === 'todas' ? pend.tarefasDevidas.join(', ') : nomeTarefa}
+                              </p>
                             </div>
                             <button
-                              onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
-                              className={`w-full py-2.5 rounded-lg text-xs font-bold flex justify-center items-center gap-2 transition-all ${copiado === idCopiaZap ? 'bg-green-200 text-green-900' : 'bg-white border border-green-500 text-green-600 hover:bg-green-50 shadow-sm'}`}
-                            >
-                              {copiado === idCopiaZap ? <CheckCircle2 size={16}/> : <Send size={16}/>} {copiado === idCopiaZap ? 'Abrindo...' : 'Enviar Zap'}
+                                onClick={() => handleEnviarWhatsAppIndividual(pend, idCopiaZap)}
+                                disabled={loadingDados}
+                                className={`w-full text-[11px] font-black uppercase tracking-wider py-2.5 rounded-lg transition-all flex justify-center items-center gap-2 shadow-sm ${copiado === idCopiaZap ? 'bg-green-200 text-green-900 scale-95' : 'bg-green-100 text-green-700 hover:bg-green-600 hover:text-white'}`}
+                              >
+                                {copiado === idCopiaZap ? <><CheckCircle2 size={14}/> Aberto!</> : <><MonitorSmartphone size={14}/> Chamar no Zap</>}
                             </button>
                           </div>
-                        )
+                        );
                       })
                     )}
                   </div>
                 </div>
-
               </div>
 
               {/* COLUNA DIREITA: COPIAR PARA PLATAFORMA */}
@@ -376,11 +426,11 @@ export default function Comunicacao() {
                     <div className="space-y-5">
                       {devedores.map((pend, idx) => {
                         const idCopiaPlat = `plat-${idx}`;
-                        const msgIndividualizada = gerarMensagemIndividual(pend.nome);
+                        const msgIndividualizada = gerarMensagemIndividual(pend);
                         const isFocado = pend.nome === alunoAlvo;
                         
                         return (
-                          <div key={idx} className={`p-5 rounded-2xl border transition-all ${isFocado ? 'bg-blue-50/30 border-blue-300 shadow-md ring-4 ring-blue-50' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md'}`}>
+                          <div key={idx} id={pend.nome === alunoAlvo ? 'aluno-alvo' : `aluno-${idx}`} className={`border rounded-2xl p-5 transition-all ${isFocado ? 'bg-blue-50/30 border-blue-300 shadow-md ring-4 ring-blue-50' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md'}`}>
                             
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                               <div>
@@ -389,7 +439,7 @@ export default function Comunicacao() {
                                   {isFocado && <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">Foco</span>}
                                 </span>
                                 <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mt-1">
-                                  Deve: {nomeTarefa}
+                                  Deve: {tarefaAtivaId === 'todas' ? pend.tarefasDevidas.join(', ') : nomeTarefa}
                                 </p>
                               </div>
                               
@@ -397,14 +447,13 @@ export default function Comunicacao() {
                                 onClick={() => handleCopiar(msgIndividualizada, idCopiaPlat)}
                                 className={`flex items-center gap-1.5 px-5 py-2.5 text-xs font-bold rounded-xl transition-all shadow-sm border ${copiado === idCopiaPlat ? 'bg-blue-600 text-white border-blue-600 scale-105' : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'}`}
                               >
-                                {copiado === idCopiaPlat ? <CheckCircle2 size={16}/> : <Copy size={16}/>} {copiado === idCopiaPlat ? 'Copiado!' : 'Copiar Mensagem'}
+                                {copiado === idCopiaPlat ? <><CheckCircle2 size={16}/> Copiado!</> : <><Copy size={16}/> Copiar Mensagem</>}
                               </button>
                             </div>
                             
                             <div className="bg-gray-50 p-5 rounded-xl text-sm text-gray-600 whitespace-pre-wrap border border-gray-100 font-medium italic shadow-inner">
                               "{msgIndividualizada}"
                             </div>
-                            
                           </div>
                         );
                       })}
