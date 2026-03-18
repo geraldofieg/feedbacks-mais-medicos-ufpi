@@ -65,9 +65,11 @@ Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '=='
 ## 9. A Nova Estação de Correção (Fluxo "Ficha Médica" e IA)
 A página de Revisar Atividade (`/revisar/id`) é o HUB principal do sistema.
 * **Barra de Progresso (UX E-commerce):** Exibe os 3 passos: `1. Trazer Resposta` ➔ `2. Revisar Feedback` ➔ `3. Lançar Oficial`.
-* **Prevenção de Tap-Through (Anti-Clique Fantasma):** Todos os modais de sucesso (`alert`) nativos foram substituídos por micro-interações visuais inline (ex: botões mudando para '✅ Salvo!'), evitando redirecionamentos indesejados em dispositivos móveis.
+* **Prevenção de Tap-Through (Anti-Clique Fantasma):** Todos os modais de sucesso (`alert`) nativos foram substituídos por micro-interações visuais inline (ex: botões mudando para '✅ Salvo!').
+* **UX Educativa (Textos Inteligentes):** A interface "conversa" com o professor novato. Se o aluno não tem resposta colada, exibe instruções claras de colagem; se já tem resposta, os textos mudam orientando a geração ou revisão da IA.
+* **Fluxo de Rascunho e Avisos Dinâmicos:** Ao salvar em Rascunho, o sistema emite um alerta visual claro informando que a atividade continua "Em Revisão" (Sinal Amarelo) e não foi finalizada.
+* **Mensagens Pós-Aprovação Guiadas:** Ao clicar em "Aprovar Feedback", em vez de exibir bruscamente os botões finais, o sistema injeta um texto de sucesso orientativo explicando os próximos passos lógicos (ir para a página de cópia ou copiar ali mesmo).
 * **Assinatura e Log:** Toda atividade aprovada exibe a hora exata e o nome de quem revisou (Log de Auditoria visível na tela).
-* **Gerenciamento Gestor (Opções de Emergência):** Botões para **Devolver p/ Revisão** (volta para Amarelo limpando a data) ou **Excluir Atividade** (apaga a resposta e volta o aluno para Vermelho).
 * **IA Gemini 3.1 Flash Lite:** Integra modelo avançado com *Search Grounding* ativo.
 * **Layout "Sticky":** No Desktop, a Mesa de Avaliação (coluna direita) fica fixada durante a rolagem.
 
@@ -78,8 +80,10 @@ O sistema orienta o professor através de Ícones Tricolores no buscador de alun
 * ✅ **Lançado:** Trabalho concluído! O feedback e a nota já foram lançados para o portal oficial da instituição. Status blindado no histórico.
 
 ## 11. Gestão de Tarefas, Automação e Motor de Clonagem
-* **Batch Write:** Ao criar uma "Tarefa do Aluno", o sistema distribui automaticamente o registro para todos os alunos (ou apenas para os alvos selecionados no guardrail preventivo).
-* **Atribuição Específica:** O sistema permite a criação de tarefas restritas a um grupo seleto de alunos, isolando-os da matemática global de inadimplência da turma.
+* **Batch Write:** Ao criar uma "Tarefa do Aluno", o sistema distribui automaticamente o registro.
+* **Atribuição Específica e Guardrails Visuais:** O sistema permite a criação de tarefas restritas a um grupo seleto de alunos. Para evitar erros de professores iniciantes, a interface exibe **Alertas Educativos Contextuais**:
+    * *Aviso Azul (Turma Completa):* Informa explicitamente que a tarefa gerará demanda/pendência para 100% dos alunos matriculados.
+    * *Aviso Âmbar (Alunos Específicos):* Informa que a tarefa ficará completamente invisível no sistema para os alunos que não forem marcados no checklist (isolando a inadimplência).
 * **O Motor de Clonagem (Turma Modelo):** Professores podem "Criar Turma a partir de Modelo", replicando 100% das tarefas e enunciados de uma turma master, sem copiar os alunos.
 
 ## 12. Módulo de Comunicação e Cobrança
