@@ -223,7 +223,6 @@ export default function RevisarAtividade() {
     } catch (error) { console.error(error); } finally { setSalvando(false); }
   }
 
-  // 🔥 CORREÇÃO: Agora ele cria a atividade direto se ela não existir (Aprovação Direta)
   async function handleAprovar(copiarAoAprovar = false) {
     if (salvando || !alunoAtual) return;
     setSalvando(true);
@@ -240,11 +239,9 @@ export default function RevisarAtividade() {
       };
       
       if (atividadeAtual) {
-        // Se já era um rascunho, apenas atualiza
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], ...payload } }));
       } else {
-        // Se o professor veio direto para a aprovação (virgem), ele cria a atividade direto como aprovada
         const novaAtiv = { 
           alunoId: alunoAtual.id, 
           turmaId: tarefa.turmaId, 
@@ -382,7 +379,8 @@ export default function RevisarAtividade() {
               </div>
               <h3 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight mb-4">A esteira de revisão está vazia</h3>
               <div className="text-slate-600 max-w-md text-left space-y-3 bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm text-lg font-medium">
-                <p><strong className="text-blue-600">1.</strong> Selecione um aluno pendente ao lado.</p>
+                {/* 🔥 TEXTO ATUALIZADO AQUI 🔥 */}
+                <p><strong className="text-blue-600">1.</strong> Selecione um aluno pendente no menu acima.</p>
                 <p><strong className="text-amber-500">2.</strong> Cole a resposta dele aqui no sistema.</p>
                 <p><strong className="text-green-600">3.</strong> Avalie e aprove para movê-lo para a lista final.</p>
               </div>
