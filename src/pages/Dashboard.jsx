@@ -112,11 +112,37 @@ export default function Dashboard() {
 
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
-          const activities = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira' && tIds.includes(a.turmaId));
+          
+          // 🔥 DESFRAGMENTADOR ANTI-CLONES DO DASHBOARD
+          const atividadesMap = new Map();
+          
+          snapAtiv.docs.forEach(d => {
+            const data = d.data();
+            if (data.status === 'lixeira' || !tIds.includes(data.turmaId)) return;
+            
+            const key = `${data.alunoId}_${data.tarefaId}`;
+            const existente = atividadesMap.get(key);
+            
+            const peso = (ativ) => {
+              if (ativ.postado) return 3;
+              if (ativ.status === 'aprovado') return 2;
+              return 1;
+            };
+
+            if (!existente || peso(data) > peso(existente)) {
+              atividadesMap.set(key, data);
+            } else if (peso(data) === peso(existente)) {
+               const t1 = data.dataModificacao?.seconds || data.dataCriacao?.seconds || 0;
+               const t2 = existente.dataModificacao?.seconds || existente.dataCriacao?.seconds || 0;
+               if (t1 > t2) atividadesMap.set(key, data);
+            }
+          });
+
+          const activities = Array.from(atividadesMap.values());
           
           let p = 0, f = 0, ok = 0, iaTotal = 0, iaOriginais = 0;
+          
           activities.forEach(d => {
-            // 🔥 CORREÇÃO DO RASCUNHO: Agora avalia arquivo anexado e rascunhos salvos, não apenas texto na resposta!
             const temEntregaOuRascunho = (d.resposta && String(d.resposta).trim() !== '') || d.arquivoUrl || (d.feedbackFinal && String(d.feedbackFinal).trim() !== '');
 
             if (d.postado) ok++; 
@@ -132,6 +158,7 @@ export default function Dashboard() {
                if (d.feedbackFinal === (d.feedbackSugerido || d.feedbackIA)) iaOriginais++;
             }
           });
+          
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
 
@@ -164,7 +191,6 @@ export default function Dashboard() {
             let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
             if (tarefa.atribuicaoEspecifica) alvo = alvo.filter(a => tarefa.alunosSelecionados?.includes(a.id));
             
-            // 🔥 CORREÇÃO AQUI TAMBÉM: Devedor é só quem não tem texto, nem anexo, nem rascunho
             const devedores = alvo.filter(aluno => !activities.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id && ((e.resposta && String(e.resposta).trim() !== '') || e.arquivoUrl || (e.feedbackFinal && String(e.feedbackFinal).trim() !== ''))));
             return { id: tarefa.id, nome: tarefa.nomeTarefa || tarefa.titulo, devedores: devedores.map(d => d.nome).sort() };
           };
