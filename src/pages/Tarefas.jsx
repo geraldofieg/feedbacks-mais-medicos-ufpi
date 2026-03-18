@@ -50,7 +50,8 @@ export default function Tarefas() {
   const [horaFimEdicao, setHoraFimEdicao] = useState('');
   const [tipoEdicao, setTipoEdicao] = useState('entrega');
 
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  // 🔥 SEGURANÇA PROFISSIONAL: Trava baseada exclusivamente no Role do banco
+  const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
     if (location.state?.novoRegistro || location.state?.abrirModal) {
@@ -617,7 +618,6 @@ export default function Tarefas() {
                         </button>
                       </div>
 
-                      {/* 🔥 AVISOS EDUCATIVOS INJETADOS AQUI 🔥 */}
                       {!atribuicaoEspecifica ? (
                         <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl mt-3 flex items-start gap-2 animate-in fade-in">
                            <div className="text-blue-500 mt-0.5"><Check size={16} /></div>
