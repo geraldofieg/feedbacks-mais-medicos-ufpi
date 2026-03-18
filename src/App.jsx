@@ -26,6 +26,7 @@ import Pendencias from './pages/Pendencias';
 import Lixeira from './pages/Lixeira'; 
 import Migracao from './pages/Migracao'; 
 import Planos from './pages/Planos'; // NOVO: Importação da página de vendas
+import Guia from './pages/Guia'; // 🔥 IMPORTAÇÃO DO GUIA ADICIONADA AQUI
 
 // ESTEIRA DE PRODUÇÃO (KANBAN)
 import AguardandoRevisao from './pages/AguardandoRevisao';
@@ -104,7 +105,8 @@ function App() {
           <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
           <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
-          <Route path="/planos" element={<PrivateRoute><Planos /></PrivateRoute>} /> {/* NOVO: Rota do Cardápio de Planos */}
+          <Route path="/planos" element={<PrivateRoute><Planos /></PrivateRoute>} />
+          <Route path="/guia" element={<PrivateRoute><Guia /></PrivateRoute>} /> {/* 🔥 ROTA DO GUIA ADICIONADA AQUI */}
           
           {/* ROTAS DE UTILIDADE */}
           <Route path="/lixeira" element={<PrivateRoute><Lixeira /></PrivateRoute>} />
