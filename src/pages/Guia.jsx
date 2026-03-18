@@ -10,7 +10,7 @@ export default function Guia() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans">
-      <div className="max-w-6xl mx-auto px-4 py-6 md:py-8">
+      <div className="max-w-6xl mx-auto px-4 py-6 md:py-8 overflow-hidden">
         
         <div className="flex items-center gap-4 mb-6 border-b border-gray-200 pb-6">
           <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
@@ -33,7 +33,6 @@ export default function Guia() {
               A Plataforma não é um Portal do Aluno. Ela é a sua <strong>Esteira de Produção Inteligente</strong>. O objetivo é transformar o caos de planilhas e Word num fluxo fluido, onde a tecnologia organiza a papelada e a Inteligência Artificial sugere avaliações, deixando para você apenas a decisão final.
             </p>
             
-            {/* 🔥 AJUSTE MOBILE DEFINITIVO AQUI */}
             <div className="flex items-start gap-3 bg-indigo-500/50 border border-indigo-400 p-4 rounded-xl text-left w-full md:w-fit">
               <Zap size={24} className="text-yellow-400 shrink-0 mt-0.5" />
               <p className="text-sm font-medium text-indigo-100 leading-relaxed">
@@ -56,9 +55,18 @@ export default function Guia() {
               Antes da IA trabalhar por você, configure seu ambiente sem burocracia.
             </p>
             <ul className="space-y-3 text-sm text-gray-700">
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Clonagem (UFPI/UFPA):</strong> Se colegas já usam o sistema, você pode "Copiar uma Turma" e herdar meses de planejamento.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Matrícula Vapt-Vupt:</strong> Cadastre um por um sem a tela recarregar.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Importador Mágico:</strong> Cole uma lista do Excel e matricule todos de uma vez.</li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Clonagem (UFPI/UFPA):</strong> Se colegas já usam o sistema, você pode "Copiar uma Turma" e herdar meses de planejamento.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Matrícula Vapt-Vupt:</strong> Cadastre um por um sem a tela recarregar.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Importador Mágico:</strong> Cole uma lista do Excel e matricule todos de uma vez.</span>
+              </li>
             </ul>
           </div>
 
@@ -72,8 +80,14 @@ export default function Guia() {
               Nada acontece sem a Tarefa. Ela é a "mãe" da organização.
             </p>
             <ul className="space-y-3 text-sm text-gray-700">
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Cruzamento em Tempo Real:</strong> Defina o prazo e o sistema cruza com a data de hoje, sabendo instantaneamente quem está devendo.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Atribuição Flexível:</strong> Lance para a turma toda ou isente alunos marcando apenas grupos específicos (ótimo para reposições).</li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Cruzamento em Tempo Real:</strong> Defina o prazo e o sistema cruza com a data de hoje, sabendo instantaneamente quem está devendo.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Atribuição Flexível:</strong> Lance para a turma toda ou isente alunos marcando apenas grupos específicos (ótimo para reposições).</span>
+              </li>
             </ul>
           </div>
 
@@ -87,9 +101,18 @@ export default function Guia() {
               O motor de inteligência onde você ganha tempo real.
             </p>
             <ul className="space-y-3 text-sm text-gray-700">
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Gemini Pro 3 (IA):</strong> A inteligência lê a resposta e, usando o seu "Comando (Prompt) Personalizado", sugere o feedback no seu tom de voz.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>A Palavra Final é Sua:</strong> A tecnologia sugere, mas o mentor aprova. Faça ajustes finos e valide.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Blindagem de Rascunho:</strong> Interrompeu o trabalho? Salve o rascunho sem perder nada.</li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Gemini Pro 3 (IA):</strong> A inteligência lê a resposta e, usando o seu "Comando (Prompt) Personalizado", sugere o feedback no seu tom de voz.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>A Palavra Final é Sua:</strong> A tecnologia sugere, mas o mentor aprova. Faça ajustes finos e valide.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Blindagem de Rascunho:</strong> Interrompeu o trabalho? Salve o rascunho sem perder nada.</span>
+              </li>
             </ul>
           </div>
 
@@ -103,9 +126,18 @@ export default function Guia() {
               Sua central de triagem automática e Gestão à Vista.
             </p>
             <ul className="space-y-3 text-sm text-gray-700">
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>A Faixa Preta "Live":</strong> Mostra estritamente o que vence hoje/em breve. Nada de passado ou futuro distante.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Esteira de Produção:</strong> Mova alunos do <em>Aguardando Revisão</em> (fila de leitura) para <em>Falta Postar</em> e finalmente para o <em>Histórico Finalizado</em>.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Termômetro da IA:</strong> Mede a eficácia do seu Prompt. Se estiver baixo, ajuste as regras nas Configurações.</li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>A Faixa Preta "Live":</strong> Mostra estritamente o que vence hoje/em breve. Nada de passado ou futuro distante.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Esteira de Produção:</strong> Mova alunos do <em>Aguardando Revisão</em> (fila de leitura) para <em>Falta Postar</em> e finalmente para o <em>Histórico Finalizado</em>.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Termômetro da IA:</strong> Mede a eficácia do seu Prompt. Se estiver baixo, ajuste as regras nas Configurações.</span>
+              </li>
             </ul>
           </div>
 
@@ -119,8 +151,14 @@ export default function Guia() {
               Duas lentes diferentes para enxergar a sua turma:
             </p>
             <ul className="space-y-3 text-sm text-gray-700">
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Mapa de Entregas:</strong> A visão panorâmica em tabela (✅ e ❌) para ver o engajamento geral da turma, ignorando quem foi isento.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Relatório de Pendências:</strong> A visão focada no débito. Exibe estritamente quem está inadimplente.</li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Mapa de Entregas:</strong> A visão panorâmica em tabela (✅ e ❌) para ver o engajamento geral da turma, ignorando quem foi isento.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Relatório de Pendências:</strong> A visão focada no débito. Exibe estritamente quem está inadimplente.</span>
+              </li>
             </ul>
           </div>
 
@@ -134,9 +172,18 @@ export default function Guia() {
               Acabe com a inadimplência com disparos inteligentes.
             </p>
             <ul className="space-y-3 text-sm text-gray-700">
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Resumo Geral:</strong> A inteligência agrupa todas as tarefas que o aluno deve em um só recado, usando o tom de urgência da tarefa que vence primeiro.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Zap Direto:</strong> Abre o WhatsApp do aluno com o texto já digitado.</li>
-              <li className="flex items-start gap-2"><CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> <strong>Copiar para Site:</strong> Copie o texto formal e cole na plataforma da sua instituição.</li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Resumo Geral:</strong> A inteligência agrupa todas as tarefas que o aluno deve em um só recado, usando o tom de urgência da tarefa que vence primeiro.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Zap Direto:</strong> Abre o WhatsApp do aluno com o texto já digitado.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0"/> 
+                <span className="flex-1 leading-relaxed"><strong>Copiar para Site:</strong> Copie o texto formal e cole na plataforma da sua instituição.</span>
+              </li>
             </ul>
           </div>
 
