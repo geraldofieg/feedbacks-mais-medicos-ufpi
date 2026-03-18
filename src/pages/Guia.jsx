@@ -33,10 +33,12 @@ export default function Guia() {
               A Plataforma não é um Portal do Aluno. Ela é a sua <strong>Esteira de Produção Inteligente</strong>. O objetivo é transformar o caos de planilhas e Word num fluxo fluido, onde a tecnologia organiza a papelada e a Inteligência Artificial sugere avaliações, deixando para você apenas a decisão final.
             </p>
             
-            {/* 🔥 AJUSTE MOBILE AQUI: flex, items-start, shrink-0 no ícone e w-fit */}
-            <div className="flex items-start sm:items-center gap-3 bg-indigo-500/50 border border-indigo-400 p-3 sm:px-4 sm:py-2.5 rounded-xl text-sm font-bold w-fit">
-              <Zap size={20} className="text-yellow-400 shrink-0 mt-0.5 sm:mt-0"/> 
-              <span className="leading-snug">ROI de Horas: Reduza seu tempo de correção em até 70%.</span>
+            {/* 🔥 AJUSTE MOBILE DEFINITIVO AQUI */}
+            <div className="flex items-start gap-3 bg-indigo-500/50 border border-indigo-400 p-4 rounded-xl text-left w-full md:w-fit">
+              <Zap size={24} className="text-yellow-400 shrink-0 mt-0.5" />
+              <p className="text-sm font-medium text-indigo-100 leading-relaxed">
+                <strong className="text-white font-black uppercase tracking-wide">ROI de Horas:</strong> Reduza seu tempo de correção em até 70%.
+              </p>
             </div>
           </div>
         </div>
