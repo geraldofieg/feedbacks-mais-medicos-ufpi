@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User } from 'lucide-react';
@@ -34,7 +34,7 @@ export default function Dashboard() {
 
   const radarExecutado = useRef(false);
 
-  // ✅ CORREÇÃO DO ERRO (F5): Variável declarada corretamente no topo do componente
+  // ✅ CORREÇÃO DO ERRO (F5): Variável declarada
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
 
   // 1. A BÚSSOLA DE LOGIN (Inteligência Restaurada: Identifica a Instituição correta do Professor)
@@ -89,7 +89,7 @@ export default function Dashboard() {
     setupRadarGlobal();
   }, [currentUser, isAdmin, setEscolaSelecionada]);
 
-  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
+  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA E REGRAS DE NEGÓCIO
   useEffect(() => {
     async function fetchDados() {
       if (!escolaSelecionada?.id) return;
@@ -112,6 +112,12 @@ export default function Dashboard() {
             .map(d => ({id: d.id, nome: d.data().nome, turmaId: d.data().turmaId}));
           setTemAlunos(listaAlunosVivos.length > 0);
 
+          // Buscar Configurações do Usuário (Para o Termômetro IA)
+          const docRefUser = doc(db, 'usuarios', currentUser.uid);
+          const docSnapUser = await getDoc(docRefUser);
+          const tsPromptRaw = docSnapUser.data()?.timestampPrompt;
+          const timestampPrompt = tsPromptRaw?.toDate ? tsPromptRaw.toDate().getTime() : (tsPromptRaw || 0);
+
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
           const activities = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira' && tIds.includes(a.turmaId));
@@ -119,7 +125,13 @@ export default function Dashboard() {
           let p = 0, f = 0, ok = 0, iaTotal = 0, iaOriginais = 0;
           activities.forEach(d => {
             if (d.postado) ok++; else if (d.status === 'aprovado') f++; else if (d.resposta) p++;
-            if ((d.status === 'aprovado' || d.postado) && (d.feedbackSugerido || d.feedbackIA)) {
+            
+            // ✅ TERMÔMETRO DA IA: Respeita o timestampPrompt (avalia só o que foi gerado após a mudança)
+            const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
+            const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
+            const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
+
+            if ((d.status === 'aprovado' || d.postado) && (d.feedbackSugerido || d.feedbackIA) && ehDessaTemporada) {
                iaTotal++;
                if (d.feedbackFinal === (d.feedbackSugerido || d.feedbackIA)) iaOriginais++;
             }
@@ -129,14 +141,29 @@ export default function Dashboard() {
 
           const qTar = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTar = await getDocs(qTar);
-          const hoje = new Date().getTime();
-          const tarefasVivas = snapTar.docs.map(d => {
+          const hojeTime = new Date().getTime();
+          
+          const tarefasProcessadas = snapTar.docs.map(d => {
             const data = d.data();
             const timeFim = data.dataFim?.toDate ? data.dataFim.toDate().getTime() : 0;
-            return { id: d.id, ...data, timeFim, diasRestantes: Math.ceil((timeFim - hoje) / (1000 * 3600 * 24)) };
+            const timeInicio = data.dataInicio?.toDate ? data.dataInicio.toDate().getTime() : 0;
+            const timeCriacao = data.dataCriacao?.toDate ? data.dataCriacao.toDate().getTime() : (data.dataCriacao?.seconds ? data.dataCriacao.seconds * 1000 : 0);
+            
+            return { 
+              id: d.id, 
+              ...data, 
+              timeFim,
+              timeInicio,
+              timeCriacao,
+              isFutura: timeInicio > hojeTime,
+              isPassada: timeFim > 0 && timeFim < hojeTime,
+              diasRestantes: Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24)) 
+            };
           }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
           
-          setTarefasEmAndamento(tarefasVivas.filter(t => t.diasRestantes >= 0).sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
+          // ✅ TAREFAS EM ANDAMENTO: Filtra rigorosamente o que está vigente HOJE (!isFutura e !isPassada)
+          const tarefasAtivas = tarefasProcessadas.filter(t => !t.isFutura && !t.isPassada);
+          setTarefasEmAndamento(tarefasAtivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
 
           // GESTÃO À VISTA (Cálculo de Devedores)
           const calcularDevedores = (tarefa) => {
@@ -146,9 +173,17 @@ export default function Dashboard() {
             return { id: tarefa.id, nome: tarefa.nomeTarefa || tarefa.titulo, devedores: devedores.map(d => d.nome).sort() };
           };
 
+          // ✅ PENDÊNCIAS ANTERIORES: Módulos encerrados a partir de 5 de Janeiro de 2026 E que tenham pendência
+          const corteCriacao = new Date('2026-01-05T00:00:00').getTime();
+
           setGestaoVista({
-            atuais: tarefasVivas.filter(t => t.diasRestantes >= 0).map(calcularDevedores),
-            anteriores: tarefasVivas.filter(t => t.diasRestantes < 0).sort((a,b) => b.timeFim - a.timeFim).slice(0, 2).map(calcularDevedores)
+            atuais: tarefasAtivas.map(calcularDevedores),
+            anteriores: tarefasProcessadas
+              .filter(t => t.isPassada && t.timeCriacao >= corteCriacao)
+              .sort((a,b) => b.timeFim - a.timeFim)
+              .map(calcularDevedores)
+              .filter(gv => gv.devedores.length > 0) // Só exibe se houver alunos devendo
+              .slice(0, 2)
           });
         }
       } catch (e) { console.error(e); } finally { setLoadingDados(false); } 
@@ -203,8 +238,8 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {/* 🔥 BARRA PRETA COMPACTA COM BOLINHA VERDE E BOTÃO CORRIGIR 🔥 */}
-          <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-6">
+          {/* 🔥 BARRA PRETA - COMPACTA E COM TEXTO PROTEGIDO 🔥 */}
+          <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
              <div className="flex items-center gap-2.5 mb-3">
                 <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
                 <h2 className="text-base font-black tracking-tight">Tarefas em andamento</h2>
@@ -213,12 +248,12 @@ export default function Dashboard() {
                 {tarefasEmAndamento.length > 0 ? (
                   tarefasEmAndamento.map(t => (
                     <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-4">
+                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0"></div>
-                        <span className="text-sm font-bold text-slate-200 truncate">{t.nomeTarefa}</span>
-                        <span className="text-xs font-black text-green-500 shrink-0">Faltam {t.diasRestantes} dias</span>
+                        <span className="text-sm font-bold text-slate-200 truncate" title={t.nomeTarefa}>{t.nomeTarefa}</span>
+                        <span className="text-xs font-black text-green-500 shrink-0 whitespace-nowrap">Faltam {t.diasRestantes} dias</span>
                       </div>
-                      <Link to={`/revisar/${t.id}`} className="text-[10px] font-black uppercase text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all shrink-0 flex items-center gap-1">
+                      <Link to={`/revisar/${t.id}`} className="text-[10px] font-black uppercase text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all shrink-0 flex items-center gap-1 ml-2">
                         Corrigir Tarefa <ChevronRight size={12}/>
                       </Link>
                     </div>
@@ -228,25 +263,6 @@ export default function Dashboard() {
                 )}
              </div>
           </div>
-
-          {/* 🔥 TERMÔMETRO IA DE VOLTA 🔥 */}
-          {mostrarTermometroIA && (
-            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
-              <div className="flex items-start sm:items-center gap-3">
-                <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl shrink-0"><Sparkles size={22}/></div>
-                <div>
-                  <h3 className="text-xs font-black text-purple-700 uppercase tracking-widest">Termômetro de Autonomia da IA</h3>
-                  <p className="text-xs font-medium text-purple-600 mt-1 leading-relaxed max-w-xl">
-                    Mede a eficácia da IA. Mostra a porcentagem de feedbacks que a IA gerou e você aprovou para enviar ao aluno <strong>sem precisar fazer nenhuma edição</strong> no texto original.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col items-start sm:items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-purple-100 shadow-sm w-full sm:w-auto text-right">
-                <span className="text-3xl font-black text-purple-700 w-full">{metricasIA.percentual}%</span>
-                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest w-full">{metricasIA.originais} de {metricasIA.total} exatos</span>
-              </div>
-            </div>
-          )}
 
           <div className={`grid grid-cols-1 md:grid-cols-2 ${mostrarFaltaPostar ? 'lg:grid-cols-3' : ''} gap-5 mb-10`}>
             <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
@@ -276,7 +292,7 @@ export default function Dashboard() {
                     <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl shrink-0"><AlertTriangle size={20}/></div>
                     <div className="min-w-0">
                       <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">Faltam Entregar <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span></h3>
-                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate">Atual: {gv.nome}</p>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={gv.nome}>Atual: {gv.nome}</p>
                     </div>
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
@@ -297,7 +313,7 @@ export default function Dashboard() {
                     <div className="bg-red-100 text-red-600 p-2.5 rounded-xl shrink-0"><Clock size={20}/></div>
                     <div className="min-w-0">
                       <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">Pendências <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span></h3>
-                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate">Anterior: {gv.nome}</p>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={gv.nome}>Anterior: {gv.nome}</p>
                     </div>
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
