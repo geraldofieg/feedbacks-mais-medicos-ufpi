@@ -2,22 +2,22 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, PlayCircle } from 'lucide-react';
+import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
   const navigate = useNavigate(); 
   
-  const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  // 🔥 SEGURANÇA PROFISSIONAL: Trava baseada exclusivamente no Role do banco
+  const isAdmin = userProfile?.role === 'admin';
   
-  // 🔥 LEITURA DE PLANOS 100% ESTrita e Limpa (Fim do Achismo)
+  // 🔥 LEITURA DE PLANOS 100% ESTrita e Limpa
   const planoUsuario = (userProfile?.plano || 'basico').toLowerCase().trim();
   const isTier1 = planoUsuario === 'basico' || planoUsuario === 'trial';
   const isTier2 = planoUsuario === 'intermediario';
   const isTier3 = planoUsuario === 'premium';
 
-  const mostrarRevisao = true; 
   const mostrarFaltaPostar = isAdmin || isTier1 || isTier3; 
   const mostrarTermometroIA = isAdmin || isTier3;
 
@@ -26,28 +26,19 @@ export default function Dashboard() {
   const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]);
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
-  const [progressoTarefas, setProgressoTarefas] = useState({});
   const [temAlunos, setTemAlunos] = useState(true); 
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
-  
   const [gestaoVista, setGestaoVista] = useState({ atuais: [], anteriores: [] });
-
   const [loadingInst, setLoadingInst] = useState(true);
   const [loadingDados, setLoadingDados] = useState(false);
-
-  const [showFormNova, setShowFormNova] = useState(false);
-  const [nomeNovaInst, setNomeNovaInst] = useState('');
-  const [criandoInst, setCriandoInst] = useState(false);
 
   const radarExecutado = useRef(false);
 
   // 1. A BÚSSOLA DE LOGIN
   useEffect(() => {
     if (!currentUser || radarExecutado.current) return;
-
     async function setupRadarGlobal() {
       radarExecutado.current = true; 
-      
       try {
         const instRef = collection(db, 'instituicoes');
         const snap = await getDocs(instRef);
@@ -61,272 +52,72 @@ export default function Dashboard() {
           return;
         }
 
-        const turmasRef = collection(db, 'turmas');
-        const qTurmasGlobais = isAdmin 
-          ? turmasRef 
-          : query(turmasRef, where('professorUid', '==', currentUser.uid));
-        
-        const snapTurmas = await getDocs(qTurmasGlobais);
-        const turmasGlobais = snapTurmas.docs
-            .map(d => ({ ...d.data(), tsCriacao: d.data().dataCriacao?.toMillis ? d.data().dataCriacao.toMillis() : 0 }))
-            .filter(t => t.status !== 'lixeira')
-            .sort((a, b) => b.tsCriacao - a.tsCriacao);
-
-        const escolaCacheStr = localStorage.getItem('@SaaS_EscolaSelecionada');
-        const escolaCache = escolaCacheStr ? JSON.parse(escolaCacheStr) : null;
-        const escolaCacheValida = escolaCache && lista.some(i => i.id === escolaCache.id);
-
-        let escolaAlvo = null;
-
-        if (turmasGlobais.length > 0) {
-            const temTurmaNoCache = escolaCacheValida && turmasGlobais.some(t => t.instituicaoId === escolaCache.id);
-            if (temTurmaNoCache) {
-                escolaAlvo = lista.find(i => i.id === escolaCache.id);
-            } else {
-                const idCerta = turmasGlobais[0].instituicaoId;
-                escolaAlvo = lista.find(i => i.id === idCerta) || null;
-                if (escolaAlvo) {
-                    localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaAlvo));
-                }
-            }
-        } else {
-            if (escolaCacheValida) escolaAlvo = lista.find(i => i.id === escolaCache.id);
+        const escolaCache = JSON.parse(localStorage.getItem('@SaaS_EscolaSelecionada'));
+        if (escolaCache && lista.some(i => i.id === escolaCache.id)) {
+            setEscolaSelecionada(escolaCache);
+        } else if (lista.length > 0) {
+            setEscolaSelecionada(lista[0]);
         }
-
-        if (escolaSelecionada?.id !== escolaAlvo?.id) {
-            setEscolaSelecionada(escolaAlvo);
-        }
-
-      } catch (e) { 
-        console.error("Erro ao buscar instituições:", e); 
-      } finally { 
-        setLoadingInst(false); 
-      }
+      } catch (e) { console.error(e); } finally { setLoadingInst(false); }
     }
     setupRadarGlobal();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, isAdmin]);
+  }, [currentUser]);
 
-  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA E GESTÃO À VISTA
+  // 2. BUSCA DADOS DA INSTITUIÇÃO SELECIONADA
   useEffect(() => {
     async function fetchDados() {
-      if (!escolaSelecionada?.id || instituicoes.length === 0) {
-        setKanban({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
-        setMinhasTurmas([]);
-        return;
-      }
-      
+      if (!escolaSelecionada?.id) return;
       setLoadingDados(true); 
-      
       try {
-        const turmasRef = collection(db, 'turmas');
-        const qTurmas = isAdmin 
-            ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
-            : query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
-            
-        const snapT = await getDocs(qTurmas);
+        const tRef = collection(db, 'turmas');
+        const qT = isAdmin ? query(tRef, where('instituicaoId', '==', escolaSelecionada.id)) : query(tRef, where('instituicaoId', '==', escolaSelecionada.id), where('professorUid', '==', currentUser.uid));
+        const snapT = await getDocs(qT);
         const turmasVivas = snapT.docs.map(t => ({ id: t.id, ...t.data() })).filter(t => t.status !== 'lixeira');
         setMinhasTurmas(turmasVivas);
 
         if (turmasVivas.length > 0) {
           const tIds = turmasVivas.map(t => t.id);
-          
-          const qAlunos = query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id));
-          const snapAlunos = await getDocs(qAlunos);
-          
-          const listaAlunosVivos = snapAlunos.docs
-            .filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId))
-            .map(d => ({id: d.id, nome: d.data().nome, turmaId: d.data().turmaId}));
-          
-          setTemAlunos(listaAlunosVivos.length > 0);
-
-          const qTarefas = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
-          const snapTarefas = await getDocs(qTarefas);
-          const tarefasVivas = snapTarefas.docs.map(d => ({id: d.id, ...d.data()})).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
-          setTemTarefasGeral(tarefasVivas.length > 0);
-
-          const hojeTime = new Date().getTime();
           const qAtiv = query(collection(db, 'atividades'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapAtiv = await getDocs(qAtiv);
-
-          const docRefUser = doc(db, 'usuarios', currentUser.uid);
-          const docSnapUser = await getDoc(docRefUser);
-          const timestampPrompt = docSnapUser.data()?.timestampPrompt || 0;
-
-          // DESFRAGMENTADOR ANTI-CLONES
-          const atividadesGerais = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira');
-          const atividadesUnicas = {};
+          const activities = snapAtiv.docs.map(d => d.data()).filter(a => a.status !== 'lixeira' && tIds.includes(a.turmaId));
           
-          atividadesGerais.forEach(ativ => {
-            if (!tIds.includes(ativ.turmaId)) return; 
-
-            const chave = `${ativ.tarefaId}_${ativ.alunoId}`;
-            const existing = atividadesUnicas[chave];
-            
-            const temRespostaAtual = (ativ.resposta && String(ativ.resposta).trim() !== '') || !!ativ.arquivoUrl;
-            const temRespostaExisting = existing ? ((existing.resposta && String(existing.resposta).trim() !== '') || !!existing.arquivoUrl) : false;
-
-            if (!existing) {
-                atividadesUnicas[chave] = ativ;
-            } else {
-                if (temRespostaAtual && !temRespostaExisting) {
-                    atividadesUnicas[chave] = ativ;
-                } else if (temRespostaAtual === temRespostaExisting) {
-                    const timeAtual = ativ.dataCriacao?.toMillis ? ativ.dataCriacao.toMillis() : 0;
-                    const timeExistente = existing.dataCriacao?.toMillis ? existing.dataCriacao.toMillis() : 0;
-                    if (timeAtual > timeExistente) {
-                        atividadesUnicas[chave] = ativ;
-                    }
-                }
-            }
-          });
-
-          const listaAtividadesDedup = Object.values(atividadesUnicas);
-
           let p = 0, f = 0, ok = 0;
-          let iaTotal = 0, iaOriginais = 0;
-          let progressoLocal = {};
-
-          listaAtividadesDedup.forEach(d => {
-            const tarefaPai = tarefasVivas.find(t => t.id === d.tarefaId);
-            if (!tarefaPai) return;
-
-            const tarefaRestrita = tarefaPai.atribuicaoEspecifica && tarefaPai.alunosSelecionados && tarefaPai.alunosSelecionados.length > 0;
-            if (tarefaRestrita && !tarefaPai.alunosSelecionados.includes(d.alunoId)) return;
-
-            const jaPostado = d.postado === true || d.status === 'finalizado' || d.status === 'postado';
-            const jaAprovado = d.status === 'aprovado' || d.status === 'revisado';
-            const temResposta = (d.resposta && String(d.resposta).trim() !== '') || !!d.arquivoUrl;
-
-            if (jaPostado) { ok++; progressoLocal[d.tarefaId] = true; }
-            else if (jaAprovado) { f++; progressoLocal[d.tarefaId] = true; }
-            else if (temResposta) { p++; progressoLocal[d.tarefaId] = true; }
-
-            const dataAvaliacao = d.dataAprovacao || d.dataPostagem || d.dataModificacao || d.dataCriacao;
-            const timeAvaliacao = dataAvaliacao ? (dataAvaliacao.toDate ? dataAvaliacao.toDate().getTime() : new Date(dataAvaliacao).getTime()) : 0;
-            const ehDessaTemporada = timestampPrompt > 0 ? (timeAvaliacao >= timestampPrompt) : true;
-
-            const fFinal = (d.feedbackFinal || "").trim();
-            const fSugerido = (d.feedbackSugerido || d.feedbackIA || "").trim();
-            
-            if ((jaAprovado || jaPostado) && fSugerido !== "" && ehDessaTemporada) {
-              iaTotal++;
-              if (fFinal === fSugerido) iaOriginais++;
-            }
+          activities.forEach(d => {
+            if (d.postado) ok++; else if (d.status === 'aprovado') f++; else if (d.resposta) p++;
           });
-
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
-          setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
-          setProgressoTarefas(progressoLocal);
 
-          const tarefasPrazo = tarefasVivas.filter(t => t.dataFim).map(t => {
-            const timeFim = t.dataFim.toDate ? t.dataFim.toDate().getTime() : new Date(t.dataFim).getTime();
-            const timeInicio = t.dataInicio ? (t.dataInicio.toDate ? t.dataInicio.toDate().getTime() : new Date(t.dataInicio).getTime()) : 0;
-            return {
-              ...t,
-              timeFim,
-              timeInicio,
-              isFutura: timeInicio > hojeTime,
-              isPassada: timeFim < hojeTime,
-              diasRestantes: Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24))
-            };
-          });
-
-          const agenda = tarefasPrazo.map(t => ({
-            id: t.id,
-            nomeTarefa: t.nomeTarefa || t.titulo,
-            diasRestantes: t.diasRestantes,
-            isFutura: t.isFutura
-          })).sort((a,b) => (a.isFutura === b.isFutura) ? (a.diasRestantes - b.diasRestantes) : (a.isFutura ? 1 : -1));
+          const qTar = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
+          const snapTar = await getDocs(qTar);
+          const hoje = new Date().getTime();
+          const tarefasVivas = snapTar.docs.map(d => {
+            const data = d.data();
+            const timeFim = data.dataFim?.toDate ? data.dataFim.toDate().getTime() : 0;
+            return { id: d.id, ...data, diasRestantes: Math.ceil((timeFim - hoje) / (1000 * 3600 * 24)) };
+          }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId) && t.diasRestantes >= 0);
           
-          setTarefasEmAndamento(agenda.filter(t => t.diasRestantes >= 0 && !t.isFutura).slice(0, 5));
-
-          const currentTasks = tarefasPrazo.filter(t => !t.isFutura && !t.isPassada).sort((a, b) => a.timeFim - b.timeFim);
-          const pastTasks = tarefasPrazo.filter(t => t.isPassada).sort((a, b) => b.timeFim - a.timeFim);
-
-          const calcularDevedores = (tarefa) => {
-            if (!tarefa) return null;
-            let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
-            if (tarefa.atribuicaoEspecifica && tarefa.alunosSelecionados && tarefa.alunosSelecionados.length > 0) {
-              alvo = alvo.filter(a => tarefa.alunosSelecionados.includes(a.id));
-            }
-            const devedores = alvo.filter(aluno => {
-              const ent = listaAtividadesDedup.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id);
-              if (!ent) return true; 
-              const temResposta = (ent.resposta && String(ent.resposta).trim() !== '') || !!ent.arquivoUrl;
-              return !temResposta;
-            });
-            return {
-              id: tarefa.id,
-              nome: tarefa.nomeTarefa || tarefa.titulo,
-              devedores: devedores.map(d => d.nome).sort()
-            };
-          };
-
-          setGestaoVista({
-            atuais: currentTasks.map(calcularDevedores).filter(Boolean),
-            anteriores: pastTasks.slice(0, 2).map(calcularDevedores).filter(Boolean)
-          });
-
-        } else {
-          setTemAlunos(false);
-          setTemTarefasGeral(false);
+          setTarefasEmAndamento(tarefasVivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
         }
-      } catch (e) { console.error("Erro ao carregar dados:", e); }
-      finally { setLoadingDados(false); } 
+      } catch (e) { console.error(e); } finally { setLoadingDados(false); } 
     }
     fetchDados();
-  }, [escolaSelecionada, instituicoes, currentUser, isAdmin]);
-
-  async function handleCriarInstituicao(e) {
-    e.preventDefault();
-    if (!nomeNovaInst.trim() || criandoInst) return;
-    setCriandoInst(true);
-    try {
-      const docRef = await addDoc(collection(db, 'instituicoes'), {
-        nome: nomeNovaInst.trim(),
-        professorUid: currentUser.uid,
-        professorEmail: currentUser.email,
-        dataCriacao: serverTimestamp(),
-        status: 'ativa'
-      });
-      const novaInst = { id: docRef.id, nome: nomeNovaInst.trim() };
-      setInstituicoes(prev => [...prev, novaInst].sort((a,b) => a.nome.localeCompare(b.nome)));
-      setEscolaSelecionada(novaInst);
-      localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(novaInst));
-      setShowFormNova(false);
-      setNomeNovaInst('');
-    } catch (err) { console.error(err); } finally { setCriandoInst(false); }
-  }
-
-  const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
-  
-  let passoAtual = 5;
-  if (!escolaSelecionada?.id || instituicoes.length === 0) passoAtual = 1;
-  else if (minhasTurmas.length === 0) passoAtual = 2;
-  else if (!temAlunos) passoAtual = 3;
-  else if (!temTarefasGeral) passoAtual = 4;
+  }, [escolaSelecionada, currentUser, isAdmin]);
 
   const renderBarraProgresso = () => {
-    const passos = [
-      { id: 1, titulo: 'Instituição', icone: <School size={18} /> },
-      { id: 2, titulo: 'Turma', icone: <Building2 size={18} /> },
-      { id: 3, titulo: 'Alunos', icone: <UserPlus size={18} /> },
-      { id: 4, titulo: 'Tarefas', icone: <FileText size={18} /> }
-    ];
-    const porcentagem = ((passoAtual - 1) / 3) * 100;
-
+    const passos = [{ id: 1, titulo: 'Instituição', icone: <School size={18} /> }, { id: 2, titulo: 'Turma', icone: <Building2 size={18} /> }, { id: 3, titulo: 'Alunos', icone: <UserPlus size={18} /> }, { id: 4, titulo: 'Tarefas', icone: <FileText size={18} /> }];
+    let pAt = 5; if (!escolaSelecionada?.id) pAt = 1; else if (minhasTurmas.length === 0) pAt = 2; else if (!temAlunos) pAt = 3; else if (!temTarefasGeral) pAt = 4;
+    const porcentagem = ((pAt - 1) / 3) * 100;
     return (
       <div className="max-w-3xl mx-auto mb-10 w-full px-4 pt-6">
         <div className="relative flex items-center justify-between">
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1.5 bg-gray-200 rounded-full z-0"></div>
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full z-0 transition-all duration-700 ease-out" style={{ width: `${porcentagem}%` }}></div>
-          {passos.map(passo => (
-            <div key={passo.id} className="relative z-10 flex flex-col items-center group">
-              <div className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${passo.id < passoAtual ? "bg-green-500 border-green-500 text-white" : passo.id === passoAtual ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/30" : "bg-white border-gray-200 text-gray-400"}`}>
-                {passo.id < passoAtual ? <CheckCheck size={20} /> : passo.icone}
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1.5 bg-gray-200 rounded-full"></div>
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 bg-blue-600 rounded-full transition-all duration-700" style={{ width: `${porcentagem}%` }}></div>
+          {passos.map(p => (
+            <div key={p.id} className="relative z-10 flex flex-col items-center">
+              <div className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${p.id < pAt ? "bg-green-500 border-green-500 text-white" : p.id === pAt ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/30" : "bg-white border-gray-200 text-gray-400"}`}>
+                {p.id < pAt ? <CheckCheck size={20} /> : p.icone}
               </div>
-              <span className={`absolute -bottom-7 text-[10px] sm:text-xs uppercase tracking-widest whitespace-nowrap transition-colors ${passo.id < passoAtual ? "text-green-600 font-bold" : passo.id === passoAtual ? "text-blue-700 font-black" : "text-gray-400 font-medium"}`}>{passo.titulo}</span>
+              <span className={`absolute -bottom-7 text-[10px] sm:text-xs uppercase tracking-widest whitespace-nowrap ${p.id < pAt ? "text-green-600 font-bold" : p.id === pAt ? "text-blue-700 font-black" : "text-gray-400 font-medium"}`}>{p.titulo}</span>
             </div>
           ))}
         </div>
@@ -336,45 +127,6 @@ export default function Dashboard() {
 
   if (loadingInst || loadingDados) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
-  if (!escolaSelecionada?.id || instituicoes.length === 0) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 py-8 text-center animate-in fade-in duration-700">
-        {renderBarraProgresso()}
-        <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-[40px] shadow-2xl max-w-lg mx-auto mt-10">
-           <School size={56} className="mx-auto text-blue-600 mb-6" />
-           <h1 className="text-3xl font-black text-gray-800 mb-3 tracking-tight">Onde você ensina?</h1>
-           <p className="text-gray-500 font-medium mb-8 text-lg leading-relaxed">
-             Selecione sua instituição para acessar turmas já criadas por colegas, ou cadastre uma nova.
-           </p>
-           <div className="space-y-4 text-left">
-              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Instituições Cadastradas</label>
-              <select className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-bold text-gray-700 outline-none focus:border-blue-500 cursor-pointer shadow-sm" defaultValue="" onChange={(e) => {
-                    if (e.target.value === 'nova') setShowFormNova(true);
-                    else if (e.target.value !== '') {
-                        const inst = instituicoes.find(i => i.id === e.target.value);
-                        setEscolaSelecionada(inst);
-                        localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(inst));
-                    }
-                 }}>
-                 <option value="" disabled>Selecione na lista...</option>
-                 {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-                 <option disabled>──────────</option>
-                 <option value="nova">+ Cadastrar Nova Instituição</option>
-              </select>
-
-              {showFormNova && (
-                 <form onSubmit={handleCriarInstituicao} className="mt-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 animate-in slide-in-from-top-4 duration-300">
-                    <input autoFocus required placeholder="Nome da nova instituição..." className="w-full p-4 bg-white border-2 border-blue-200 rounded-2xl font-bold outline-none focus:border-blue-500 mb-3 text-gray-800" value={nomeNovaInst} onChange={e => setNomeNovaInst(e.target.value)}/>
-                    <button disabled={criandoInst} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">{criandoInst ? 'Criando...' : 'Salvar Instituição'}</button>
-                    <button type="button" onClick={() => setShowFormNova(false)} className="w-full mt-2 py-2 text-sm font-bold text-gray-400 hover:text-gray-600">Cancelar</button>
-                 </form>
-              )}
-           </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 overflow-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
@@ -382,52 +134,24 @@ export default function Dashboard() {
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
           <div className="flex items-center gap-2 mt-2 max-w-full">
             <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
-            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer shadow-inner truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => {
-                if (e.target.value === 'nova_instituicao') navigate('/turmas', { state: { abrirModalInstituicao: true } });
-                else setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value));
-              }}>
-              {instituicoes.map(i => (
-                <option key={i.id} value={i.id} className="truncate">{i.nome} {isAdmin && i.professorUid === currentUser.uid ? '(Sua conta)' : isAdmin ? '(De outro prof.)' : ''}</option>
-              ))}
-              <option disabled>──────────</option>
-              <option value="nova_instituicao">+ Criar Nova Instituição</option>
+            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg outline-none cursor-pointer truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}>
+              {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
             </select>
           </div>
         </div>
       </div>
 
-      {passoAtual <= 4 && renderBarraProgresso()}
-
       {minhasTurmas.length === 0 ? (
-        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12 animate-in zoom-in-95 duration-500">
+        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12">
           <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
           <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi vinculada.</h2>
-          <p className="text-gray-500 font-medium mb-8 text-lg">O próximo passo é configurar sua primeira turma para gerenciar os alunos.</p>
-          <div className="space-y-4">
-            <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">
-              Passo 2: Configurar Turma <ChevronRight size={18}/>
-            </Link>
-            <div className="flex items-center justify-center gap-2 text-purple-600 font-bold text-sm animate-pulse mt-4"><Sparkles size={16}/><span>Dica: Você poderá "Copiar turma existente" neste passo!</span></div>
-          </div>
-        </div>
-      ) : !temAlunos ? (
-        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12 animate-in zoom-in-95 duration-500">
-          <div className="bg-orange-50 text-orange-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><UserPlus size={40}/></div>
-          <h2 className="text-2xl font-black text-gray-800 mb-3">Turma configurada! Mas e os alunos?</h2>
-          <p className="text-gray-500 font-medium mb-8 text-lg">Uma sala de aula não funciona sem eles. Vamos adicionar a lista de alunos para que eles possam receber as atividades.</p>
-          <Link to="/alunos" className="inline-flex items-center gap-2 bg-orange-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-orange-600/20 hover:bg-orange-700 transition-all">Passo 3: Cadastrar Alunos <ChevronRight size={18}/></Link>
-        </div>
-      ) : !temTarefasGeral ? (
-        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12 animate-in zoom-in-95 duration-500">
-          <div className="bg-purple-50 text-purple-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><FileText size={40}/></div>
-          <h2 className="text-2xl font-black text-gray-800 mb-3">Tudo pronto! Vamos ao trabalho.</h2>
-          <p className="text-gray-500 font-medium mb-8 text-lg">Sua turma já tem alunos cadastrados. Que tal lançar o seu primeiro desafio ou atividade para eles?</p>
-          <Link to="/tarefas" className="inline-flex items-center gap-2 bg-purple-600 text-white font-black py-3.5 px-8 rounded-xl shadow-lg shadow-purple-600/20 hover:bg-purple-700 transition-all">Passo 4: Criar Tarefa <ChevronRight size={18}/></Link>
+          <p className="text-gray-500 font-medium mb-8 text-lg">O próximo passo é configurar sua primeira turma.</p>
+          <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 2: Configurar Turma <ChevronRight size={18}/></Link>
         </div>
       ) : (
         <>
-          {/* 🔥 BARRA PRETA - MAIS DISCRETA E COMPACTA 🔥 */}
-          <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-6">
+          {/* 🔥 BARRA PRETA - MAIS DISCRETA, CURTA E COMPACTA 🔥 */}
+          <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
              <div className="flex items-center gap-2.5 mb-3">
                 <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
                 <h2 className="text-base font-black tracking-tight">Tarefas em andamento</h2>
@@ -435,154 +159,45 @@ export default function Dashboard() {
              <div className="space-y-2">
                 {tarefasEmAndamento.length > 0 ? (
                   tarefasEmAndamento.map(t => (
-                    <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
-                      
-                      <div className="flex items-center gap-2 min-w-0 flex-1 pr-4">
-                        {/* 🔥 Bolinha verde piscando */}
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></div>
-                        {/* 🔥 Nome da tarefa e Dias mais próximos */}
+                    <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-4">
+                        {/* Bolinha verde piscando */}
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0"></div>
                         <span className="text-sm font-bold text-slate-200 truncate">{t.nomeTarefa}</span>
-                        <span className="text-xs font-bold text-green-400 shrink-0 ml-1">Faltam {t.diasRestantes} dias</span>
+                        <span className="text-xs font-black text-green-500 shrink-0">Faltam {t.diasRestantes} dias</span>
                       </div>
                       
-                      {/* 🔥 Novo botão direto para correção */}
+                      {/* Botão direto para a correção */}
                       <Link to={`/revisar/${t.id}`} className="text-[10px] font-black uppercase text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all shrink-0 flex items-center gap-1">
                         Corrigir Tarefa <ChevronRight size={12}/>
                       </Link>
-
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-500 font-medium italic p-2 text-center">Nenhuma tarefa ativa no momento.</p>
+                  <p className="text-sm text-slate-500 font-medium italic p-2 text-center">Nenhuma tarefa ativa no cronograma.</p>
                 )}
              </div>
           </div>
 
-          {/* 🔥 TERMÔMETRO IA 🔥 */}
-          {mostrarTermometroIA && (
-            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
-              <div className="flex items-start sm:items-center gap-3">
-                <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl shrink-0"><Sparkles size={22}/></div>
-                <div>
-                  <h3 className="text-xs font-black text-purple-700 uppercase tracking-widest">Termômetro de Autonomia da IA</h3>
-                  <p className="text-xs font-medium text-purple-600 mt-1 leading-relaxed max-w-xl">
-                    Mede a eficácia da IA. Mostra a porcentagem de feedbacks que a IA gerou e você aprovou para enviar ao aluno <strong>sem precisar fazer nenhuma edição</strong> no texto original.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col items-start sm:items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-purple-100 shadow-sm w-full sm:w-auto text-right">
-                <span className="text-3xl font-black text-purple-700 w-full">{metricasIA.percentual}%</span>
-                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest w-full">{metricasIA.originais} de {metricasIA.total} exatos</span>
-              </div>
-            </div>
-          )}
-
-          {/* 🔥 KANBAN REAJUSTADO 🔥 */}
           <div className={`grid grid-cols-1 md:grid-cols-2 ${mostrarFaltaPostar ? 'lg:grid-cols-3' : ''} gap-5 mb-10`}>
-            
             <div className="bg-white border border-yellow-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-[11px] font-black text-yellow-600 uppercase tracking-widest mt-1">Aguardando Revisão</h3>
-                <div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div>
-              </div>
+              <div className="flex justify-between items-start mb-2"><h3 className="text-[11px] font-black text-yellow-600 uppercase mt-1">Aguardando Revisão</h3><div className="text-yellow-500 bg-yellow-50 p-1.5 rounded-lg"><Clock size={20}/></div></div>
               <span className="text-4xl font-black text-gray-800">{kanban.pendentes}</span>
               <Link to="/aguardandorevisao" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver lista <ChevronRight size={14}/></Link>
             </div>
-            
             {mostrarFaltaPostar && (
               <div className="bg-white border border-blue-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest mt-1">Aguardando Postar</h3>
-                  <div className="text-blue-500 bg-blue-50 p-1.5 rounded-lg"><Send size={20}/></div>
-                </div>
+                <div className="flex justify-between items-start mb-2"><h3 className="text-[11px] font-black text-blue-600 uppercase mt-1">Aguardando Postar</h3><div className="text-blue-500 bg-blue-50 p-1.5 rounded-lg"><Send size={20}/></div></div>
                 <span className="text-4xl font-black text-gray-800">{kanban.faltaLancar}</span>
                 <Link to="/faltapostar" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Copiar p/ Site <ChevronRight size={14}/></Link>
               </div>
             )}
-            
             <div className="bg-white border border-green-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-[11px] font-black text-green-600 uppercase tracking-widest mt-1">Histórico Finalizado</h3>
-                <div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div>
-              </div>
+              <div className="flex justify-between items-start mb-2"><h3 className="text-[11px] font-black text-green-600 uppercase mt-1">Histórico Finalizado</h3><div className="text-green-500 bg-green-50 p-1.5 rounded-lg"><CheckCheck size={20}/></div></div>
               <span className="text-4xl font-black text-gray-800">{finalizadosVisor}</span>
               <Link to="/historico" className="mt-4 text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline w-fit">Ver histórico <ChevronRight size={14}/></Link>
             </div>
           </div>
-          
-          {(gestaoVista.atuais?.length > 0 || gestaoVista.anteriores?.length > 0) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 items-start">
-              
-              {/* RENDEREZIA TODAS AS TAREFAS ATUAIS */}
-              {gestaoVista.atuais.map((gv, idx) => (
-                <div key={`atual-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
-                    <div className="bg-orange-100 text-orange-600 p-2.5 rounded-xl shrink-0"><AlertTriangle size={20}/></div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">
-                        Faltam Entregar
-                        <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span>
-                      </h3>
-                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Atual: ${gv.nome}`}>Atual: {gv.nome}</p>
-                    </div>
-                  </div>
-                  <div className="relative">
-                    {/* O Gradiente de Sombra (Esconde a base para dar profundidade) */}
-                    {gv.devedores.length > 4 && (
-                        <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white to-transparent pointer-events-none z-10"></div>
-                    )}
-                    {/* A Caixa de Rolagem com Scroll Forçado via Tailwind arbitrary variants */}
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full">
-                      {gv.devedores.length === 0 ? (
-                        <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>
-                      ) : (
-                        gv.devedores.map((nome, i) => (
-                          <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
-                            <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {/* RENDEREZIA AS PENDÊNCIAS ANTERIORES */}
-              {gestaoVista.anteriores.map((gv, idx) => (
-                <div key={`ant-${idx}`} className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-4">
-                    <div className="bg-red-100 text-red-600 p-2.5 rounded-xl shrink-0"><Clock size={20}/></div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">
-                        Pendências
-                        <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[10px] tracking-widest">{gv.devedores.length} ALUNOS</span>
-                      </h3>
-                      <p className="text-xs font-bold text-gray-500 mt-0.5 truncate" title={`Anterior: ${gv.nome}`}>Anterior: {gv.nome}</p>
-                    </div>
-                  </div>
-                  <div className="relative">
-                    {/* O Gradiente de Sombra */}
-                    {gv.devedores.length > 4 && (
-                        <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white to-transparent pointer-events-none z-10"></div>
-                    )}
-                    {/* A Caixa de Rolagem com Scroll Forçado via Tailwind arbitrary variants */}
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:block [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full">
-                      {gv.devedores.length === 0 ? (
-                        <p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>
-                      ) : (
-                        gv.devedores.map((nome, i) => (
-                          <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
-                            <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-            </div>
-          )}
         </>
       )}
     </div>
