@@ -158,11 +158,11 @@ export default function RevisarAtividade() {
 
   async function handleGerarIA() {
     if (isTier1) {
-      if (window.confirm("🔒 Deseja conhecer o Plano Premium para usar IA?")) navigate('/planos');
+      if (window.confirm("🔒 Deseja conhecer o Plano Premium para usar a IA?")) navigate('/planos');
       return;
     }
     if (!promptVivo) {
-      if (window.confirm("Configure suas instruções de correção antes.")) navigate('/configuracoes');
+      if (window.confirm("Configure as suas instruções de correção antes.")) navigate('/configuracoes');
       return;
     }
     if (respostaEstaVazia) return;
@@ -178,7 +178,7 @@ export default function RevisarAtividade() {
       setFeedbackEditado(result.response.text());
     } catch (e) { 
       console.error(e);
-      alert("Erro ao conectar com a IA da Google. Tenta novamente.");
+      alert("Erro ao ligar com a IA da Google. Tente novamente.");
     }
     finally { setGerandoIA(false); }
   }
@@ -268,7 +268,7 @@ export default function RevisarAtividade() {
   }
 
   async function handleExcluirAtividade() {
-    if (!window.confirm("ATENÇÃO: Você vai excluir a resposta do aluno. Continuar?")) return;
+    if (!window.confirm("ATENÇÃO: Vai excluir a resposta do aluno. Continuar?")) return;
     setSalvando(true);
     try {
         await deleteDoc(doc(db, 'atividades', atividadeAtual.id));
@@ -410,7 +410,7 @@ export default function RevisarAtividade() {
                     {linksNaResposta.length > 0 && (
                       <div className="mt-4 p-5 bg-indigo-50 border border-indigo-100 rounded-2xl flex flex-col gap-3 shadow-inner">
                         <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-2">
-                          <ExternalLink size={14} /> Links detectados na resposta do aluno:
+                          <ExternalLink size={14} /> Links detetados na resposta do aluno:
                         </span>
                         <div className="flex flex-wrap gap-2">
                           {linksNaResposta.map((link, idx) => (
@@ -419,7 +419,7 @@ export default function RevisarAtividade() {
                             </a>
                           ))}
                         </div>
-                         <p className="text-[9px] text-indigo-400 font-bold italic">Nota: Caixas de texto não permitem cliques diretos. Use os botões acima para abrir os arquivos do aluno.</p>
+                         <p className="text-[9px] text-indigo-400 font-bold italic">Nota: Caixas de texto não permitem cliques diretos. Use os botões acima para abrir os ficheiros do aluno.</p>
                       </div>
                     )}
                   </section>
@@ -442,10 +442,22 @@ export default function RevisarAtividade() {
                   {atividadeAtual?.postado ? (
                       <div className="w-full bg-green-500/20 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2 border border-green-500/30"><CheckCheck size={18}/> LANÇADO OFICIALMENTE</div>
                   ) : atividadeAtual?.status === 'aprovado' ? (
-                        <div className="pt-2 border-t border-slate-800 space-y-3">
-                          <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"><Copy size={18}/> {copiado ? 'Copiado!' : '1. Copiar Feedback'}</button>
-                      
-                          <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl hover:bg-indigo-700 transition-colors"><Send size={18}/> 2. Marcar Oficial (Move p/ Histórico)</button>
+                        <div className="pt-4 border-t border-slate-800 space-y-4">
+                          {/* 🔥 NOVO: BANNER VISUAL DE CONFIRMAÇÃO DO PASSO 3 */}
+                          <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                            <div className="bg-green-500 text-white rounded-full p-1.5 shrink-0 mt-0.5">
+                              <CheckCircle size={18} />
+                            </div>
+                            <div>
+                              <h4 className="text-green-400 font-black text-sm tracking-wide">PASSO 3 LIBERADO!</h4>
+                              <p className="text-green-500/80 text-xs font-bold mt-1 leading-snug">Feedback aprovado. Copie o texto abaixo e encerre a tarefa.</p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"><Copy size={18}/> {copiado ? 'Copiado!' : '1. Copiar Feedback'}</button>
+                            <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl hover:bg-indigo-700 transition-colors"><Send size={18}/> 2. Marcar Oficial (Move p/ Histórico)</button>
+                          </div>
                         </div>
                   ) : (
                         <div className="grid grid-cols-2 gap-3">
