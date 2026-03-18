@@ -12,7 +12,6 @@ export default function FaltaPostar() {
   const [loading, setLoading] = useState(true);
   const [listaPendencias, setListaPendencias] = useState([]);
 
-  // LEITURA DE CRACHÁ (Segurança Clean Code)
   const isAdmin = userProfile?.role === 'admin';
   const isTier2 = userProfile?.plano === 'intermediario';
 
@@ -21,7 +20,6 @@ export default function FaltaPostar() {
       if (!currentUser || !escolaSelecionada?.id) return;
       setLoading(true);
       try {
-        // 1. Busca todas as turmas que esse usuário tem acesso na Instituição
         const turmasRef = collection(db, 'turmas');
         const qTurmas = isAdmin
           ? query(turmasRef, where('instituicaoId', '==', escolaSelecionada.id))
@@ -36,7 +34,6 @@ export default function FaltaPostar() {
           return;
         }
 
-        // Divide o array de turmas em pedaços de no máximo 30 para o operador 'in' do Firestore
         const maxItemsPerQuery = 30;
         const turmasChunks = [];
         for (let i = 0; i < turmasIds.length; i += maxItemsPerQuery) {
@@ -45,26 +42,47 @@ export default function FaltaPostar() {
 
         let pendenciasTemporarias = [];
 
-        // 2. Busca atividades com status='aprovado' para essas turmas
         for (const chunk of turmasChunks) {
           const qPendencias = query(
             collection(db, 'atividades'),
-            where('turmaId', 'in', chunk),
-            where('status', '==', 'aprovado')
+            where('turmaId', 'in', chunk)
           );
 
           const snapPendencias = await getDocs(qPendencias);
 
+          // 🔥 DESFRAGMENTADOR ANTI-CLONES
+          const mapDeduplicado = new Map();
+          
           snapPendencias.docs.forEach(d => {
             const data = d.data();
-            // LÓGICA DE DEDUPLICAÇÃO: Se NÃO foi postado (seja false ou campo inexistente), entra na lista.
-            if (!data.postado && data.status !== 'lixeira') {
-               pendenciasTemporarias.push({ id: d.id, ...data });
+            if (data.status === 'lixeira') return;
+            
+            const key = `${data.alunoId}_${data.tarefaId}`;
+            const existente = mapDeduplicado.get(key);
+            
+            const peso = (ativ) => {
+              if (ativ.postado) return 3;
+              if (ativ.status === 'aprovado') return 2;
+              return 1;
+            };
+
+            if (!existente || peso(data) > peso(existente)) {
+              mapDeduplicado.set(key, { id: d.id, ...data });
+            } else if (peso(data) === peso(existente)) {
+               const t1 = data.dataModificacao?.seconds || data.dataCriacao?.seconds || 0;
+               const t2 = existente.dataModificacao?.seconds || existente.dataCriacao?.seconds || 0;
+               if (t1 > t2) mapDeduplicado.set(key, { id: d.id, ...data });
+            }
+          });
+
+          // Pega apenas as que venceram a triagem e ainda estão no funil de postar
+          mapDeduplicado.forEach(data => {
+            if (data.status === 'aprovado' && !data.postado) {
+              pendenciasTemporarias.push(data);
             }
           });
         }
 
-        // 3. Ordenação decrescente pela data de aprovação (mais recentes primeiro)
         pendenciasTemporarias.sort((a, b) => {
           const timeA = a.dataAprovacao?.toMillis ? a.dataAprovacao.toMillis() : 0;
           const timeB = b.dataAprovacao?.toMillis ? b.dataAprovacao.toMillis() : 0;
@@ -82,15 +100,12 @@ export default function FaltaPostar() {
     fetchFaltaPostar();
   }, [currentUser, escolaSelecionada, isAdmin]);
 
-  // Função utilitária para formatar a data na tela
   const formatarData = (timestamp) => {
     if (!timestamp) return 'Sem data';
-    // Verifica se é timestamp do Firestore
     const data = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  // Se for o plano Intermediário (Tier 2), a Patrícia não deve ter acesso a essa tela (só o Admin avalia e posta)
   if (isTier2) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
@@ -110,8 +125,6 @@ export default function FaltaPostar() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      
-      {/* CABEÇALHO */}
       <div className="flex items-center gap-4 mb-8 border-b border-gray-200 pb-6">
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
           <ArrowLeft size={24} />
@@ -125,7 +138,6 @@ export default function FaltaPostar() {
         </div>
       </div>
 
-      {/* ÁREA DE CONTEÚDO */}
       {loading ? (
         <div className="py-20 text-center flex flex-col items-center gap-3 animate-pulse">
           <Send className="text-blue-200" size={48}/>
@@ -156,7 +168,6 @@ export default function FaltaPostar() {
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                  {/* Estratégia Poliglota V1/V3 aplicada */}
                   <h3 className="font-black text-gray-800 text-base md:text-lg uppercase tracking-wide truncate group-hover:text-blue-700 transition-colors">
                     {item.nomeAluno || item.aluno || 'ALUNO NÃO IDENTIFICADO'}
                   </h3>
