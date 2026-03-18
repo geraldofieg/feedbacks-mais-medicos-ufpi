@@ -481,7 +481,6 @@ export default function Tarefas() {
                              )}
                            </div>
                            
-                           {/* 🔥 MODIFICAÇÃO DO LAYOUT PARA AFASTAR OS BOTÕES 🔥 */}
                            <div className="flex flex-col items-end justify-between h-full shrink-0 gap-4">
                              <div className="flex gap-2 mb-5 md:mb-8 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                <button onClick={() => iniciarEdicao(item)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar Tarefa"><Pencil size={18}/></button>
@@ -596,9 +595,11 @@ export default function Tarefas() {
 
                   {novaTarefa.tipo === 'entrega' && (
                     <div className="mt-6 border-t border-slate-100 pt-6 animate-in fade-in slide-in-from-bottom-2">
-                      <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">Atribuição da Tarefa</label>
+                      <label className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 block">
+                        Atribuição da Tarefa <span className="text-red-500">*</span>
+                      </label>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
                         <button type="button" onClick={() => setAtribuicaoEspecifica(false)} className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${!atribuicaoEspecifica ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
                           <div className={`p-2 rounded-full ${!atribuicaoEspecifica ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Users size={18}/></div>
                           <div className="text-left">
@@ -616,10 +617,27 @@ export default function Tarefas() {
                         </button>
                       </div>
 
+                      {/* 🔥 AVISOS EDUCATIVOS INJETADOS AQUI 🔥 */}
+                      {!atribuicaoEspecifica ? (
+                        <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl mt-3 flex items-start gap-2 animate-in fade-in">
+                           <div className="text-blue-500 mt-0.5"><Check size={16} /></div>
+                           <p className="text-xs text-blue-700 font-medium leading-relaxed">
+                             <strong>Ação Padrão:</strong> Todos os <strong>{alunosTurma.length} alunos</strong> da turma serão cobrados. A tarefa constará como pendente para a turma inteira.
+                           </p>
+                        </div>
+                      ) : (
+                        <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl mt-3 flex items-start gap-2 animate-in fade-in">
+                           <div className="text-amber-500 mt-0.5"><Check size={16} /></div>
+                           <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                             <strong>Atenção:</strong> Apenas os alunos que você marcar abaixo terão esta tarefa pendente. Para os demais, esta tarefa ficará invisível no sistema.
+                           </p>
+                        </div>
+                      )}
+
                       {atribuicaoEspecifica && alunosTurma.length > 0 && (
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-48 overflow-y-auto mt-2 animate-in slide-in-from-top-2">
-                          <div className="flex justify-between items-center mb-3 sticky top-0 bg-slate-50 pb-2">
-                            <span className="text-xs font-bold text-slate-500">Selecione os alunos:</span>
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-48 overflow-y-auto mt-4 animate-in slide-in-from-top-2">
+                          <div className="flex justify-between items-center mb-3 sticky top-0 bg-slate-50 pb-2 border-b border-slate-200/50">
+                            <span className="text-xs font-bold text-slate-500">Selecione quem fará a tarefa:</span>
                             <span className="text-xs font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{alunosSelecionados.length} selecionados</span>
                           </div>
                           <div className="space-y-1">
