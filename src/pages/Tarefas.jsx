@@ -489,8 +489,8 @@ export default function Tarefas() {
                              </div>
                              
                              {(item.tipo === 'entrega' || !item.tipo) && status !== 'futuro' && (
-                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto ${status === 'passado' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
-                                 {status === 'passado' ? 'Consultar Histórico' : 'Corrigir tarefas'}
+                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto flex items-center justify-center gap-2 ${status === 'passado' ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
+                                 {status === 'passado' ? <><Pencil size={16}/> Avaliar Atrasados</> : 'Corrigir tarefas'}
                                </Link>
                              )}
                            </div>
