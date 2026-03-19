@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, Users, LayoutDashboard, ChevronRight, ChevronLeft, X, Rocket, GitMerge } from 'lucide-react';
+import { Sparkles, Users, LayoutDashboard, ChevronRight, ChevronLeft, X, Rocket, GitMerge, MessageCircle } from 'lucide-react';
 
 export default function OnboardingModal({ isOpen, onClose }) {
   const [step, setStep] = useState(0);
@@ -29,13 +29,13 @@ export default function OnboardingModal({ isOpen, onClose }) {
     {
       icone: <Sparkles size={48} className="text-purple-500" />,
       titulo: "2. Correção e Inteligência",
-      texto: "Quando os alunos enviam os trabalhos, chega a hora de lançar a nota e o feedback. Você pode fazer isso manualmente ou usar nossa Inteligência Artificial para gerar o texto. Mas a regra é clara: a IA é apenas uma opção assistente. A revisão e a palavra final são sempre suas!",
+      texto: "Lembre-se: o aluno não acessa esta plataforma. Ao receber o trabalho no sistema oficial, você copia o texto ou faz upload do PDF da resposta do aluno aqui. Na hora de lançar a nota e o feedback, você pode fazer manualmente ou usar nossa Inteligência Artificial, customizando o seu comando (prompt) para garantir o seu tom pessoal. Mas a regra é clara: a IA é apenas uma opção assistente. A revisão e a palavra final são sempre suas!",
       cor: "bg-purple-50"
     },
     {
       icone: <GitMerge size={48} className="text-orange-500" />,
       titulo: "3. O Cruzamento Automático",
-      texto: "Aqui está o grande segredo: o sistema cruza as suas tarefas e prazos com os alunos matriculados automaticamente. É isso que alimenta suas outras telas! Sem você fazer nada, o sistema gera o Mapa de Entregas, a lista de Pendências e a Central de Comunicação.",
+      texto: "Aqui está o grande segredo: o sistema cruza as suas tarefas e prazos com os alunos matriculados automaticamente. Sem você fazer nada, ele gera o Mapa de Entregas (uma visão geral rápida de quem já entregou e quem falta) e a lista de Pendências (que mostra estritamente apenas os devedores das tarefas atuais e passadas).",
       cor: "bg-orange-50"
     },
     {
@@ -43,6 +43,12 @@ export default function OnboardingModal({ isOpen, onClose }) {
       titulo: "4. Seu Centro de Comando",
       texto: "Agora tudo faz sentido no seu Dashboard! Ele resume a operação: avisa o que vence hoje e organiza seu fluxo num modelo Kanban. Veja quem está 'Aguardando Revisão', quais feedbacks prontos estão 'Aguardando Postar' na faculdade, e seu 'Histórico' de concluídos.",
       cor: "bg-emerald-50"
+    },
+    {
+      icone: <MessageCircle size={48} className="text-pink-500" />,
+      titulo: "5. Cobrança de Elite",
+      texto: "O sistema consolida tudo o que o aluno deve num único recado de urgência. Na Central de Comunicação, com apenas um clique, você manda uma mensagem direto no WhatsApp do aluno cobrando a pendência, ou simplesmente copia o texto pronto para colar no site oficial da instituição de ensino.",
+      cor: "bg-pink-50"
     }
   ];
 
