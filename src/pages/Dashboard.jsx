@@ -42,7 +42,7 @@ export default function Dashboard() {
 
     // 🔥 ADICIONADO: Verifica se é o primeiro acesso para mostrar o Tour
     const jaViuTour = localStorage.getItem('@SaaS_TourVisto');
-    setMostrarTour(true);
+    if (!jaViuTour) setMostrarTour(true);
 
     async function setupRadarGlobal() {
       radarExecutado.current = true; 
