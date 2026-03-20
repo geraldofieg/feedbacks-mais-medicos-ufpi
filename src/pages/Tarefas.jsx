@@ -384,7 +384,7 @@ export default function Tarefas() {
             <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-2 min-w-[240px]">
                <GraduationCap size={20} className="text-gray-400 ml-2" />
                <select className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-blue-700 cursor-pointer" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
-                 <option value="" disabled>Selecione a Turma...</option>
+                 <onClick value="" disabled>Selecione a Turma...</option>
                  {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                </select>
             </div>
@@ -394,7 +394,7 @@ export default function Tarefas() {
         {isTurmaMaisMedicos && turmaAtiva && (
           <div className="flex bg-gray-200/50 p-1.5 rounded-2xl mb-8 w-fit">
             <button onClick={() => setAbaAtiva('agenda')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${abaAtiva === 'agenda' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Agenda de Tarefas</button>
-            <button onClick={() => setAbaAtiva('guia')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${abaAtiva === 'guia' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Ficha Técnica (PDF)</button>
+            <button onClick={() => setAbaAtiva('guia')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${abaAtiva === 'guia' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Cronograma</button>
           </div>
         )}
 
