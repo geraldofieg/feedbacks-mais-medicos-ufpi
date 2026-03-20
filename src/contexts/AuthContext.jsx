@@ -6,7 +6,6 @@ import {
   signOut, 
   onAuthStateChanged 
 } from 'firebase/auth';
-// Importamos setDoc e serverTimestamp para criar novos usuários
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'; 
 
 const AuthContext = createContext();
@@ -19,18 +18,9 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null); 
   const [loading, setLoading] = useState(true);
-
-  // Guarda o Objeto { id: '...', nome: '...' } da Instituição
   const [escolaSelecionada, setEscolaSelecionadaState] = useState(() => {
     const stored = localStorage.getItem('@SaaS_EscolaSelecionada');
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        return null; 
-      }
-    }
-    return null;
+    return stored ? JSON.parse(stored) : null;
   });
 
   function setEscolaSelecionada(escolaObj) {
@@ -43,100 +33,56 @@ export function AuthProvider({ children }) {
     }
   }
 
-  function signup(email, password) {
-    return createUserWithEmailAndPassword(auth, email, password);
+  // 🔥 FUNÇÃO ATUALIZADA: Recebe nome e whatsapp e marca como NÃO VISTO
+  async function signup(email, password, nome, whatsapp) {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    const dataExpiracao = new Date();
+    dataExpiracao.setDate(dataExpiracao.getDate() + 30);
+
+    const novoPerfil = {
+      nome: nome,
+      whatsapp: whatsapp || '',
+      email: user.email,
+      role: 'professor',
+      plano: 'trial',
+      dataCriacao: serverTimestamp(),
+      dataExpiracao: dataExpiracao,
+      isVitalicio: false,
+      vistoPeloAdmin: false // 🔥 ISSO LIGA O SININHO
+    };
+
+    await setDoc(doc(db, 'usuarios', user.uid), novoPerfil);
+    setUserProfile(novoPerfil);
+    return userCredential;
   }
 
-  function login(email, password) {
-    return signInWithEmailAndPassword(auth, email, password);
-  }
-
-  function logout() {
-    setEscolaSelecionada(null); 
-    setUserProfile(null); 
-    return signOut(auth);
-  }
+  function login(email, password) { return signInWithEmailAndPassword(auth, email, password); }
+  function logout() { setEscolaSelecionada(null); setUserProfile(null); return signOut(auth); }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      
       if (user) {
-        try {
-          const docRef = doc(db, 'usuarios', user.uid);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
-            // Usuário já existe, apenas carrega o perfil
-            setUserProfile(docSnap.data());
-          } else {
-            // NOVO USUÁRIO: Criando o perfil com 30 dias de Trial
-            const dataExpiracao = new Date();
-            dataExpiracao.setDate(dataExpiracao.getDate() + 30); // Soma 30 dias
-
-            const novoPerfil = {
-              email: user.email,
-              role: 'professor', // Papel padrão
-              plano: 'trial',
-              dataCriacao: serverTimestamp(),
-              dataExpiracao: dataExpiracao, // Salva o limite de acesso
-              isVitalicio: false
-            };
-
-            await setDoc(docRef, novoPerfil);
-            
-            // Busca novamente para garantir que o formato de data (Timestamp) venha certinho do Firebase
-            const novoSnap = await getDoc(docRef);
-            setUserProfile(novoSnap.data());
-          }
-        } catch (error) {
-          console.error("Erro ao buscar perfil SaaS do usuário:", error);
-          setUserProfile(null);
-        }
+        const docRef = doc(db, 'usuarios', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) setUserProfile(docSnap.data());
       } else {
         setUserProfile(null);
       }
-      
       setLoading(false);
     });
-
     return unsubscribe;
   }, []);
 
-  // --- AVALIAÇÃO DE BLOQUEIO DO SAAS ---
-  let isAcessoExpirado = false;
-
-  // 🔥 SEGURANÇA PROFISSIONAL: Agora o Super Admin é identificado apenas pelo cargo no banco de dados
   const isSuperAdmin = userProfile?.role === 'admin';
-
-  if (!isSuperAdmin && userProfile) {
-    if (userProfile.isVitalicio === true) {
-      isAcessoExpirado = false; // Tem passe livre comprado
-    } else if (userProfile.dataExpiracao) {
-      // Verifica se a data de hoje é maior que a data de expiração
-      const dataVencimento = userProfile.dataExpiracao.toDate ? userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao);
-      const hoje = new Date();
-      if (hoje > dataVencimento) {
-        isAcessoExpirado = true; // Venceu!
-      }
-    }
+  let isAcessoExpirado = false;
+  if (!isSuperAdmin && userProfile?.dataExpiracao && !userProfile.isVitalicio) {
+    const dVenc = userProfile.dataExpiracao.toDate ? userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao);
+    if (new Date() > dVenc) isAcessoExpirado = true;
   }
 
-  const value = {
-    currentUser,
-    userProfile, 
-    login,
-    signup,
-    logout,
-    escolaSelecionada,
-    setEscolaSelecionada,
-    isAcessoExpirado, // Exportando a trava para o App.jsx usar
-    isSuperAdmin // Facilita identificar o dono em qualquer tela via banco de dados
-  };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
+  const value = { currentUser, userProfile, login, signup, logout, escolaSelecionada, setEscolaSelecionada, isAcessoExpirado, isSuperAdmin };
+  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
 }
