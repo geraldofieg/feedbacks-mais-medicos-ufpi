@@ -384,7 +384,7 @@ export default function Tarefas() {
             <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-2 min-w-[240px]">
                <GraduationCap size={20} className="text-gray-400 ml-2" />
                <select className="w-full py-3.5 bg-transparent outline-none text-sm font-bold text-blue-700 cursor-pointer" value={turmaAtiva} onChange={e => setTurmaAtiva(e.target.value)}>
-                 <onClick value="" disabled>Selecione a Turma...</option>
+                 <option value="" disabled>Selecione a Turma...</option>
                  {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                </select>
             </div>
