@@ -89,7 +89,6 @@ export default function Dashboard() {
             if (escolaAlvo) localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaAlvo));
         } else {
             if (escolaCacheValida) escolaAlvo = lista.find(i => i.id === escolaCache.id);
-            // 🔥 CORREÇÃO 3: Removido o "else escolaAlvo = lista[0];"
         }
 
         if (escolaAlvo) setEscolaSelecionada(escolaAlvo);
@@ -268,23 +267,64 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
-          <div className="flex items-center gap-2 mt-2 max-w-full">
-            <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
-            <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}>
-              {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-            </select>
-          </div>
+          
+          {/* 🔥 SÓ MOSTRA O SELETOR SE O PROFESSOR TIVER PELO MENOS 1 INSTITUIÇÃO */}
+          {instituicoes.length > 0 && (
+            <div className="flex items-center gap-2 mt-2 max-w-full">
+              <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
+              <select className="bg-blue-50 text-blue-700 font-bold px-3 py-1.5 rounded-lg border-none outline-none cursor-pointer truncate max-w-[220px] sm:max-w-md" value={escolaSelecionada?.id || ''} onChange={e => setEscolaSelecionada(instituicoes.find(i => i.id === e.target.value))}>
+                {instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
-      {minhasTurmas.length === 0 ? (
-        <div className="bg-white border border-gray-200 p-12 rounded-3xl text-center max-w-2xl mx-auto shadow-sm mt-12">
-          <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
-          <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi vinculada.</h2>
-          <p className="text-gray-500 font-medium mb-8 text-lg">O próximo passo é configurar sua primeira turma.</p>
-          <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 2: Configurar Turma <ChevronRight size={18}/></Link>
+      {/* 🔥 LÓGICA DE ONBOARDING: PASSO 1 (ZERO INSTITUIÇÕES) */}
+      {instituicoes.length === 0 ? (
+        <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
+          
+          {/* BARRA DE PROGRESSO VISUAL */}
+          <div className="flex items-center justify-between mb-12 relative">
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white">1</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">2</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Turma</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">3</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Alunos</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">4</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Tarefas</span></div>
+          </div>
+
+          <div className="text-center">
+            <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><School size={40}/></div>
+            <h2 className="text-2xl font-black text-gray-800 mb-3">Bem-vindo(a) à Plataforma!</h2>
+            <p className="text-gray-500 font-medium mb-8 text-lg">Para darmos início ao seu fluxo de trabalho, o primeiro passo é cadastrar o nome da sua Instituição de Ensino.</p>
+            {/* ⚠️ Lembre-se de checar se a rota "/instituicoes" é realmente onde ele cria a escola */}
+            <Link to="/instituicoes" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 1: Criar Instituição <ChevronRight size={18}/></Link>
+          </div>
+        </div>
+
+      /* 🔥 LÓGICA DE ONBOARDING: PASSO 2 (TEM INSTITUIÇÃO, MAS ZERO TURMAS) */
+      ) : minhasTurmas.length === 0 ? (
+        <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
+          
+          {/* BARRA DE PROGRESSO VISUAL - ESTÁGIO 2 */}
+          <div className="flex items-center justify-between mb-12 relative">
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1/3 h-1 bg-blue-600 -z-10 rounded-full"></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><CheckCheck size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white">2</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Turma</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">3</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Alunos</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">4</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Tarefas</span></div>
+          </div>
+
+          <div className="text-center">
+            <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
+            <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi vinculada.</h2>
+            <p className="text-gray-500 font-medium mb-8 text-lg">A fundação está pronta. O próximo passo é configurar sua primeira turma nesta instituição.</p>
+            <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 2: Configurar Turma <ChevronRight size={18}/></Link>
+          </div>
         </div>
       ) : (
+        /* 🔥 DASHBOARD NORMAL (TEM INSTITUIÇÃO E TEM TURMA) */
         <>
           <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
             <div className="flex items-center gap-2.5 mb-3">
