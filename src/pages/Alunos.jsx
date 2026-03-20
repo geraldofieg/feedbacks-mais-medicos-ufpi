@@ -3,7 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, Plus, Search, Pencil, Trash2, Check, X, GraduationCap, Phone, Mail, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { Users, Plus, Search, Pencil, Trash2, Check, X, GraduationCap, Phone, Mail, FileSpreadsheet, RefreshCw, ChevronRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 export default function Alunos() {
@@ -271,6 +271,18 @@ export default function Alunos() {
         </h1>
         {turmas.length > 0 && (
           <div className="flex flex-wrap items-center gap-3">
+            
+            {/* 🔥 A PONTE FINAL DO ONBOARDING: Botão Passo 4 */}
+            {turmas.length === 1 && alunos.length > 0 && (
+              <Link 
+                to="/tarefas" 
+                state={{ turmaIdSelecionada: filtroTurma !== 'todas' ? filtroTurma : turmas[0].id }}
+                className="bg-slate-900 text-white font-black px-6 py-3.5 rounded-xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 flex items-center justify-center gap-2 animate-in zoom-in duration-300 ring-2 ring-slate-900 ring-offset-2"
+              >
+                Passo 4: Criar Tarefas <ChevronRight size={20}/>
+              </Link>
+            )}
+
             <button 
               onClick={() => setIsImportModalOpen(true)} 
               className="bg-green-50 text-green-700 border border-green-200 font-bold px-5 py-3.5 rounded-xl hover:bg-green-100 transition-all flex items-center justify-center gap-2"
@@ -279,7 +291,7 @@ export default function Alunos() {
             </button>
             <button 
               onClick={() => setIsModalOpen(true)} 
-              className="bg-blue-600 text-white font-black px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+              className={`font-black px-6 py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${turmas.length === 1 && alunos.length > 0 ? 'bg-white text-blue-600 border border-blue-200 hover:bg-blue-50' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20'}`}
             >
               <Plus size={20}/> Novo Aluno
             </button>
