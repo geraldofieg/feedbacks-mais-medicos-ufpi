@@ -5,7 +5,7 @@ import {
   signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
-  sendEmailVerification // 🔥 ADICIONADO PARA ENVIAR E-MAIL AUTOMÁTICO
+  sendEmailVerification // 🔥 ESSENCIAL PARA O E-MAIL DO PROFESSOR
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'; 
 
@@ -19,6 +19,7 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null); 
   const [loading, setLoading] = useState(true);
+
   const [escolaSelecionada, setEscolaSelecionadaState] = useState(() => {
     const stored = localStorage.getItem('@SaaS_EscolaSelecionada');
     return stored ? JSON.parse(stored) : null;
@@ -34,23 +35,23 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // 🔥 FUNÇÃO COMPLETA: Salva dados, envia e-mail e liga o sininho
+  // 🔥 FUNÇÃO MESTRA: Cadastra, envia e-mail e marca para o Sininho
   async function signup(email, password, nome, whatsapp) {
-    // 1. Cria a conta no Firebase Authentication
+    // 1. Cria o acesso
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // 2. DISPARA O E-MAIL DE CONFIRMAÇÃO AUTOMATICAMENTE
+    // 2. ENVIA O E-MAIL DE VERIFICAÇÃO (O que estava faltando!)
     try {
       await sendEmailVerification(user);
-    } catch (err) {
-      console.error("Erro ao enviar verificação:", err);
+    } catch (e) {
+      console.error("Erro ao enviar e-mail de verificação:", e);
     }
 
     const dataExpiracao = new Date();
     dataExpiracao.setDate(dataExpiracao.getDate() + 30);
 
-    // 3. Monta o perfil com todos os gatilhos necessários
+    // 3. Salva a ficha completa no Banco (Nome, Zap e Sininho)
     const novoPerfil = {
       nome: nome,
       whatsapp: whatsapp || '',
@@ -60,13 +61,12 @@ export function AuthProvider({ children }) {
       dataCriacao: serverTimestamp(),
       dataExpiracao: dataExpiracao,
       isVitalicio: false,
-      vistoPeloAdmin: false // 🔥 ISSO ATIVA O SININHO NO NAVBAR
+      vistoPeloAdmin: false // 🔥 ISSO ATIVA O SININHO
     };
 
-    // 4. Salva no Firestore
     await setDoc(doc(db, 'usuarios', user.uid), novoPerfil);
     setUserProfile(novoPerfil);
-    
+
     return userCredential;
   }
 
@@ -77,9 +77,15 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        const docRef = doc(db, 'usuarios', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) setUserProfile(docSnap.data());
+        try {
+          const docRef = doc(db, 'usuarios', user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setUserProfile(docSnap.data());
+          }
+        } catch (error) {
+          console.error("Erro ao buscar perfil:", error);
+        }
       } else {
         setUserProfile(null);
       }
@@ -88,13 +94,24 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  const isSuperAdmin = userProfile?.role === 'admin';
+  const isSuperAdmin = userProfile?.role === 'admin' || currentUser?.email === 'geraldofieg@gmail.com';
   let isAcessoExpirado = false;
-  if (!isSuperAdmin && userProfile?.dataExpiracao && !userProfile.isVitalicio) {
-    const dVenc = userProfile.dataExpiracao.toDate ? userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao);
-    if (new Date() > dVenc) isAcessoExpirado = true;
+
+  if (!isSuperAdmin && userProfile) {
+    if (userProfile.isVitalicio !== true && userProfile.dataExpiracao) {
+      const dataVencimento = userProfile.dataExpiracao.toDate ? userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao);
+      if (new Date() > dataVencimento) isAcessoExpirado = true;
+    }
   }
 
-  const value = { currentUser, userProfile, login, signup, logout, escolaSelecionada, setEscolaSelecionada, isAcessoExpirado, isSuperAdmin };
-  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
+  const value = {
+    currentUser, userProfile, login, signup, logout,
+    escolaSelecionada, setEscolaSelecionada, isAcessoExpirado, isSuperAdmin
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 }
