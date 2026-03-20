@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../services/firebase'; // 🔥 IMPORTADO PARA O SININHO
-import { collection, query, where, onSnapshot } from 'firebase/firestore'; // 🔥 IMPORTADO PARA O SININHO
+import { db } from '../services/firebase'; 
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
 import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown, UserCircle, Settings, BookOpen, LifeBuoy, ChevronDown, Trash2, Bell } from 'lucide-react';
 
 export default function Navbar() {
@@ -32,7 +32,6 @@ export default function Navbar() {
   useEffect(() => {
     if (!isAdmin) return;
     
-    // Procura no banco usuários que ainda não foram "vistos" pelo admin
     const q = query(collection(db, 'usuarios'), where('vistoPeloAdmin', '==', false));
     
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -53,7 +52,6 @@ export default function Navbar() {
     }
   }
 
-  // 🔥 A MÁGICA DA ROTA: Removemos /cronograma e evoluímos a /tarefas
   const navLinks = [
     { path: '/', icon: <Home size={18} />, label: 'Início' },
     { path: '/turmas', icon: <Users size={18} />, label: 'Turmas' }, 
@@ -100,14 +98,31 @@ export default function Navbar() {
         
         {/* === MODO COMPUTADOR === */}
         <div className="hidden md:flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center gap-3 transition-transform hover:scale-105 shrink-0 mr-8 lg:mr-12">
-            <span className="font-black text-slate-900 text-lg tracking-tight hidden lg:block">Plataforma do Professor</span>
-            <div className="hidden lg:block w-px h-5 bg-gray-300"></div>
-            <span className="bg-blue-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs shadow-sm font-bold tracking-wide" title={nomeCompleto}>
-              <GraduationCap size={14} /> {siglaEscola}
-            </span>
-          </Link>
+          
+          {/* LADO ESQUERDO DA BARRA */}
+          <div className="flex items-center gap-3 shrink-0 mr-8 lg:mr-12">
+            <Link to="/" className="flex items-center gap-3 transition-transform hover:scale-105">
+              <span className="font-black text-slate-900 text-lg tracking-tight hidden lg:block">Plataforma do Professor</span>
+              <div className="hidden lg:block w-px h-5 bg-gray-300"></div>
+              <span className="bg-blue-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs shadow-sm font-bold tracking-wide" title={nomeCompleto}>
+                <GraduationCap size={14} /> {siglaEscola}
+              </span>
+            </Link>
 
+            {/* 🔥 SININHO POSICIONADO ESTRATEGICAMENTE À ESQUERDA */}
+            {isAdmin && (
+              <Link to="/admin" className="relative p-2 ml-2 text-slate-400 hover:text-blue-600 transition-colors bg-slate-50 hover:bg-blue-50 rounded-full" title="Novos cadastros">
+                <Bell size={20} />
+                {novosUsuariosCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-pulse">
+                    {novosUsuariosCount}
+                  </span>
+                )}
+              </Link>
+            )}
+          </div>
+
+          {/* LADO DIREITO DA BARRA */}
           <div className="flex items-center gap-5 lg:gap-6 flex-1 justify-end">
             {mostrarLinks && navLinks.map(link => (
               <Link
@@ -124,28 +139,16 @@ export default function Navbar() {
             ))}
             
             {isAdmin && (
-              <>
-                {/* 🔥 SININHO DE NOTIFICAÇÃO - DESKTOP */}
-                <Link to="/admin" className="relative p-2 text-slate-400 hover:text-blue-600 transition-colors bg-slate-50 hover:bg-blue-50 rounded-full" title="Novos cadastros">
-                  <Bell size={20} />
-                  {novosUsuariosCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-pulse">
-                      {novosUsuariosCount}
-                    </span>
-                  )}
-                </Link>
-
-                <Link
-                  to="/admin"
-                  className={`flex items-center gap-1.5 text-sm font-black transition-all ${
-                    location.pathname === '/admin' 
-                      ? 'text-purple-700 border-b-2 border-purple-600 py-5' 
-                      : 'text-purple-500 hover:text-purple-700 py-5'
-                  }`}
-                >
-                  <Crown size={18} /> Painel SaaS
-                </Link>
-              </>
+              <Link
+                to="/admin"
+                className={`flex items-center gap-1.5 text-sm font-black transition-all ${
+                  location.pathname === '/admin' 
+                    ? 'text-purple-700 border-b-2 border-purple-600 py-5' 
+                    : 'text-purple-500 hover:text-purple-700 py-5'
+                }`}
+              >
+                <Crown size={18} /> Painel SaaS
+              </Link>
             )}
 
             {/* O MENU DO PROFESSOR (DROPDOWN VIP) */}
@@ -164,7 +167,6 @@ export default function Navbar() {
                     <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-0.5">Sessão Ativa</p>
                     <p className="text-sm font-bold text-gray-800 truncate" title={currentUser.email}>{currentUser.email}</p>
                     
-                    {/* 🔥 SELOS DE ASSINATURA */}
                     <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                       <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md flex items-center gap-1">
                         ⚡ {planoNomenclatura}
@@ -208,9 +210,22 @@ export default function Navbar() {
 
         {/* === MODO CELULAR === */}
         <div className="flex md:hidden items-center gap-2 overflow-x-auto py-3 w-full [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          
           <Link to="/" className="shrink-0 flex items-center justify-center bg-blue-600 text-white px-2.5 py-1 rounded-md mr-1 font-bold text-xs gap-1 shadow-sm" title={nomeCompleto}>
             <GraduationCap size={14} /> {siglaEscola}
           </Link>
+
+          {/* 🔥 SININHO POSICIONADO ESTRATEGICAMENTE À ESQUERDA NO MOBILE TAMBÉM */}
+          {isAdmin && (
+            <Link to="/admin" className="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors mr-1">
+              <Bell size={16} />
+              {novosUsuariosCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                  {novosUsuariosCount}
+                </span>
+              )}
+            </Link>
+          )}
 
           {mostrarLinks && navLinks.filter(link => link.path !== '/').map(link => (
             <Link
@@ -225,21 +240,9 @@ export default function Navbar() {
           ))}
 
           {isAdmin && (
-            <>
-              {/* 🔥 SININHO DE NOTIFICAÇÃO - CELULAR */}
-              <Link to="/admin" className="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                <Bell size={16} />
-                {novosUsuariosCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
-                    {novosUsuariosCount}
-                  </span>
-                )}
-              </Link>
-
-              <Link to="/admin" className={`shrink-0 flex items-center gap-1.5 text-xs font-black whitespace-nowrap px-3 py-2 rounded-full transition-colors ${location.pathname === '/admin' ? 'bg-purple-200 text-purple-800' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}`}>
-                <Crown size={14} /> SaaS
-              </Link>
-            </>
+            <Link to="/admin" className={`shrink-0 flex items-center gap-1.5 text-xs font-black whitespace-nowrap px-3 py-2 rounded-full transition-colors ${location.pathname === '/admin' ? 'bg-purple-200 text-purple-800' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}`}>
+              <Crown size={14} /> SaaS
+            </Link>
           )}
 
           <div className="w-px h-6 bg-gray-300 shrink-0 mx-1"></div>
