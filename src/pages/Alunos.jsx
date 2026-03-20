@@ -245,6 +245,25 @@ export default function Alunos() {
     <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Alunos' }]} />
       
+      {/* 🔥 MODO FANTASMA: BARRA DE PROGRESSO DO ONBOARDING (SÓ APARECE SE TIVER ZERO ALUNOS NO SISTEMA) */}
+      {!loading && turmas.length > 0 && alunos.length === 0 && (
+        <div className="bg-white border border-gray-200 p-8 md:p-10 rounded-3xl max-w-4xl mx-auto shadow-sm mt-6 mb-10 animate-in fade-in zoom-in-95">
+          <div className="flex items-center justify-between mb-8 relative">
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2/3 h-1 bg-blue-600 -z-10 rounded-full"></div>
+            
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Turma</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white animate-pulse">3</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Alunos</span></div>
+            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">4</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Tarefas</span></div>
+          </div>
+          <div className="text-center">
+            <h2 className="text-2xl font-black text-gray-800 mb-2">Quase lá! Turma configurada.</h2>
+            <p className="text-gray-500 font-medium text-lg">O Passo 3 é preencher sua sala de aula. Utilize os botões abaixo para cadastrar alunos individualmente ou importar uma lista completa do Excel.</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4 mb-8">
         <h1 className="text-2xl font-black text-gray-800 flex items-center gap-3 tracking-tight">
           <div className="bg-green-100 text-green-600 p-2.5 rounded-xl shadow-sm"><Users size={26} /></div>
@@ -393,9 +412,7 @@ export default function Alunos() {
         )}
       </div>
 
-      {/* =========================================================================
-          MODAL DE MATRÍCULA ÚNICA (VAPT-VUPT)
-          ========================================================================= */}
+      {/* MODAL DE MATRÍCULA ÚNICA (VAPT-VUPT) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
@@ -472,9 +489,7 @@ export default function Alunos() {
         </div>
       )}
 
-      {/* =========================================================================
-          MODAL DE IMPORTAÇÃO EM LOTE (NOVO)
-          ========================================================================= */}
+      {/* MODAL DE IMPORTAÇÃO EM LOTE */}
       {isImportModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
