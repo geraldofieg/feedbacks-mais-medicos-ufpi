@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, query, getDocs, doc, updateDoc, arrayUnion, where, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History, Ban, UserCheck, XCircle } from 'lucide-react';
+import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History, Ban, UserCheck, XCircle, Bell } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { Navigate } from 'react-router-dom';
 
@@ -34,6 +34,28 @@ export default function Admin() {
     }
     fetchUsuarios();
   }, [isAdmin]);
+
+  // 🔥 FUNÇÃO ADICIONADA: Zera a notificação dos novos usuários
+  async function handleMarcarTodosVistos() {
+    try {
+      const batch = writeBatch(db);
+      const novos = usuarios.filter(u => u.vistoPeloAdmin === false);
+      
+      novos.forEach(u => {
+        const ref = doc(db, 'usuarios', u.id);
+        batch.update(ref, { vistoPeloAdmin: true });
+      });
+
+      await batch.commit();
+
+      setUsuarios(usuarios.map(u => 
+        u.vistoPeloAdmin === false ? { ...u, vistoPeloAdmin: true } : u
+      ));
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao atualizar notificações.");
+    }
+  }
 
   async function handleMudarCargo(id, cargoAtual) {
     const novoCargo = cargoAtual === 'admin' ? 'professor' : 'admin';
@@ -247,18 +269,33 @@ export default function Admin() {
 
   if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse">Carregando usuários...</div>;
 
+  const qtdNovos = usuarios.filter(u => u.vistoPeloAdmin === false).length;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <Breadcrumb items={[{ label: 'Painel SaaS' }]} />
 
-      <div className="flex items-center gap-4 mt-6 mb-10">
-        <div className="bg-slate-900 text-yellow-400 p-4 rounded-3xl shadow-xl">
-          <ShieldCheck size={32} />
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-6 mb-10">
+        <div className="flex items-center gap-4">
+          <div className="bg-slate-900 text-yellow-400 p-4 rounded-3xl shadow-xl">
+            <ShieldCheck size={32} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Painel SaaS (CEO)</h1>
+            <p className="text-slate-500 font-medium">Gestão de assinaturas, acessos e faturamento.</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Painel SaaS (CEO)</h1>
-          <p className="text-slate-500 font-medium">Gestão de assinaturas, acessos e faturamento.</p>
-        </div>
+
+        {/* 🔥 BOTÃO PARA ZERAR NOTIFICAÇÕES */}
+        {qtdNovos > 0 && (
+          <button 
+            onClick={handleMarcarTodosVistos}
+            className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white px-5 py-2.5 rounded-xl text-sm font-black transition-all shadow-sm w-full md:w-auto"
+          >
+            <Bell size={18} />
+            Marcar {qtdNovos} como lido{qtdNovos > 1 ? 's' : ''}
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-hidden">
@@ -330,7 +367,15 @@ export default function Admin() {
                           {user.role === 'admin' ? <Crown size={22}/> : <User size={22}/>}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-black text-slate-900 text-lg leading-tight truncate">{user.nome || 'Sem Nome'}</p>
+                          
+                          {/* 🔥 SELO VISUAL DE NOVO USUÁRIO ADICIONADO AQUI */}
+                          <div className="flex items-center gap-2">
+                            <p className="font-black text-slate-900 text-lg leading-tight truncate">{user.nome || 'Sem Nome'}</p>
+                            {user.vistoPeloAdmin === false && (
+                              <span className="bg-red-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full animate-pulse shrink-0">Novo</span>
+                            )}
+                          </div>
+                          
                           <p className="text-sm text-slate-400 font-medium flex items-center gap-1 break-all md:break-normal mt-0.5"><Mail size={12} className="shrink-0"/> {user.email}</p>
                         </div>
                       </div>
