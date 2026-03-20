@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { 
   User, Phone, Sparkles, Save, ShieldCheck, Mail, 
   CheckCircle2, Target, Zap, RefreshCw, AlertCircle,
-  MessageSquareHeart, Stethoscope, Lock, ChevronRight
+  Lock, ChevronRight
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -29,32 +29,6 @@ export default function Configuracoes() {
 
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
   const [loadingMetricas, setLoadingMetricas] = useState(true);
-
-  const templates = [
-    {
-      label: 'Empático',
-      icon: <MessageSquareHeart size={16} />,
-      texto: 'Aja como um preceptor médico acolhedor. Comece sempre validando o esforço do aluno e destacando um ponto positivo. Em seguida, aponte as melhorias técnicas de forma construtiva e encerre com uma frase motivadora para a prática clínica.'
-    },
-    {
-      label: 'Técnico/Acadêmico',
-      icon: <Stethoscope size={16} />,
-      texto: 'Aja como um preceptor médico rigoroso e técnico. Foque na precisão dos protocolos da APS, terminologias corretas e evidências científicas. Avalie a resposta com base estritamente nos critérios do enunciado, sendo direto e formal.'
-    },
-    {
-      label: 'Direto/Prático',
-      icon: <Zap size={16} />,
-      texto: 'Seja direto e objetivo. Use bullet points para listar o que está correto e o que precisa ser ajustado. Evite introduções longas. Foque na resolutividade do problema apresentado pelo aluno.'
-    }
-  ];
-
-  const aplicarTemplate = (textoTemplate) => {
-    if (promptIA.trim() !== "" && promptIA.trim() !== textoTemplate.trim()) {
-      const confirmacao = window.confirm("Isso substituirá suas instruções atuais por este modelo. Deseja continuar?");
-      if (!confirmacao) return;
-    }
-    setPromptIA(textoTemplate);
-  };
 
   useEffect(() => {
     async function fetchPerfil() {
@@ -239,19 +213,6 @@ export default function Configuracoes() {
                   <label className="block text-sm font-black text-indigo-300 uppercase tracking-widest mb-3 ml-1">
                     Instruções de Personalidade (Prompt)
                   </label>
-                  
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {templates.map((temp, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => aplicarTemplate(temp.texto)}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-tighter transition-all"
-                      >
-                        {temp.icon} {temp.label}
-                      </button>
-                    ))}
-                  </div>
 
                   <p className="text-sm text-slate-400 mb-5 leading-relaxed font-medium">
                     Explique como a IA deve corrigir seus alunos. Ela seguirá esse estilo em todos os feedbacks automáticos. Ao salvar, a contagem de eficiência recomeça.
