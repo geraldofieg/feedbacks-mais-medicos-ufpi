@@ -35,7 +35,6 @@ export default function Turmas() {
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
 
-  // 🔥 BUSCA E ATUALIZA A LISTA DE INSTITUIÇÕES PARA O DROPDOWN
   useEffect(() => {
     async function setupInstituicoes() {
       if (!currentUser) return;
@@ -210,7 +209,6 @@ export default function Turmas() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <Breadcrumb items={[{ label: 'Turmas' }]} />
       
-      {/* 🔥 MODO FANTASMA: BARRA DE PROGRESSO DO ONBOARDING (SÓ APARECE SE TIVER ZERO TURMAS NO SISTEMA) */}
       {!loading && !precisaCriarEscola && turmas.length === 0 && (
         <div className="bg-white border border-gray-200 p-8 md:p-10 rounded-3xl max-w-4xl mx-auto shadow-sm mt-6 mb-10 animate-in fade-in zoom-in-95">
           <div className="flex items-center justify-between mb-8 relative">
@@ -229,7 +227,6 @@ export default function Turmas() {
         </div>
       )}
 
-      {/* HEADER MELHORADO (Instituição à esquerda c/ Dropdown, Ação de Nova Instituição Discreta à Direita) */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8 mt-3 border-b pb-6">
         <div>
           <h1 className="text-3xl font-black text-gray-800 tracking-tight mb-2">Gestão de Turmas</h1>
@@ -243,7 +240,6 @@ export default function Turmas() {
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium text-gray-500">Agrupamentos em:</p>
               
-              {/* 🔥 DROPDOWN INJETADO AQUI PARA MUDAR DE INSTITUIÇÃO RAPIDAMENTE 🔥 */}
               <select 
                 className="bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded-md border-none outline-none cursor-pointer hover:bg-gray-200 transition-colors text-sm max-w-[200px] sm:max-w-[300px] truncate"
                 value={escolaSelecionada?.id || ''}
@@ -273,10 +269,8 @@ export default function Turmas() {
         </button>
       </div>
 
-      {/* BLOCO SUPERIOR: CARTÕES DE CRIAÇÃO LADO A LADO */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
         
-        {/* CARTÃO 1: CRIAR DO ZERO */}
         <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
            <div className="flex items-center gap-3 mb-5">
               <div className="bg-blue-100 text-blue-600 p-3 rounded-xl"><Plus size={22}/></div>
@@ -293,7 +287,6 @@ export default function Turmas() {
            </form>
         </div>
 
-        {/* CARTÃO 2: COPIAR EXISTENTE */}
         <div className="bg-purple-50/30 border border-purple-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
            <div className="absolute -right-6 -top-6 text-purple-100 opacity-50 pointer-events-none"><Copy size={100} /></div>
            <div className="relative z-10">
@@ -310,7 +303,6 @@ export default function Turmas() {
                     required 
                     className="flex-1 px-4 py-3 bg-white border border-purple-200 rounded-xl font-bold outline-none cursor-pointer focus:ring-2 focus:ring-purple-500 text-sm text-gray-700 shadow-sm" 
                     value={modeloSelecionado} 
-                    // 🔥 MÁGICA DO AUTOFILL AQUI
                     onChange={e => {
                         const idModel = e.target.value;
                         setModeloSelecionado(idModel);
@@ -336,7 +328,6 @@ export default function Turmas() {
 
       </div>
 
-      {/* BLOCO INFERIOR: GRELHA DE TURMAS ATIVAS */}
       <div>
         <h2 className="text-lg font-black text-gray-800 mb-4">Salas de Aula Ativas</h2>
         
@@ -374,8 +365,16 @@ export default function Turmas() {
                 </div>
 
                 <div className="mt-auto pt-4 border-t border-gray-100 flex gap-3">
-                  <Link to="/alunos" state={{ turmaIdSelecionada: turma.id }} className="flex-1 flex items-center justify-center gap-1.5 bg-gray-50 py-2.5 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors">
-                    <Users size={14}/> Alunos
+                  <Link 
+                    to="/alunos" 
+                    state={{ turmaIdSelecionada: turma.id }} 
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs transition-all ${
+                      turmas.length === 1 
+                        ? 'bg-blue-600 text-white font-black shadow-lg shadow-blue-600/20 hover:bg-blue-700 animate-in zoom-in duration-300' 
+                        : 'bg-gray-50 font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                    }`}
+                  >
+                    <Users size={14}/> {turmas.length === 1 ? 'Passo 3: Adicionar Alunos' : 'Alunos'}
                   </Link>
                   <Link to="/tarefas" state={{ turmaIdSelecionada: turma.id }} className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 py-2.5 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition-colors">
                     <FileText size={14}/> Tarefas
