@@ -33,8 +33,11 @@ export default function Dashboard() {
   
   const [mostrarTour, setMostrarTour] = useState(false);
 
-  // 🔥 ESTADOS DO MODAL DE NOVA INSTITUIÇÃO
+  // 🔥 ESTADOS DO MODAL DE INSTITUIÇÃO
   const [isModalInstituicaoOpen, setIsModalInstituicaoOpen] = useState(false);
+  const [instituicoesGlobais, setInstituicoesGlobais] = useState([]);
+  const [modoInstituicao, setModoInstituicao] = useState('existente'); // 'existente' ou 'nova'
+  const [instituicaoSelecionadaId, setInstituicaoSelecionadaId] = useState('');
   const [novaInstituicaoNome, setNovaInstituicaoNome] = useState('');
   const [salvandoInstituicao, setSalvandoInstituicao] = useState(false);
 
@@ -51,26 +54,14 @@ export default function Dashboard() {
     async function setupRadarGlobal() {
       radarExecutado.current = true; 
       try {
+        // 🔥 BUSCA TODAS AS INSTITUIÇÕES PARA O MODAL
         const instRef = collection(db, 'instituicoes');
-        
-        const qInst = isAdmin 
-          ? instRef 
-          : query(instRef, where('professorUid', '==', currentUser.uid));
-        
-        const snap = await getDocs(qInst);
-        const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
-        lista.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-       
-        setInstituicoes(lista);
-
-        if (lista.length === 0) {
-          if (escolaSelecionada !== null) setEscolaSelecionada(null);
-          setLoadingInst(false);
-          return;
-        }
+        const snapGlobais = await getDocs(instRef);
+        const todasInst = snapGlobais.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => i.status !== 'lixeira');
+        todasInst.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+        setInstituicoesGlobais(todasInst);
 
         const turmasRef = collection(db, 'turmas');
-        
         const qTurmasGlobais = isAdmin 
           ? turmasRef 
           : query(turmasRef, where('professorUid', '==', currentUser.uid));
@@ -80,7 +71,22 @@ export default function Dashboard() {
             .map(d => ({ ...d.data(), tsCriacao: d.data().dataCriacao?.toMillis ? d.data().dataCriacao.toMillis() : 0 }))
             .filter(t => t.status !== 'lixeira')
             .sort((a, b) => b.tsCriacao - a.tsCriacao);
-            
+
+        const instIdsComTurmas = [...new Set(turmasGlobais.map(t => t.instituicaoId))];
+
+        // 🔥 PAREDE DE CONCRETO MELHORADA: Exibe no topo as que ele criou E as que ele já tem turma
+        let lista = isAdmin 
+          ? todasInst 
+          : todasInst.filter(i => i.professorUid === currentUser.uid || instIdsComTurmas.includes(i.id));
+       
+        setInstituicoes(lista);
+
+        if (lista.length === 0) {
+          if (escolaSelecionada !== null) setEscolaSelecionada(null);
+          setLoadingInst(false);
+          return;
+        }
+
         const escolaCacheStr = localStorage.getItem('@SaaS_EscolaSelecionada');
         const escolaCache = escolaCacheStr ? JSON.parse(escolaCacheStr) : null;
         const escolaCacheValida = escolaCache && lista.some(i => i.id === escolaCache.id);
@@ -232,32 +238,42 @@ export default function Dashboard() {
     fetchDados();
   }, [escolaSelecionada, currentUser, isAdmin]);
 
-  // 🔥 FUNÇÃO QUE CRIA A INSTITUIÇÃO DIRETAMENTE NO MODAL
-  async function handleCriarInstituicao(e) {
+  // 🔥 NOVA LÓGICA DE INSTITUIÇÃO DO MODAL
+  async function handleSelecionarOuCriarInstituicao(e) {
     e.preventDefault();
-    if (!novaInstituicaoNome.trim()) return;
-    
     setSalvandoInstituicao(true);
+    
     try {
-      const novaInst = {
-        nome: novaInstituicaoNome.trim(),
-        professorUid: currentUser.uid,
-        status: 'ativo',
-        dataCriacao: serverTimestamp()
-      };
-      
-      const docRef = await addDoc(collection(db, 'instituicoes'), novaInst);
-      const instCriada = { id: docRef.id, ...novaInst };
+      let instAlvo = null;
 
-      // Atualiza os estados locais imediatamente para avançar a barra de progresso
-      setInstituicoes([instCriada]);
-      setEscolaSelecionada(instCriada);
-      
-      setIsModalInstituicaoOpen(false);
-      setNovaInstituicaoNome('');
+      if (modoInstituicao === 'nova') {
+        if (!novaInstituicaoNome.trim()) return;
+        const novaInst = {
+          nome: novaInstituicaoNome.trim(),
+          professorUid: currentUser.uid,
+          status: 'ativo',
+          dataCriacao: serverTimestamp()
+        };
+        const docRef = await addDoc(collection(db, 'instituicoes'), novaInst);
+        instAlvo = { id: docRef.id, ...novaInst };
+        setInstituicoesGlobais(prev => [...prev, instAlvo].sort((a, b) => a.nome.localeCompare(b.nome)));
+      } else {
+        if (!instituicaoSelecionadaId) return;
+        instAlvo = instituicoesGlobais.find(i => i.id === instituicaoSelecionadaId);
+      }
+
+      if (instAlvo) {
+        if (!instituicoes.some(i => i.id === instAlvo.id)) {
+          setInstituicoes(prev => [...prev, instAlvo].sort((a, b) => a.nome.localeCompare(b.nome)));
+        }
+        setEscolaSelecionada(instAlvo);
+        setIsModalInstituicaoOpen(false);
+        setNovaInstituicaoNome('');
+        setInstituicaoSelecionadaId('');
+      }
     } catch (error) {
-      console.error("Erro ao criar instituição:", error);
-      alert("Erro ao criar instituição. Tente novamente.");
+      console.error("Erro ao configurar instituição:", error);
+      alert("Erro ao configurar instituição. Tente novamente.");
     } finally {
       setSalvandoInstituicao(false);
     }
@@ -313,7 +329,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 🔥 LÓGICA DE ONBOARDING: PASSO 1 (ZERO INSTITUIÇÕES) */}
       {instituicoes.length === 0 ? (
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
           
@@ -328,18 +343,16 @@ export default function Dashboard() {
           <div className="text-center">
             <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><School size={40}/></div>
             <h2 className="text-2xl font-black text-gray-800 mb-3">Bem-vindo(a) à Plataforma!</h2>
-            <p className="text-gray-500 font-medium mb-8 text-lg">Para darmos início ao seu fluxo de trabalho, o primeiro passo é cadastrar o nome da sua Instituição de Ensino.</p>
-            {/* 🔥 MUDANÇA AQUI: Agora é um botão que abre o modal */}
+            <p className="text-gray-500 font-medium mb-8 text-lg">Para darmos início ao seu fluxo de trabalho, o primeiro passo é selecionar ou cadastrar sua Instituição de Ensino.</p>
             <button 
               onClick={() => setIsModalInstituicaoOpen(true)} 
               className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg"
             >
-              Passo 1: Criar Instituição <ChevronRight size={18}/>
+              Passo 1: Vincular Instituição <ChevronRight size={18}/>
             </button>
           </div>
         </div>
 
-      /* 🔥 LÓGICA DE ONBOARDING: PASSO 2 (TEM INSTITUIÇÃO, MAS ZERO TURMAS) */
       ) : minhasTurmas.length === 0 ? (
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
           
@@ -470,35 +483,60 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* 🔥 MODAL DE CRIAR INSTITUIÇÃO */}
+      {/* 🔥 MODAL DE SELECIONAR OU CRIAR INSTITUIÇÃO */}
       {isModalInstituicaoOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-              <h3 className="font-black text-gray-800 text-lg">Nova Instituição</h3>
+              <h3 className="font-black text-gray-800 text-lg">Vincular Instituição</h3>
               <button onClick={() => setIsModalInstituicaoOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
                 <X size={20}/>
               </button>
             </div>
             
-            <form onSubmit={handleCriarInstituicao} className="p-6">
-              <label className="block text-sm font-bold text-gray-700 mb-2">Nome da Instituição de Ensino</label>
-              <input
-                type="text"
-                autoFocus
-                required
-                value={novaInstituicaoNome}
-                onChange={(e) => setNovaInstituicaoNome(e.target.value)}
-                placeholder="Ex: UFPI, Estácio, USP..."
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 outline-none font-medium text-gray-700 transition-colors mb-6"
-              />
+            <form onSubmit={handleSelecionarOuCriarInstituicao} className="p-6">
+              
+              <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
+                <button type="button" onClick={() => setModoInstituicao('existente')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${modoInstituicao === 'existente' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Já Cadastrada</button>
+                <button type="button" onClick={() => setModoInstituicao('nova')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${modoInstituicao === 'nova' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Nova Instituição</button>
+              </div>
+
+              {modoInstituicao === 'existente' ? (
+                <div className="mb-6 animate-in fade-in">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Selecione sua Instituição</label>
+                  <select
+                    required
+                    value={instituicaoSelecionadaId}
+                    onChange={(e) => setInstituicaoSelecionadaId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 outline-none font-medium text-gray-700 transition-colors cursor-pointer"
+                  >
+                    <option value="">Selecione...</option>
+                    {instituicoesGlobais.map(i => (
+                      <option key={i.id} value={i.id}>{i.nome}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="mb-6 animate-in fade-in">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Nome da Nova Instituição</label>
+                  <input
+                    type="text"
+                    autoFocus
+                    required
+                    value={novaInstituicaoNome}
+                    onChange={(e) => setNovaInstituicaoNome(e.target.value)}
+                    placeholder="Ex: Faculdade XYZ..."
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 outline-none font-medium text-gray-700 transition-colors"
+                  />
+                </div>
+              )}
               
               <div className="flex gap-3">
                 <button type="button" onClick={() => setIsModalInstituicaoOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
                   Cancelar
                 </button>
-                <button type="submit" disabled={salvandoInstituicao || !novaInstituicaoNome.trim()} className="flex-1 py-3 rounded-xl font-black text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50">
-                  {salvandoInstituicao ? 'Salvando...' : 'Criar Instituição'}
+                <button type="submit" disabled={salvandoInstituicao || (modoInstituicao === 'nova' ? !novaInstituicaoNome.trim() : !instituicaoSelecionadaId)} className="flex-1 py-3 rounded-xl font-black text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                  {salvandoInstituicao ? 'Salvando...' : 'Avançar'}
                 </button>
               </div>
             </form>
