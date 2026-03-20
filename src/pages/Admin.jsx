@@ -38,6 +38,7 @@ export default function Admin() {
   async function handleMudarCargo(id, cargoAtual) {
     const novoCargo = cargoAtual === 'admin' ? 'professor' : 'admin';
     if (!window.confirm(`Deseja alterar o acesso deste usuário para ${novoCargo.toUpperCase()}?`)) return;
+
     try {
       await updateDoc(doc(db, 'usuarios', id), { role: novoCargo });
       setUsuarios(usuarios.map(u => u.id === id ? { ...u, role: novoCargo } : u));
@@ -86,7 +87,7 @@ export default function Admin() {
         isVitalicio: false,
         historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
       } : u));
-      
+
       alert(`Assinatura estendida por ${diasAdicionais} dias!`);
     } catch (error) {
       alert("Erro ao estender assinatura.");
@@ -104,7 +105,7 @@ export default function Admin() {
     }
 
     const novaData = new Date(ano, mes - 1, dia, 23, 59, 59);
-    
+
     if (isNaN(novaData.getTime())) {
       return alert("Data inválida. Tente novamente.");
     }
@@ -208,12 +209,12 @@ export default function Admin() {
     const confirmacao = window.confirm(
       `CUIDADO EXTREMO!\n\nVocê está prestes a fazer um HARD DELETE na conta de:\n"${user.nome || user.email}".\n\nIsso irá APAGAR DE VEZ:\n- O Perfil do Usuário\n- Todas as Instituições\n- Todas as Turmas\n- Todos os Alunos\n- Todas as Tarefas e Respostas que este e-mail criou.\n\nEssa ação é irreversível e feita apenas para testes. Deseja DESTRUIR todos os dados deste usuário?`
     );
-    
+
     if (!confirmacao) return;
 
     try {
       const uidParaApagar = user.id; 
-      const batch = writeBatch(db); 
+      const batch = writeBatch(db);
 
       const ativSnap = await getDocs(query(collection(db, 'atividades'), where('professorUid', '==', uidParaApagar)));
       ativSnap.forEach(doc => batch.delete(doc.ref));
@@ -261,9 +262,10 @@ export default function Admin() {
       </div>
 
       <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
+        {/* A Mágica de Responsividade acontece aqui na Tabela */}
+        <div className="overflow-hidden md:overflow-x-auto">
+          <table className="w-full text-left border-collapse flex flex-col md:table">
+            <thead className="hidden md:table-header-group">
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Professor / Usuário</th>
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest">Nível de Acesso</th>
@@ -272,14 +274,14 @@ export default function Admin() {
                 <th className="p-6 text-sm font-black text-slate-800 uppercase tracking-widest text-right">Gestão e Bloqueio</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="flex flex-col md:table-row-group divide-y-[8px] md:divide-y md:divide-y-[1px] divide-slate-100 md:divide-slate-50">
               {usuarios.map(user => {
                 
                 let statusVisual = "Ativo";
                 let corStatus = "text-green-700 bg-green-100";
                 let textoValidade = "";
                 let textoDiasRestantes = null; 
-                let dataApenasString = ""; 
+                let dataApenasString = "";
 
                 if (user.status === 'bloqueado') {
                   statusVisual = "Bloqueado Manualmente";
@@ -319,42 +321,47 @@ export default function Admin() {
                 }
 
                 return (
-                  <tr key={user.id} className={`hover:bg-slate-50/50 transition-colors group ${user.status === 'bloqueado' ? 'opacity-70' : ''}`}>
+                  <tr key={user.id} className={`flex flex-col md:table-row hover:bg-slate-50/50 transition-colors group p-4 md:p-0 ${user.status === 'bloqueado' ? 'opacity-70' : ''}`}>
                     
-                    <td className="p-6">
+                    <td className="p-2 md:p-6 flex flex-col md:table-cell border-b border-slate-100 md:border-none mb-4 md:mb-0 pb-4 md:pb-0 last:border-0 last:mb-0 last:pb-0">
+                      <span className="md:hidden text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Professor / Usuário</span>
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${user.role === 'admin' ? 'bg-yellow-100 text-yellow-600' : 'bg-blue-100 text-blue-600'}`}>
                           {user.role === 'admin' ? <Crown size={22}/> : <User size={22}/>}
                         </div>
-                        <div>
-                          <p className="font-black text-slate-900 text-lg leading-tight">{user.nome || 'Sem Nome'}</p>
-                          <p className="text-sm text-slate-400 font-medium flex items-center gap-1"><Mail size={12}/> {user.email}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black text-slate-900 text-lg leading-tight truncate">{user.nome || 'Sem Nome'}</p>
+                          <p className="text-sm text-slate-400 font-medium flex items-center gap-1 break-all md:break-normal mt-0.5"><Mail size={12} className="shrink-0"/> {user.email}</p>
                         </div>
                       </div>
                     </td>
 
-                    <td className="p-6">
-                      <button 
-                        onClick={() => handleMudarCargo(user.id, user.role)}
-                        disabled={user.status === 'bloqueado'}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
-                          user.role === 'admin' 
-                            ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' 
-                            : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'
-                        } ${user.status === 'bloqueado' && 'cursor-not-allowed opacity-50'}`}
-                      >
-                        {user.role === 'admin' ? <><Crown size={14}/> Super Admin</> : <><UserCog size={14}/> Professor</>}
-                      </button>
+                    <td className="p-2 md:p-6 flex flex-col md:table-cell border-b border-slate-100 md:border-none mb-4 md:mb-0 pb-4 md:pb-0 last:border-0 last:mb-0 last:pb-0">
+                      <span className="md:hidden text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Nível de Acesso</span>
+                      <div>
+                        <button 
+                          onClick={() => handleMudarCargo(user.id, user.role)}
+                          disabled={user.status === 'bloqueado'}
+                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all border ${
+                            user.role === 'admin' 
+                              ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' 
+                              : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'
+                          } ${user.status === 'bloqueado' && 'cursor-not-allowed opacity-50'}`}
+                        >
+                          {user.role === 'admin' ? <><Crown size={14}/> Super Admin</> : <><UserCog size={14}/> Professor</>}
+                        </button>
+                      </div>
                     </td>
 
-                    <td className="p-6">
-                      <div className="relative inline-block">
+                    <td className="p-2 md:p-6 flex flex-col md:table-cell border-b border-slate-100 md:border-none mb-4 md:mb-0 pb-4 md:pb-0 last:border-0 last:mb-0 last:pb-0">
+                      <span className="md:hidden text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Plano de Assinatura</span>
+                      <div className="relative inline-block w-full md:w-auto">
                         <Zap className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${user.plano === 'premium' ? 'text-yellow-500' : 'text-slate-300'}`} size={16} />
                         <select 
                           value={user.plano || 'basico'} 
                           disabled={user.status === 'bloqueado'}
                           onChange={(e) => handleMudarPlano(user.id, e.target.value)}
-                          className={`bg-slate-50 border-2 border-slate-100 text-slate-700 text-sm rounded-xl py-2.5 pl-10 pr-4 font-black outline-none focus:border-blue-500 appearance-none shadow-sm min-w-[200px] ${user.status === 'bloqueado' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                          className={`w-full md:w-auto bg-slate-50 border-2 border-slate-100 text-slate-700 text-sm rounded-xl py-2.5 pl-10 pr-4 font-black outline-none focus:border-blue-500 appearance-none shadow-sm min-w-[200px] ${user.status === 'bloqueado' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                         >
                           <option value="trial">Trial de 30 Dias</option>
                           <option value="basico">Tier 1: Básico</option>
@@ -364,7 +371,8 @@ export default function Admin() {
                       </div>
                     </td>
 
-                    <td className="p-6">
+                    <td className="p-2 md:p-6 flex flex-col md:table-cell border-b border-slate-100 md:border-none mb-4 md:mb-0 pb-4 md:pb-0 last:border-0 last:mb-0 last:pb-0">
+                      <span className="md:hidden text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Assinatura (SaaS)</span>
                       <div className="flex flex-col items-start gap-2">
                         <div className="flex items-center gap-2">
                           <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-wider ${corStatus}`}>
@@ -414,12 +422,13 @@ export default function Admin() {
                       </div>
                     </td>
 
-                    <td className="p-6">
-                      <div className="flex flex-col items-end gap-2">
+                    <td className="p-2 md:p-6 flex flex-col md:table-cell last:border-0 last:mb-0 last:pb-0">
+                      <span className="md:hidden text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Gestão e Bloqueio</span>
+                      <div className="flex flex-col md:items-end gap-2 w-full">
                         
                         <button 
                           onClick={() => handleAlternarBloqueio(user)} 
-                          className={`flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm w-full justify-center border ${
+                          className={`flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm w-full md:w-auto justify-center border ${
                             user.status === 'bloqueado' 
                               ? 'bg-green-50 text-green-600 border-green-200 hover:bg-green-600 hover:text-white' 
                               : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-600 hover:text-white'
@@ -431,7 +440,7 @@ export default function Admin() {
 
                         <button 
                           onClick={() => handleExcluirUsuario(user)} 
-                          className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm w-full justify-center" 
+                          className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm w-full md:w-auto justify-center" 
                           title="Vaporizar Todos os Dados do Banco"
                         >
                           <Trash2 size={14} /> Excluir Dados
