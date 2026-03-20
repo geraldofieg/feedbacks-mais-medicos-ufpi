@@ -10,7 +10,7 @@ import Breadcrumb from '../components/Breadcrumb';
 export default function Planos() {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
-  
+
   // Identifica o plano atual para mudar os botões
   const planoAtual = userProfile?.plano || 'basico';
   const numeroWhatsApp = "5586999999999"; // Coloque o seu número de vendas aqui
@@ -29,6 +29,7 @@ export default function Planos() {
           <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
             <ArrowLeft size={24} />
           </button>
+  
           <div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight">Assinaturas</h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Escolha seu pacote</p>
@@ -67,7 +68,7 @@ export default function Planos() {
             <div className="mb-8">
               <div className="flex items-end gap-1 mb-1">
                 <span className="text-slate-500 font-bold">R$</span>
-                <span className="text-5xl font-black text-slate-900 tracking-tighter">29</span>
+                <span className="text-5xl font-black text-slate-900 tracking-tighter">59</span>
                 <span className="text-slate-500 font-bold mb-1">,90</span>
               </div>
               <p className="text-slate-400 text-sm font-bold">/mês no plano anual</p>
@@ -175,7 +176,7 @@ export default function Planos() {
           <div>
             <h3 className="text-2xl font-black text-white mb-3">Você no Controle Absoluto. Sempre.</h3>
             <p className="text-slate-400 font-medium leading-relaxed mb-4 text-sm md:text-base">
-              Acreditamos que a tecnologia existe para ser sua assistente, e não sua substituta. Nosso motor utiliza os modelos mais recentes e potentes do mercado para ler e sugerir avaliações precisas, poupando horas do seu dia. 
+              Acreditamos que a tecnologia existe para ser sua assistente, e não sua substituta. Nosso motor utiliza os modelos mais recentes e potentes do mercado para ler e sugerir avaliações precisas, poupando horas do seu dia.
             </p>
             <p className="text-slate-300 font-bold flex items-center gap-2 justify-center md:justify-start">
               <LockKeyhole size={18} className="text-indigo-400"/>
