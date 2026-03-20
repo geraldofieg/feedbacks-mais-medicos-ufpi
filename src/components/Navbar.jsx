@@ -181,20 +181,6 @@ export default function Navbar() {
             <GraduationCap size={14} /> {siglaEscola}
           </Link>
 
-          {/* 🔥 SELOS DE ASSINATURA ADICIONADOS NO CELULAR */}
-          <div className="shrink-0 flex items-center gap-1.5 mr-1">
-            <span className="text-[10px] font-black uppercase tracking-widest bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-full flex items-center gap-1">
-              ⚡ {planoNomenclatura}
-            </span>
-            {diasRestantesText && (
-              <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-full ${corBadgeDias}`}>
-                {diasRestantesText}
-              </span>
-            )}
-          </div>
-
-          <div className="w-px h-6 bg-gray-300 shrink-0 mx-1"></div>
-
           {mostrarLinks && navLinks.filter(link => link.path !== '/').map(link => (
             <Link
               key={link.path}
@@ -230,6 +216,20 @@ export default function Navbar() {
           <button onClick={() => window.open('https://wa.me/', '_blank')} className="shrink-0 flex items-center gap-1.5 text-xs font-bold whitespace-nowrap px-3 py-2 rounded-full bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
             <LifeBuoy size={14} /> Ajuda
           </button>
+
+          <div className="w-px h-6 bg-gray-300 shrink-0 mx-1"></div>
+
+          {/* 🔥 SELOS DE ASSINATURA MOVIDOS PARA O FINAL NO CELULAR */}
+          <div className="shrink-0 flex items-center gap-1.5">
+            <span className="text-[10px] font-black uppercase tracking-widest bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-full flex items-center gap-1">
+              ⚡ {planoNomenclatura}
+            </span>
+            {diasRestantesText && (
+              <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-full ${corBadgeDias}`}>
+                {diasRestantesText}
+              </span>
+            )}
+          </div>
 
           <button onClick={handleLogout} className="shrink-0 flex items-center gap-1 text-xs font-black whitespace-nowrap px-4 py-2 rounded-full bg-red-50 text-red-600 border border-red-100 hover:bg-red-100">
             <LogOut size={14} /> Sair
