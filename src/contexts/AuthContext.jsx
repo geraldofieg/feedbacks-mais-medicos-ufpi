@@ -4,7 +4,8 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  sendEmailVerification // 🔥 ADICIONADO PARA ENVIAR E-MAIL AUTOMÁTICO
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'; 
 
@@ -33,14 +34,23 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // 🔥 FUNÇÃO ATUALIZADA: Recebe nome e whatsapp e marca como NÃO VISTO
+  // 🔥 FUNÇÃO COMPLETA: Salva dados, envia e-mail e liga o sininho
   async function signup(email, password, nome, whatsapp) {
+    // 1. Cria a conta no Firebase Authentication
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+
+    // 2. DISPARA O E-MAIL DE CONFIRMAÇÃO AUTOMATICAMENTE
+    try {
+      await sendEmailVerification(user);
+    } catch (err) {
+      console.error("Erro ao enviar verificação:", err);
+    }
 
     const dataExpiracao = new Date();
     dataExpiracao.setDate(dataExpiracao.getDate() + 30);
 
+    // 3. Monta o perfil com todos os gatilhos necessários
     const novoPerfil = {
       nome: nome,
       whatsapp: whatsapp || '',
@@ -50,11 +60,13 @@ export function AuthProvider({ children }) {
       dataCriacao: serverTimestamp(),
       dataExpiracao: dataExpiracao,
       isVitalicio: false,
-      vistoPeloAdmin: false // 🔥 ISSO LIGA O SININHO
+      vistoPeloAdmin: false // 🔥 ISSO ATIVA O SININHO NO NAVBAR
     };
 
+    // 4. Salva no Firestore
     await setDoc(doc(db, 'usuarios', user.uid), novoPerfil);
     setUserProfile(novoPerfil);
+    
     return userCredential;
   }
 
