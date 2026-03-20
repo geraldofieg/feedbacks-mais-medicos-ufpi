@@ -50,6 +50,31 @@ export default function Navbar() {
   
   const mostrarLinks = !!escolaSelecionada?.id;
 
+  // 🔥 LÓGICA DE ASSINATURA (SaaS) ADICIONADA AQUI
+  let planoNomenclatura = "Básico";
+  if (userProfile?.plano === 'intermediario') planoNomenclatura = "Intermediário";
+  if (userProfile?.plano === 'premium') planoNomenclatura = "Premium (IA)";
+  if (userProfile?.plano === 'trial') planoNomenclatura = "Trial 30 Dias";
+
+  let diasRestantesText = "";
+  let corBadgeDias = "bg-slate-100 text-slate-600";
+
+  if (userProfile?.isVitalicio) {
+    diasRestantesText = "♾️ Vitalício";
+    corBadgeDias = "bg-purple-100 text-purple-700";
+  } else if (userProfile?.dataExpiracao) {
+    const dVenc = userProfile.dataExpiracao.toDate ? userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao.seconds ? userProfile.dataExpiracao.seconds * 1000 : userProfile.dataExpiracao);
+    const diff = Math.ceil((dVenc - new Date()) / (1000 * 60 * 60 * 24));
+    
+    if (diff < 0) {
+      diasRestantesText = `Vencido há ${Math.abs(diff)}d`;
+      corBadgeDias = "bg-red-100 text-red-700";
+    } else {
+      diasRestantesText = `⏳ Restam ${diff}d`;
+      corBadgeDias = diff <= 5 ? "bg-orange-100 text-orange-700" : "bg-emerald-100 text-emerald-700";
+    }
+  }
+
   return (
     <div className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4">
@@ -107,6 +132,18 @@ export default function Navbar() {
                   <div className="px-4 py-4 bg-gray-50 border-b border-gray-100">
                     <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-0.5">Sessão Ativa</p>
                     <p className="text-sm font-bold text-gray-800 truncate" title={currentUser.email}>{currentUser.email}</p>
+                    
+                    {/* 🔥 SELOS DE ASSINATURA ADICIONADOS AQUI */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                      <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        ⚡ {planoNomenclatura}
+                      </span>
+                      {diasRestantesText && (
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${corBadgeDias}`}>
+                          {diasRestantesText}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="p-2 space-y-1">
@@ -118,7 +155,6 @@ export default function Navbar() {
                       <Trash2 size={18} /> Lixeira (Recuperar)
                     </Link>
 
-                    {/* 🔥 AQUI ESTÁ A MUDANÇA: Link para a página do Guia! */}
                     <Link to="/guia" onClick={() => setMenuAberto(false)} className="w-full text-left flex items-center gap-3 px-3 py-2.5 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors">
                       <BookOpen size={18} /> Como Funciona
                     </Link>
