@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown, UserCircle, Settings, BookOpen, LifeBuoy, ChevronDown, Trash2 } from 'lucide-react';
+import { db } from '../services/firebase'; // 🔥 IMPORTADO PARA O SININHO
+import { collection, query, where, onSnapshot } from 'firebase/firestore'; // 🔥 IMPORTADO PARA O SININHO
+import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown, UserCircle, Settings, BookOpen, LifeBuoy, ChevronDown, Trash2, Bell } from 'lucide-react';
 
 export default function Navbar() {
   const { currentUser, userProfile, logout, escolaSelecionada } = useAuth();
@@ -10,6 +12,9 @@ export default function Navbar() {
   
   const [menuAberto, setMenuAberto] = useState(false);
   const menuRef = useRef(null);
+  
+  // 🔥 ESTADO DO SININHO DE NOTIFICAÇÃO
+  const [novosUsuariosCount, setNovosUsuariosCount] = useState(0);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -21,9 +26,23 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (!currentUser) return null;
-
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+
+  // 🔥 EFEITO PARA ESCUTAR NOVOS CADASTROS EM TEMPO REAL
+  useEffect(() => {
+    if (!isAdmin) return;
+    
+    // Procura no banco usuários que ainda não foram "vistos" pelo admin
+    const q = query(collection(db, 'usuarios'), where('vistoPeloAdmin', '==', false));
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      setNovosUsuariosCount(querySnapshot.docs.length);
+    });
+    
+    return () => unsubscribe();
+  }, [isAdmin]);
+
+  if (!currentUser) return null;
 
   async function handleLogout() {
     try {
@@ -105,16 +124,28 @@ export default function Navbar() {
             ))}
             
             {isAdmin && (
-              <Link
-                to="/admin"
-                className={`flex items-center gap-1.5 text-sm font-black transition-all ${
-                  location.pathname === '/admin' 
-                    ? 'text-purple-700 border-b-2 border-purple-600 py-5' 
-                    : 'text-purple-500 hover:text-purple-700 py-5'
-                }`}
-              >
-                <Crown size={18} /> Painel SaaS
-              </Link>
+              <>
+                {/* 🔥 SININHO DE NOTIFICAÇÃO - DESKTOP */}
+                <Link to="/admin" className="relative p-2 text-slate-400 hover:text-blue-600 transition-colors bg-slate-50 hover:bg-blue-50 rounded-full" title="Novos cadastros">
+                  <Bell size={20} />
+                  {novosUsuariosCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-pulse">
+                      {novosUsuariosCount}
+                    </span>
+                  )}
+                </Link>
+
+                <Link
+                  to="/admin"
+                  className={`flex items-center gap-1.5 text-sm font-black transition-all ${
+                    location.pathname === '/admin' 
+                      ? 'text-purple-700 border-b-2 border-purple-600 py-5' 
+                      : 'text-purple-500 hover:text-purple-700 py-5'
+                  }`}
+                >
+                  <Crown size={18} /> Painel SaaS
+                </Link>
+              </>
             )}
 
             {/* O MENU DO PROFESSOR (DROPDOWN VIP) */}
@@ -194,9 +225,21 @@ export default function Navbar() {
           ))}
 
           {isAdmin && (
-            <Link to="/admin" className={`shrink-0 flex items-center gap-1.5 text-xs font-black whitespace-nowrap px-3 py-2 rounded-full transition-colors ${location.pathname === '/admin' ? 'bg-purple-200 text-purple-800' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}`}>
-              <Crown size={14} /> SaaS
-            </Link>
+            <>
+              {/* 🔥 SININHO DE NOTIFICAÇÃO - CELULAR */}
+              <Link to="/admin" className="relative shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors">
+                <Bell size={16} />
+                {novosUsuariosCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                    {novosUsuariosCount}
+                  </span>
+                )}
+              </Link>
+
+              <Link to="/admin" className={`shrink-0 flex items-center gap-1.5 text-xs font-black whitespace-nowrap px-3 py-2 rounded-full transition-colors ${location.pathname === '/admin' ? 'bg-purple-200 text-purple-800' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}`}>
+                <Crown size={14} /> SaaS
+              </Link>
+            </>
           )}
 
           <div className="w-px h-6 bg-gray-300 shrink-0 mx-1"></div>
@@ -219,7 +262,7 @@ export default function Navbar() {
 
           <div className="w-px h-6 bg-gray-300 shrink-0 mx-1"></div>
 
-          {/* 🔥 SELOS DE ASSINATURA MOVIDOS PARA O FINAL NO CELULAR */}
+          {/* 🔥 SELOS DE ASSINATURA */}
           <div className="shrink-0 flex items-center gap-1.5">
             <span className="text-[10px] font-black uppercase tracking-widest bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-full flex items-center gap-1">
               ⚡ {planoNomenclatura}
