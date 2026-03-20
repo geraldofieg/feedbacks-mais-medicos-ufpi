@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, Pencil } from 'lucide-react';
+import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, Pencil, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import OnboardingModal from '../components/OnboardingModal';
 
@@ -33,6 +33,11 @@ export default function Dashboard() {
   
   const [mostrarTour, setMostrarTour] = useState(false);
 
+  // 🔥 ESTADOS DO MODAL DE NOVA INSTITUIÇÃO
+  const [isModalInstituicaoOpen, setIsModalInstituicaoOpen] = useState(false);
+  const [novaInstituicaoNome, setNovaInstituicaoNome] = useState('');
+  const [salvandoInstituicao, setSalvandoInstituicao] = useState(false);
+
   const radarExecutado = useRef(false);
 
   const finalizadosVisor = isAdmin ? kanban.finalizados : (kanban.finalizados + kanban.faltaLancar);
@@ -48,7 +53,6 @@ export default function Dashboard() {
       try {
         const instRef = collection(db, 'instituicoes');
         
-        // 🔥 PAREDE 1: Isola as Instituições pelo dono
         const qInst = isAdmin 
           ? instRef 
           : query(instRef, where('professorUid', '==', currentUser.uid));
@@ -67,7 +71,6 @@ export default function Dashboard() {
 
         const turmasRef = collection(db, 'turmas');
         
-        // 🔥 PAREDE 2: Isola as Turmas Globais pelo dono
         const qTurmasGlobais = isAdmin 
           ? turmasRef 
           : query(turmasRef, where('professorUid', '==', currentUser.uid));
@@ -229,6 +232,37 @@ export default function Dashboard() {
     fetchDados();
   }, [escolaSelecionada, currentUser, isAdmin]);
 
+  // 🔥 FUNÇÃO QUE CRIA A INSTITUIÇÃO DIRETAMENTE NO MODAL
+  async function handleCriarInstituicao(e) {
+    e.preventDefault();
+    if (!novaInstituicaoNome.trim()) return;
+    
+    setSalvandoInstituicao(true);
+    try {
+      const novaInst = {
+        nome: novaInstituicaoNome.trim(),
+        professorUid: currentUser.uid,
+        status: 'ativo',
+        dataCriacao: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, 'instituicoes'), novaInst);
+      const instCriada = { id: docRef.id, ...novaInst };
+
+      // Atualiza os estados locais imediatamente para avançar a barra de progresso
+      setInstituicoes([instCriada]);
+      setEscolaSelecionada(instCriada);
+      
+      setIsModalInstituicaoOpen(false);
+      setNovaInstituicaoNome('');
+    } catch (error) {
+      console.error("Erro ao criar instituição:", error);
+      alert("Erro ao criar instituição. Tente novamente.");
+    } finally {
+      setSalvandoInstituicao(false);
+    }
+  }
+
   if (loadingInst || loadingDados) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
   let bannerAssinatura = null;
@@ -268,7 +302,6 @@ export default function Dashboard() {
         <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
           
-          {/* 🔥 SÓ MOSTRA O SELETOR SE O PROFESSOR TIVER PELO MENOS 1 INSTITUIÇÃO */}
           {instituicoes.length > 0 && (
             <div className="flex items-center gap-2 mt-2 max-w-full">
               <span className="text-sm font-bold text-gray-500 shrink-0">Instituição:</span>
@@ -284,7 +317,6 @@ export default function Dashboard() {
       {instituicoes.length === 0 ? (
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
           
-          {/* BARRA DE PROGRESSO VISUAL */}
           <div className="flex items-center justify-between mb-12 relative">
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
             <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white">1</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
@@ -297,8 +329,13 @@ export default function Dashboard() {
             <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><School size={40}/></div>
             <h2 className="text-2xl font-black text-gray-800 mb-3">Bem-vindo(a) à Plataforma!</h2>
             <p className="text-gray-500 font-medium mb-8 text-lg">Para darmos início ao seu fluxo de trabalho, o primeiro passo é cadastrar o nome da sua Instituição de Ensino.</p>
-            {/* ⚠️ Lembre-se de checar se a rota "/instituicoes" é realmente onde ele cria a escola */}
-            <Link to="/instituicoes" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 1: Criar Instituição <ChevronRight size={18}/></Link>
+            {/* 🔥 MUDANÇA AQUI: Agora é um botão que abre o modal */}
+            <button 
+              onClick={() => setIsModalInstituicaoOpen(true)} 
+              className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg"
+            >
+              Passo 1: Criar Instituição <ChevronRight size={18}/>
+            </button>
           </div>
         </div>
 
@@ -306,7 +343,6 @@ export default function Dashboard() {
       ) : minhasTurmas.length === 0 ? (
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
           
-          {/* BARRA DE PROGRESSO VISUAL - ESTÁGIO 2 */}
           <div className="flex items-center justify-between mb-12 relative">
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1/3 h-1 bg-blue-600 -z-10 rounded-full"></div>
@@ -324,7 +360,6 @@ export default function Dashboard() {
           </div>
         </div>
       ) : (
-        /* 🔥 DASHBOARD NORMAL (TEM INSTITUIÇÃO E TEM TURMA) */
         <>
           <div className="bg-slate-900 rounded-2xl py-3 px-4 md:py-4 md:px-5 text-white border border-slate-800 shadow-xl mb-8">
             <div className="flex items-center gap-2.5 mb-3">
@@ -433,6 +468,42 @@ export default function Dashboard() {
               ))}
           </div>
         </>
+      )}
+
+      {/* 🔥 MODAL DE CRIAR INSTITUIÇÃO */}
+      {isModalInstituicaoOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+              <h3 className="font-black text-gray-800 text-lg">Nova Instituição</h3>
+              <button onClick={() => setIsModalInstituicaoOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X size={20}/>
+              </button>
+            </div>
+            
+            <form onSubmit={handleCriarInstituicao} className="p-6">
+              <label className="block text-sm font-bold text-gray-700 mb-2">Nome da Instituição de Ensino</label>
+              <input
+                type="text"
+                autoFocus
+                required
+                value={novaInstituicaoNome}
+                onChange={(e) => setNovaInstituicaoNome(e.target.value)}
+                placeholder="Ex: UFPI, Estácio, USP..."
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 outline-none font-medium text-gray-700 transition-colors mb-6"
+              />
+              
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setIsModalInstituicaoOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={salvandoInstituicao || !novaInstituicaoNome.trim()} className="flex-1 py-3 rounded-xl font-black text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50">
+                  {salvandoInstituicao ? 'Salvando...' : 'Criar Instituição'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       <OnboardingModal isOpen={mostrarTour} onClose={() => setMostrarTour(false)} />
