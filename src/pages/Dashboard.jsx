@@ -1,3 +1,4 @@
+import GeradorDeDados from '../components/GeradorDeDados';
 import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
