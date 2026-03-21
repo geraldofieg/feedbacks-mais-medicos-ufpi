@@ -9,8 +9,7 @@ import OnboardingModal from '../components/OnboardingModal';
 
 export default function Dashboard() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
-  const navigate = useNavigate(); 
-  
+  const navigate = useNavigate();
   const isAdmin = userProfile?.role === 'admin';
   
   const planoUsuario = (userProfile?.plano || 'basico').toLowerCase().trim();
@@ -93,6 +92,7 @@ export default function Dashboard() {
         const escolaCacheValida = escolaCache && lista.some(i => i.id === escolaCache.id);
 
         let escolaAlvo = null;
+
         if (turmasGlobais.length > 0) {
             const idCerta = turmasGlobais[0].instituicaoId;
             escolaAlvo = lista.find(i => i.id === idCerta) || null;
@@ -102,12 +102,12 @@ export default function Dashboard() {
         }
 
         if (escolaAlvo) setEscolaSelecionada(escolaAlvo);
-        else setEscolaSelecionada(null); 
+        else setEscolaSelecionada(null);
 
       } catch (e) { 
-        console.error(e); 
+        console.error(e);
       } finally { 
-        setLoadingInst(false); 
+        setLoadingInst(false);
       }
     }
     setupRadarGlobal();
@@ -132,6 +132,7 @@ export default function Dashboard() {
           const listaAlunosVivos = snapAlunos.docs
             .filter(d => d.data().status !== 'lixeira' && tIds.includes(d.data().turmaId))
             .map(d => ({id: d.id, nome: d.data().nome, turmaId: d.data().turmaId}));
+
           setTemAlunos(listaAlunosVivos.length > 0);
 
           const docRefUser = doc(db, 'usuarios', currentUser.uid);
@@ -143,6 +144,7 @@ export default function Dashboard() {
           const snapAtiv = await getDocs(qAtiv);
           
           const atividadesMap = new Map();
+
           snapAtiv.docs.forEach(d => {
             const data = d.data();
             if (data.status === 'lixeira' || !tIds.includes(data.turmaId)) return;
@@ -167,6 +169,7 @@ export default function Dashboard() {
 
           const activities = Array.from(atividadesMap.values());
           let p = 0, f = 0, ok = 0, iaTotal = 0, iaOriginais = 0;
+
           activities.forEach(d => {
             const temEntregaOuRascunho = (d.resposta && String(d.resposta).trim() !== '') || d.arquivoUrl || (d.feedbackFinal && String(d.feedbackFinal).trim() !== '');
 
@@ -183,13 +186,14 @@ export default function Dashboard() {
                if (d.feedbackFinal === (d.feedbackSugerido || d.feedbackIA)) iaOriginais++;
             }
           });
+
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
-          
+
           const qTar = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTar = await getDocs(qTar);
           const hojeTime = new Date().getTime();
-          
+
           const tarefasProcessadas = snapTar.docs.map(d => {
             const data = d.data();
             const timeFim = data.dataFim?.toDate ? data.dataFim.toDate().getTime() : 0;
@@ -207,19 +211,21 @@ export default function Dashboard() {
               diasRestantes: Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24)) 
             };
           }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
-          
+
           const tarefasAtivas = tarefasProcessadas.filter(t => !t.isFutura && !t.isPassada);
           setTarefasEmAndamento(tarefasAtivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
-          
+
           const calcularDevedores = (tarefa) => {
             let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
             if (tarefa.atribuicaoEspecifica) alvo = alvo.filter(a => tarefa.alunosSelecionados?.includes(a.id));
             
             const devedores = alvo.filter(aluno => !activities.find(e => e.tarefaId === tarefa.id && e.alunoId === aluno.id && ((e.resposta && String(e.resposta).trim() !== '') || e.arquivoUrl || (e.feedbackFinal && String(e.feedbackFinal).trim() !== ''))));
+
             return { id: tarefa.id, nome: tarefa.nomeTarefa || tarefa.titulo, devedores: devedores.map(d => d.nome).sort() };
           };
-          
+
           const corteCriacao = new Date(2026, 0, 4, 0, 0, 0).getTime();
+
           setGestaoVista({
             atuais: tarefasAtivas.map(calcularDevedores).filter(gv => gv.devedores.length > 0),
             anteriores: tarefasProcessadas
@@ -229,9 +235,10 @@ export default function Dashboard() {
               .filter(gv => gv.devedores.length > 0)
               .slice(0, 4) 
           });
+
         }
       } catch (e) { 
-        console.error(e); 
+        console.error(e);
       } finally { 
         setLoadingDados(false);
       } 
@@ -243,20 +250,23 @@ export default function Dashboard() {
   async function handleSelecionarOuCriarInstituicao(e) {
     e.preventDefault();
     setSalvandoInstituicao(true);
-    
+
     try {
       let instAlvo = null;
 
       if (modoInstituicao === 'nova') {
         if (!novaInstituicaoNome.trim()) return;
+
         const novaInst = {
           nome: novaInstituicaoNome.trim(),
           professorUid: currentUser.uid,
           status: 'ativo',
           dataCriacao: serverTimestamp()
         };
+
         const docRef = await addDoc(collection(db, 'instituicoes'), novaInst);
         instAlvo = { id: docRef.id, ...novaInst };
+
         setInstituicoesGlobais(prev => [...prev, instAlvo].sort((a, b) => a.nome.localeCompare(b.nome)));
       } else {
         if (!instituicaoSelecionadaId) return;
@@ -283,10 +293,13 @@ export default function Dashboard() {
   if (loadingInst || loadingDados) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
   let bannerAssinatura = null;
+
   if (userProfile && !userProfile.isVitalicio && userProfile.dataExpiracao) {
-    const dVenc = userProfile.dataExpiracao.toDate ? userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao.seconds ? userProfile.dataExpiracao.seconds * 1000 : userProfile.dataExpiracao);
-    const diff = Math.ceil((dVenc - new Date()) / (1000 * 60 * 60 * 24));
+    const dVenc = userProfile.dataExpiracao.toDate ?
+      userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao.seconds ? userProfile.dataExpiracao.seconds * 1000 : userProfile.dataExpiracao);
     
+    const diff = Math.ceil((dVenc - new Date()) / (1000 * 60 * 60 * 24));
+
     if (diff < 0) {
       bannerAssinatura = (
         <div className="bg-red-50 border border-red-200 p-4 mb-8 rounded-2xl shadow-sm flex items-start gap-3 animate-in fade-in">
@@ -315,6 +328,9 @@ export default function Dashboard() {
       
       {bannerAssinatura}
 
+      {/* 🔥 BOTÃO GERADOR DE DADOS FAKE AQUI 🔥 */}
+      <GeradorDeDados />
+
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-black text-gray-800 tracking-tight">Centro de Comando</h1>
@@ -330,7 +346,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {instituicoes.length === 0 ? (
+      {instituicoes.length === 0 ?
+        (
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
           
           <div className="flex items-center justify-between mb-12 relative">
@@ -354,7 +371,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-      ) : minhasTurmas.length === 0 ? (
+      ) : minhasTurmas.length === 0 ?
+        (
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
           
           <div className="flex items-center justify-between mb-12 relative">
@@ -381,7 +399,8 @@ export default function Dashboard() {
                 <h2 className="text-base font-black tracking-tight">Tarefas em andamento</h2>
              </div>
              <div className="space-y-2">
-                {tarefasEmAndamento.length > 0 ? (
+                {tarefasEmAndamento.length > 0 ? 
+                  (
                   tarefasEmAndamento.map(t => (
                     <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors group">
                       <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
@@ -449,7 +468,8 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
-                    {gv.devedores.length === 0 ? (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>) : (
+                    {gv.devedores.length === 0 ?
+                      (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">100% de entregas! 🎉</p>) : (
                       gv.devedores.map((nome, i) => (
                         <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
                           <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
@@ -470,7 +490,8 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-2 pb-4">
-                    {gv.devedores.length === 0 ? (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>) : (
+                    {gv.devedores.length === 0 ?
+                      (<p className="text-sm font-bold text-green-600 bg-green-50 p-4 rounded-xl text-center">Nenhuma pendência! 🎉</p>) : (
                       gv.devedores.map((nome, i) => (
                         <div key={i} className="text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center gap-2">
                           <User size={14} className="text-gray-400 shrink-0"/> <span className="truncate">{nome}</span>
@@ -502,7 +523,8 @@ export default function Dashboard() {
                 <button type="button" onClick={() => setModoInstituicao('nova')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${modoInstituicao === 'nova' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Nova Instituição</button>
               </div>
 
-              {modoInstituicao === 'existente' ? (
+              {modoInstituicao === 'existente' ?
+                (
                 <div className="mb-6 animate-in fade-in">
                   <label className="block text-sm font-bold text-gray-700 mb-2">Selecione sua Instituição</label>
                   <select
