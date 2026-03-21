@@ -68,6 +68,10 @@ A página de Revisar Atividade (`/revisar/id`) é o *HUB* principal do sistema.
 * **Barra de Progresso (UX E-commerce):** Exibe os 3 passos: `1. Trazer Resposta` ➔ `2. Revisar Feedback` ➔ `3. Lançar Oficial`.
 * **Prevenção de Tap-Through (Anticlique Fantasma):** Todos os modais de sucesso (`alert`) nativos foram substituídos por microinterações visuais *inline* (ex.: botões mudando para '✅ Salvo!').
 * **UX Educativa (Textos Inteligentes):** A interface "conversa" com o professor novato. Se o aluno não tem resposta colada, exibe instruções claras de colagem; se já tem resposta, os textos mudam orientando a geração ou revisão da IA.
+* **Upload de Arquivos Inteligente e IA:** O sistema aceita o envio de arquivos (PDF, DOC, etc.) para análise de inteligência com proteções ativas:
+    * **Trava de Custo (5MB):** Validação processada estritamente no *frontend* para bloquear o envio de arquivos imensos (acima de 5MB), blindando o custo de *Storage* e tempo da IA.
+    * **UX de Resolução (iLovePDF):** O sistema fornece atalhos educativos de resolução para o cliente, exibindo um link direto para a ferramenta de compressão caso precise reduzir o arquivo.
+    * **Leitura Server-Side Inteligente:** Em vez de travar o navegador do cliente decodificando PDFs localmente, a plataforma envia a URL pública do *Firebase Storage* diretamente para o prompt do Gemini 3.1, permitindo que a IA lide com a extração bruta remotamente.
 * **Fluxo de Rascunho e Avisos Dinâmicos:** Ao salvar em rascunho, o sistema emite um alerta visual claro informando que a atividade continua "Em Revisão" (sinal amarelo) e não foi finalizada.
 * **Mensagens Pós-Aprovação Guiadas:** Ao clicar em "Aprovar Feedback", em vez de exibir bruscamente os botões finais, o sistema injeta um texto de sucesso orientativo explicando os próximos passos lógicos (ir para a página de cópia ou copiar ali mesmo).
 * **Assinatura e Log:** Toda atividade aprovada exibe a hora exata e o nome de quem revisou (*log* de auditoria visível na tela).
@@ -96,7 +100,7 @@ Automatização de cobranças baseada no cruzamento de alunos *versus* tarefas p
     * **Reta Final:** Avisos para tarefas que encerram em poucos dias.
     * **Fase Intermediária:** Prazos regulares em andamento.
     * **Prazo Encerrado:** Cobrança direta de tarefas vencidas.
-* **Foco Específico:** O professor ainda pode clicar no botão de uma única tarefa no topo da tela para isolar a cobrança e os textos exclusivamente para aquele módulo.
+* **Foco Específico:** O professor ainda pode clicar no botão de uma única textos no topo da tela para isolar a cobrança e os textos exclusivamente para aquele módulo.
 
 ### Ações de Disparo e Templates (Detalhamento de Mensagens):
 * **Grupo Geral da Turma (Coluna Esquerda):** Mensagens contextuais dinâmicas prontas para copiar para o grupo. Utiliza o algoritmo de maior urgência para avisar a turma e detalha os prazos específicos (ex.: "A entrega mais próxima encerra em X dias", informando com exatidão a linha do tempo das atividades).
