@@ -122,6 +122,13 @@ export default function Turmas() {
 
   async function handleSalvarEdicaoEscola() {
     if (!nomeEscolaEdicao.trim() || !escolaSelecionada) return;
+    
+    // 🔥 TRAVA LÓGICA DE SEGURANÇA: Impede utilizadores não autorizados de editar
+    if (!isAdmin && escolaSelecionada.professorUid !== currentUser.uid) {
+       alert("Ação não permitida: Apenas o criador desta instituição pode alterá-la.");
+       return;
+    }
+
     try {
       setSalvandoEscola(true); 
       await updateDoc(doc(db, 'instituicoes', escolaSelecionada.id), { nome: nomeEscolaEdicao.trim() });
@@ -134,6 +141,12 @@ export default function Turmas() {
   }
 
   async function handleLixeiraEscola() {
+    // 🔥 TRAVA LÓGICA DE SEGURANÇA: Impede utilizadores não autorizados de eliminar
+    if (!isAdmin && escolaSelecionada?.professorUid !== currentUser.uid) {
+       alert("Ação não permitida: Apenas o criador desta instituição pode excluí-la.");
+       return;
+    }
+
     if (!window.confirm(`Tem certeza que deseja enviar a instituição "${escolaSelecionada.nome}" para a lixeira?`)) return;
     try { 
       await updateDoc(doc(db, 'instituicoes', escolaSelecionada.id), { status: 'lixeira' });
@@ -258,8 +271,13 @@ export default function Turmas() {
                 ))}
               </select>
 
-              <button onClick={() => { setEditandoEscola(true); setNomeEscolaEdicao(escolaSelecionada.nome); }} className="text-gray-400 hover:text-blue-500 transition-colors p-1 ml-1" title="Renomear Instituição"><Pencil size={14}/></button>
-              <button onClick={handleLixeiraEscola} className="text-gray-400 hover:text-red-500 transition-colors p-1" title="Excluir Instituição"><Trash2 size={14}/></button>
+              {/* 🔥 TRAVA VISUAL: Apenas os donos ou admins veem os botões de editar e apagar */}
+              {(isAdmin || escolaSelecionada?.professorUid === currentUser.uid) && (
+                <>
+                  <button onClick={() => { setEditandoEscola(true); setNomeEscolaEdicao(escolaSelecionada.nome); }} className="text-gray-400 hover:text-blue-500 transition-colors p-1 ml-1" title="Renomear Instituição"><Pencil size={14}/></button>
+                  <button onClick={handleLixeiraEscola} className="text-gray-400 hover:text-red-500 transition-colors p-1" title="Excluir Instituição"><Trash2 size={14}/></button>
+                </>
+              )}
             </div>
           )}
         </div>
