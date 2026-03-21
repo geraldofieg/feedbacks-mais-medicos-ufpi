@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, query, getDocs, doc, updateDoc, arrayUnion, where, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History, Ban, UserCheck, XCircle, Bell } from 'lucide-react';
+// 🔥 Filter importado para o ícone do novo menu
+import { ShieldCheck, Crown, Trash2, UserCog, User, AlertTriangle, Mail, Zap, CalendarPlus, Infinity, Edit3, History, Ban, UserCheck, XCircle, Bell, Filter } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { Navigate } from 'react-router-dom';
 
@@ -10,6 +11,9 @@ export default function Admin() {
   const { currentUser, userProfile } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // 🔥 NOVO ESTADO: Guarda a opção escolhida no menu de filtro
+  const [ordenacao, setOrdenacao] = useState('padrao');
 
   // 🔥 SEGURANÇA PROFISSIONAL: Trava baseada exclusivamente no Role do banco de dados
   const isAdmin = userProfile?.role === 'admin';
@@ -22,6 +26,7 @@ export default function Admin() {
         const snap = await getDocs(q);
         
         const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Ordenação padrão inicial
         lista.sort((a, b) => {
           if (a.role === 'admin' && b.role !== 'admin') return -1;
           if (a.role !== 'admin' && b.role === 'admin') return 1;
@@ -51,6 +56,7 @@ export default function Admin() {
       setUsuarios(usuarios.map(u => 
         u.vistoPeloAdmin === false ? { ...u, vistoPeloAdmin: true } : u
       ));
+
     } catch (e) {
       console.error(e);
       alert("Erro ao atualizar notificações.");
@@ -86,7 +92,9 @@ export default function Admin() {
       let dataBase = new Date(); 
 
       if (userData && userData.dataExpiracao) {
-        const currentExp = userData.dataExpiracao.toDate ? userData.dataExpiracao.toDate() : new Date(userData.dataExpiracao.seconds ? userData.dataExpiracao.seconds * 1000 : userData.dataExpiracao);
+        const currentExp = userData.dataExpiracao.toDate ?
+          userData.dataExpiracao.toDate() : new Date(userData.dataExpiracao.seconds ? userData.dataExpiracao.seconds * 1000 : userData.dataExpiracao);
+        
         if (currentExp > dataBase) {
           dataBase = currentExp;
         }
@@ -94,7 +102,7 @@ export default function Admin() {
 
       const novaData = new Date(dataBase);
       novaData.setDate(novaData.getDate() + diasAdicionais);
-
+      
       const logAuditoria = criarLog(`Adicionado +${diasAdicionais} dias`);
 
       await updateDoc(doc(db, 'usuarios', id), {
@@ -119,6 +127,7 @@ export default function Admin() {
 
   async function editarDataManual(id, dataAtualStr) {
     const input = window.prompt("Digite a nova data exata de vencimento (Formato: DD/MM/AAAA):", dataAtualStr);
+    
     if (!input) return;
 
     const [dia, mes, ano] = input.split('/');
@@ -127,27 +136,27 @@ export default function Admin() {
     }
 
     const novaData = new Date(ano, mes - 1, dia, 23, 59, 59);
-
+    
     if (isNaN(novaData.getTime())) {
       return alert("Data inválida. Tente novamente.");
     }
 
     try {
       const logAuditoria = criarLog(`Data alterada manualmente para ${input}`);
-
+      
       await updateDoc(doc(db, 'usuarios', id), {
         dataExpiracao: novaData,
         isVitalicio: false,
         historicoAssinatura: arrayUnion(logAuditoria)
       });
-
+      
       setUsuarios(usuarios.map(u => u.id === id ? { 
         ...u, 
         dataExpiracao: novaData, 
         isVitalicio: false,
         historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
       } : u));
-
+      
       alert("Data de vencimento ajustada com sucesso!");
     } catch (e) {
       console.error(e);
@@ -171,14 +180,14 @@ export default function Admin() {
         dataExpiracao: isAtualVitalicio ? hoje : user.dataExpiracao || hoje,
         historicoAssinatura: arrayUnion(logAuditoria)
       });
-
+      
       setUsuarios(usuarios.map(u => u.id === user.id ? { 
         ...u, 
         isVitalicio: !isAtualVitalicio,
         dataExpiracao: isAtualVitalicio ? hoje : u.dataExpiracao || hoje,
         historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
       } : u));
-
+      
       alert(`Acesso Vitalício ${isAtualVitalicio ? 'revogado' : 'concedido'} com sucesso!`);
     } catch (error) {
       alert("Erro ao alterar acesso vitalício.");
@@ -195,7 +204,7 @@ export default function Admin() {
       const dataLog = new Date(log.dataOperacao).toLocaleString('pt-BR');
       return `${index + 1}. [${dataLog}]\nAção: ${log.acao}\nPor: ${log.responsavel}\n`;
     }).join('\n');
-
+    
     alert(`HISTÓRICO DE ASSINATURA: ${user.nome || user.email}\n\n${textoHistorico}`);
   }
 
@@ -213,13 +222,13 @@ export default function Admin() {
         status: novoStatus,
         historicoAssinatura: arrayUnion(logAuditoria)
       });
-
+      
       setUsuarios(usuarios.map(u => u.id === user.id ? { 
         ...u, 
         status: novoStatus,
         historicoAssinatura: [...(u.historicoAssinatura || []), logAuditoria]
       } : u));
-
+      
       alert(`Usuário ${novoStatus} com sucesso!`);
     } catch (error) {
       console.error(error);
@@ -231,42 +240,92 @@ export default function Admin() {
     const confirmacao = window.confirm(
       `CUIDADO EXTREMO!\n\nVocê está prestes a fazer um HARD DELETE na conta de:\n"${user.nome || user.email}".\n\nIsso irá APAGAR DE VEZ:\n- O Perfil do Usuário\n- Todas as Instituições\n- Todas as Turmas\n- Todos os Alunos\n- Todas as Tarefas e Respostas que este e-mail criou.\n\nEssa ação é irreversível e feita apenas para testes. Deseja DESTRUIR todos os dados deste usuário?`
     );
-
     if (!confirmacao) return;
 
     try {
       const uidParaApagar = user.id; 
       const batch = writeBatch(db);
-
+      
       const ativSnap = await getDocs(query(collection(db, 'atividades'), where('professorUid', '==', uidParaApagar)));
       ativSnap.forEach(doc => batch.delete(doc.ref));
-
+      
       const tarefasSnap = await getDocs(query(collection(db, 'tarefas'), where('professorUid', '==', uidParaApagar)));
       tarefasSnap.forEach(doc => batch.delete(doc.ref));
-
+      
       const alunosSnap = await getDocs(query(collection(db, 'alunos'), where('professorUid', '==', uidParaApagar)));
       alunosSnap.forEach(doc => batch.delete(doc.ref));
-
+      
       const turmasSnap = await getDocs(query(collection(db, 'turmas'), where('professorUid', '==', uidParaApagar)));
       turmasSnap.forEach(doc => batch.delete(doc.ref));
-
+      
       const instSnap = await getDocs(query(collection(db, 'instituicoes'), where('professorUid', '==', uidParaApagar)));
       instSnap.forEach(doc => batch.delete(doc.ref));
 
       batch.delete(doc(db, 'usuarios', uidParaApagar));
       await batch.commit();
-
+      
       setUsuarios(usuarios.filter(u => u.id !== uidParaApagar));
       alert("Operação concluída. O histórico inteiro do professor foi pulverizado do banco de dados.");
-
+      
     } catch (e) { 
       alert("Erro ao tentar executar o Hard Delete. Veja o console.");
       console.error(e);
     }
   }
 
-  if (!isAdmin) return <Navigate to="/" />;
+  // 🔥 LÓGICA DE ORDENAÇÃO E FILTRAGEM NO FRONTEND (CUSTO ZERO)
+  const getUsuariosProcessados = () => {
+    let lista = [...usuarios];
 
+    switch (ordenacao) {
+      case 'recentes':
+        lista.sort((a, b) => {
+          const tempoA = a.ultimoAcesso?.seconds || 0;
+          const tempoB = b.ultimoAcesso?.seconds || 0;
+          return tempoB - tempoA; // Ordena do maior (mais recente) para o menor
+        });
+        break;
+      case 'antigos':
+        lista.sort((a, b) => {
+          const tempoA = a.ultimoAcesso?.seconds || Infinity;
+          const tempoB = b.ultimoAcesso?.seconds || Infinity;
+          return tempoA - tempoB; // Ordena do menor (mais antigo) para o maior
+        });
+        break;
+      case 'nao_ativou':
+        // Apenas usuários onde o e-mail não foi verificado
+        lista = lista.filter(u => u.emailVerificado === false);
+        break;
+      case 'nunca_logou':
+        // Usuários que ativaram, mas não possuem data de último acesso
+        lista = lista.filter(u => u.emailVerificado !== false && !u.ultimoAcesso);
+        break;
+      case 'expirando':
+        lista.sort((a, b) => {
+          const tempoA = a.dataExpiracao?.seconds || Infinity;
+          const tempoB = b.dataExpiracao?.seconds || Infinity;
+          return tempoA - tempoB; // Data mais próxima primeiro
+        });
+        break;
+      case 'admins':
+        lista = lista.filter(u => u.role === 'admin');
+        break;
+      case 'padrao':
+      default:
+        // Ordenação padrão: Admins no topo, depois ordem alfabética
+        lista.sort((a, b) => {
+          if (a.role === 'admin' && b.role !== 'admin') return -1;
+          if (a.role !== 'admin' && b.role === 'admin') return 1;
+          return (a.nome || '').localeCompare(b.nome || '');
+        });
+        break;
+    }
+    return lista;
+  };
+
+  const usuariosProcessados = getUsuariosProcessados();
+
+  if (!isAdmin) return <Navigate to="/" />;
   if (loading) return <div className="p-20 text-center font-black text-slate-400 animate-pulse">Carregando usuários...</div>;
 
   const qtdNovos = usuarios.filter(u => u.vistoPeloAdmin === false).length;
@@ -286,16 +345,38 @@ export default function Admin() {
           </div>
         </div>
 
-        {/* 🔥 BOTÃO PARA ZERAR NOTIFICAÇÕES */}
-        {qtdNovos > 0 && (
-          <button 
-            onClick={handleMarcarTodosVistos}
-            className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white px-5 py-2.5 rounded-xl text-sm font-black transition-all shadow-sm w-full md:w-auto"
-          >
-            <Bell size={18} />
-            Marcar {qtdNovos} como lido{qtdNovos > 1 ? 's' : ''}
-          </button>
-        )}
+        {/* 🔥 ÁREA DOS BOTÕES E FILTROS */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          
+          {/* 🔥 NOVO MENU DE FILTRO E ORDENAÇÃO */}
+          <div className="relative w-full sm:w-auto">
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+            <select
+              value={ordenacao}
+              onChange={(e) => setOrdenacao(e.target.value)}
+              className="w-full sm:w-auto bg-white border border-slate-200 text-slate-700 text-sm rounded-xl py-2.5 pl-10 pr-8 font-bold outline-none focus:border-blue-500 appearance-none shadow-sm cursor-pointer"
+            >
+              <option value="padrao">Organizar: Padrão (Nome/Admin)</option>
+              <option value="recentes">Organizar: Acesso Mais Recente</option>
+              <option value="antigos">Organizar: Acesso Mais Antigo</option>
+              <option value="expirando">Organizar: Expira em Breve</option>
+              <option value="nunca_logou">Filtrar: Nunca Logaram</option>
+              <option value="nao_ativou">Filtrar: Não Ativaram Conta</option>
+              <option value="admins">Filtrar: Apenas Admins</option>
+            </select>
+          </div>
+
+          {/* BOTÃO PARA ZERAR NOTIFICAÇÕES */}
+          {qtdNovos > 0 && (
+            <button 
+              onClick={handleMarcarTodosVistos}
+              className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white px-5 py-2.5 rounded-xl text-sm font-black transition-all shadow-sm w-full sm:w-auto"
+            >
+              <Bell size={18} />
+              Marcar {qtdNovos} como lido{qtdNovos > 1 ? 's' : ''}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-hidden">
@@ -312,7 +393,9 @@ export default function Admin() {
               </tr>
             </thead>
             <tbody className="flex flex-col md:table-row-group divide-y-[8px] md:divide-y md:divide-y-[1px] divide-slate-100 md:divide-slate-50">
-              {usuarios.map(user => {
+              
+              {/* 🔥 SUBSTITUÍDO: usuarios.map POR usuariosProcessados.map */}
+              {usuariosProcessados.map(user => {
                 
                 let statusVisual = "Ativo";
                 let corStatus = "text-green-700 bg-green-100";
@@ -339,7 +422,7 @@ export default function Admin() {
                   
                   const diffTime = dataVencimento - hoje;
                   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
+                  
                   if (diffDays < 0) {
                     statusVisual = "Vencido";
                     corStatus = "text-red-700 bg-red-100";
@@ -367,8 +450,6 @@ export default function Admin() {
                           {user.role === 'admin' ? <Crown size={22}/> : <User size={22}/>}
                         </div>
                         <div className="min-w-0 flex-1">
-                          
-                          {/* 🔥 SELO VISUAL DE NOVO USUÁRIO ADICIONADO AQUI */}
                           <div className="flex items-center gap-2">
                             <p className="font-black text-slate-900 text-lg leading-tight truncate">{user.nome || 'Sem Nome'}</p>
                             {user.vistoPeloAdmin === false && (
@@ -376,7 +457,27 @@ export default function Admin() {
                             )}
                           </div>
                           
-                          <p className="text-sm text-slate-400 font-medium flex items-center gap-1 break-all md:break-normal mt-0.5"><Mail size={12} className="shrink-0"/> {user.email}</p>
+                          <p className="text-sm text-slate-400 font-medium flex items-center gap-1 break-all md:break-normal mt-0.5">
+                            <Mail size={12} className="shrink-0"/> {user.email}
+                          </p>
+
+                          {/* 🔥 EXIBIÇÃO DO ÚLTIMO ACESSO / STATUS DA CONTA */}
+                          <div className="mt-1.5">
+                            {user.emailVerificado === false ? (
+                              <span className="inline-block text-[10px] font-black uppercase tracking-wider text-orange-600 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-md">
+                                Não ativou a conta
+                              </span>
+                            ) : !user.ultimoAcesso ? (
+                              <span className="inline-block text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                                Nunca logou
+                              </span>
+                            ) : (
+                              <span className="inline-block text-[11px] font-bold text-slate-400">
+                                Último acesso: <span className="text-slate-600">{new Date(user.ultimoAcesso?.seconds * 1000).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                              </span>
+                            )}
+                          </div>
+                          
                         </div>
                       </div>
                     </td>
