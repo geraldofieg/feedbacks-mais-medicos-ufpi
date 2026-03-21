@@ -1,4 +1,3 @@
-import GeradorDeDados from '../components/GeradorDeDados';
 import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -327,9 +326,6 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto px-4 py-8 overflow-hidden">
       
       {bannerAssinatura}
-
-      {/* 🔥 BOTÃO GERADOR DE DADOS FAKE AQUI 🔥 */}
-      <GeradorDeDados />
 
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b border-gray-200 pb-6 gap-4">
         <div className="min-w-0 flex-1">
