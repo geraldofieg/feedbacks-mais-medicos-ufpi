@@ -27,7 +27,7 @@ O sistema opera em uma hierarquia plana de três níveis protegida por *Tenant I
 
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
-* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` (`'admin'` | `'professor'`), `plano`, `promptPersonalizado`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`, `status` (`'ativo'` | `'bloqueado'`).
+* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` (`'admin'` | `'professor'`), `plano`, `promptPersonalizado`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`, `status` (`'ativo'` | `'bloqueado'`), `ultimoAcesso`, `emailVerificado`, `vistoPeloAdmin`.
 * **`tarefas`:** Agora possuem **Atribuição Específica** (`atribuicaoEspecifica: boolean`, `alunosSelecionados: array`). Tarefas podem ser exclusivas para certos alunos, prevenindo cobranças indevidas (falsos positivos). Sempre geram `dataInicio` na hora 00:00 e `dataFim` às 23:59.
 * **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` (`'pendente'` | `'aprovado'`), `nota`, `feedbackSugerido`, `feedbackFinal`, `postado` (booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`, `arquivoUrl`, `nomeArquivo`. 
 * **Campos de Retrocompatibilidade V1/V3 (Estratégia Poliglota/Dupla Etiqueta):** Salva simultaneamente `nomeAluno` (V3) e `aluno` (V1), `nomeTarefa` (V3) e `tarefa`/`modulo` (V1), `revisadoPor` (nome do revisor). 
@@ -53,6 +53,7 @@ Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '=='
     * Gestão visual de assinaturas (vencido, vitalício, ativo).
     * Ações de faturamento (estender dias, conceder/revogar vitalício, edição manual de datas).
     * Suspensão instantânea de acesso (bloqueio de usuário).
+    * **Gestão de Engajamento e Filtros (Custo Zero):** Rastreio em tempo real do engajamento do usuário na plataforma exibindo os status "Não ativou a conta", "Nunca logou" ou a exata data de "Último acesso". A tabela gerencial possui um motor de ordenação e filtros dinâmicos processados 100% no *frontend* (via estado do React), garantindo a reordenação instantânea dos dados com zero custo de novas requisições (leituras) ao banco de dados.
     * Botão de Emergência (*Hard Delete*): apaga todos os rastros de um usuário no banco via `writeBatch`.
     * **Relatório de Log da IA:** Painel/relatório focado na comparação entre os *feedbacks* originais gerados pela IA e os *feedbacks* finais aprovados. O sistema registra e exibe **apenas as avaliações que sofreram edições/mudanças**, permitindo auditar os ajustes feitos pelo professor sobre o conteúdo gerado.
 
