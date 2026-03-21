@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { auth, db } from '../services/firebase'; 
+import { auth, db } from '../services/firebase';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -7,7 +7,7 @@ import {
   onAuthStateChanged,
   sendEmailVerification // 🔥 ESSENCIAL PARA O E-MAIL DO PROFESSOR
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'; 
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'; 
 
 const AuthContext = createContext();
 
@@ -17,7 +17,7 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null); 
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [escolaSelecionada, setEscolaSelecionadaState] = useState(() => {
@@ -61,16 +61,34 @@ export function AuthProvider({ children }) {
       dataCriacao: serverTimestamp(),
       dataExpiracao: dataExpiracao,
       isVitalicio: false,
-      vistoPeloAdmin: false // 🔥 ISSO ATIVA O SININHO
+      vistoPeloAdmin: false, // 🔥 ISSO ATIVA O SININHO
+      emailVerificado: false, // 🔥 NOVO: Nasce como falso
+      ultimoAcesso: null      // 🔥 NOVO: Nasce sem acesso
     };
-
     await setDoc(doc(db, 'usuarios', user.uid), novoPerfil);
     setUserProfile(novoPerfil);
 
     return userCredential;
   }
 
-  function login(email, password) { return signInWithEmailAndPassword(auth, email, password); }
+  async function login(email, password) { 
+    // 1. Faz o login no motor do Firebase Auth
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // 2. Tática de Auto-Cura: Atualiza a ficha do professor no banco de dados
+    try {
+      await updateDoc(doc(db, 'usuarios', user.uid), {
+        ultimoAcesso: serverTimestamp(),
+        emailVerificado: user.emailVerified // Pega a verdade absoluta do Firebase Auth
+      });
+    } catch (error) {
+      console.error("Erro ao registrar último acesso:", error);
+    }
+
+    return userCredential;
+  }
+
   function logout() { setEscolaSelecionada(null); setUserProfile(null); return signOut(auth); }
 
   useEffect(() => {
@@ -99,7 +117,8 @@ export function AuthProvider({ children }) {
 
   if (!isSuperAdmin && userProfile) {
     if (userProfile.isVitalicio !== true && userProfile.dataExpiracao) {
-      const dataVencimento = userProfile.dataExpiracao.toDate ? userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao);
+      const dataVencimento = userProfile.dataExpiracao.toDate ?
+        userProfile.dataExpiracao.toDate() : new Date(userProfile.dataExpiracao);
       if (new Date() > dataVencimento) isAcessoExpirado = true;
     }
   }
