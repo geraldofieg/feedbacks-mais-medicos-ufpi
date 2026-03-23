@@ -3,7 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import ImportarSirio from './pages/ImportarSirio'; // ou components, dependendo de onde salvou
+
+// 🔥 ATENÇÃO AQUI: Se você salvou na pasta components, mude 'pages' para 'components' na linha abaixo
+import ImportarSirio from './pages/ImportarSirio';
 
 // COMPONENTES
 import Navbar from './components/Navbar';
@@ -26,8 +28,8 @@ import MapaEntregas from './pages/MapaEntregas';
 import Pendencias from './pages/Pendencias';
 import Lixeira from './pages/Lixeira'; 
 import Migracao from './pages/Migracao'; 
-import Planos from './pages/Planos'; // NOVO: Importação da página de vendas
-import Guia from './pages/Guia'; // 🔥 IMPORTAÇÃO DO GUIA ADICIONADA AQUI
+import Planos from './pages/Planos'; 
+import Guia from './pages/Guia'; 
 
 // ESTEIRA DE PRODUÇÃO (KANBAN)
 import AguardandoRevisao from './pages/AguardandoRevisao';
@@ -107,7 +109,7 @@ function App() {
           <Route path="/mapa" element={<PrivateRoute><MapaEntregas /></PrivateRoute>} />
           <Route path="/pendencias" element={<PrivateRoute><Pendencias /></PrivateRoute>} />
           <Route path="/planos" element={<PrivateRoute><Planos /></PrivateRoute>} />
-          <Route path="/guia" element={<PrivateRoute><Guia /></PrivateRoute>} /> {/* 🔥 ROTA DO GUIA ADICIONADA AQUI */}
+          <Route path="/guia" element={<PrivateRoute><Guia /></PrivateRoute>} /> 
           
           {/* ROTAS DE UTILIDADE */}
           <Route path="/lixeira" element={<PrivateRoute><Lixeira /></PrivateRoute>} />
@@ -120,11 +122,12 @@ function App() {
           
           {/* Rota do Painel SaaS */}
           <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
-          
-          {/* Rota de fallback */}
-          <Route path="*" element={<Navigate to="/" />} />
 
+          {/* 🔥 ROTA DE IMPORTAÇÃO (Movida para CIMA do fallback) */}
           <Route path="/importar" element={<ImportarSirio />} />
+          
+          {/* Rota de fallback (DEVE FICAR SEMPRE POR ÚLTIMO) */}
+          <Route path="*" element={<Navigate to="/" />} />
           
         </Routes>
 
