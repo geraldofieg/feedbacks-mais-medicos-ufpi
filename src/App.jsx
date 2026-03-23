@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import ImportarSirio from './pages/ImportarSirio'; // ou components, dependendo de onde salvou
 
 // COMPONENTES
 import Navbar from './components/Navbar';
