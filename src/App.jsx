@@ -4,9 +4,6 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-// 🔥 ATENÇÃO AQUI: Se você salvou na pasta components, mude 'pages' para 'components' na linha abaixo
-import ImportarSirio from './pages/ImportarSirio';
-
 // COMPONENTES
 import Navbar from './components/Navbar';
 import BotaoGlobal from './components/BotaoGlobal'; 
@@ -122,11 +119,8 @@ function App() {
           
           {/* Rota do Painel SaaS */}
           <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
-
-          {/* 🔥 ROTA DE IMPORTAÇÃO (Movida para CIMA do fallback) */}
-          <Route path="/importar" element={<ImportarSirio />} />
           
-          {/* Rota de fallback (DEVE FICAR SEMPRE POR ÚLTIMO) */}
+          {/* Rota de fallback */}
           <Route path="*" element={<Navigate to="/" />} />
           
         </Routes>
