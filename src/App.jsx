@@ -123,6 +123,9 @@ function App() {
           
           {/* Rota de fallback */}
           <Route path="*" element={<Navigate to="/" />} />
+
+          <Route path="/importar" element={<ImportarSirio />} />
+          
         </Routes>
 
         <BotaoGlobal />
