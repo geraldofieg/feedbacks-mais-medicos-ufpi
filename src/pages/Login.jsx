@@ -51,8 +51,8 @@ export default function Login() {
           </div>
         )}
 
-        {/* O formulário agora tem o action="#" e as "pistas" que o Chrome precisa */}
-        <form action="#" onSubmit={handleSubmit} className="space-y-5">
+        {/* 🔥 Removido o action="#" que pode atrapalhar a leitura do Chrome */}
+        <form onSubmit={handleSubmit} className="space-y-5">
           
           <div>
             <label htmlFor="email" className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">E-mail Profissional</label>
@@ -64,7 +64,7 @@ export default function Login() {
                 type="email" 
                 id="email"
                 name="email"
-                autoComplete="email"
+                autoComplete="username" // 🔥 O SEGREDO AQUI: Chrome mapeia cofres de senhas para 'username', mesmo sendo um e-mail!
                 required 
                 className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500" 
                 placeholder="nome@instituicao.com.br" 
@@ -84,7 +84,7 @@ export default function Login() {
                 type="password" 
                 id="password"
                 name="password"
-                autoComplete="current-password"
+                autoComplete="current-password" // Confirma que é o par do "username"
                 required 
                 className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500" 
                 placeholder="••••••••" 
