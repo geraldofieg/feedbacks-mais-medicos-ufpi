@@ -92,12 +92,14 @@ export default function Dashboard() {
 
         let escolaAlvo = null;
 
-        if (turmasGlobais.length > 0) {
+        // 🔥 A MÁGICA INVERTIDA ESTÁ AQUI: Prioridade para o navegador (Cache/LocalStorage)
+        if (escolaCacheValida) {
+            escolaAlvo = lista.find(i => i.id === escolaCache.id);
+        } else if (turmasGlobais.length > 0) {
+            // Só vai para o banco de dados se não tiver cache
             const idCerta = turmasGlobais[0].instituicaoId;
             escolaAlvo = lista.find(i => i.id === idCerta) || null;
             if (escolaAlvo) localStorage.setItem('@SaaS_EscolaSelecionada', JSON.stringify(escolaAlvo));
-        } else {
-            if (escolaCacheValida) escolaAlvo = lista.find(i => i.id === escolaCache.id);
         }
 
         if (escolaAlvo) setEscolaSelecionada(escolaAlvo);
