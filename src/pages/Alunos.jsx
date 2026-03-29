@@ -404,10 +404,17 @@ export default function Alunos() {
                         <GraduationCap size={14} className="shrink-0"/> <span className="truncate">{getNomeTurma(aluno.turmaId)}</span>
                       </div>
                       
+                      {/* 🔥 A MÁGICA FOI FEITA AQUI. O BOTÃO AGORA FORMATA E INJETA O 55 ANTES DE ENVIAR PARA O WHATSAPP! */}
                       {aluno.whatsapp && (
-                        <div className="flex items-center gap-2 text-slate-600 text-xs font-bold mt-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <a 
+                          href={`https://wa.me/55${aluno.whatsapp.replace(/\D/g, '')}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-slate-600 hover:text-green-700 text-xs font-bold mt-1 bg-slate-50 hover:bg-green-50 p-2 rounded-lg border border-slate-100 hover:border-green-200 transition-colors cursor-pointer"
+                          title="Abrir conversa no WhatsApp"
+                        >
                           <Phone size={14} className="text-green-500 shrink-0"/> <span className="truncate">{aluno.whatsapp}</span>
-                        </div>
+                        </a>
                       )}
 
                       {aluno.email && (
