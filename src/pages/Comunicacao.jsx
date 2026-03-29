@@ -256,9 +256,19 @@ export default function Comunicacao() {
   const handleEnviarWhatsAppIndividual = (alunoObjeto, idCopia) => {
     const textoFinal = gerarMensagemIndividual(alunoObjeto);
     navigator.clipboard.writeText(textoFinal);
-    const numeroLimpo = getTelefone(alunoObjeto).replace(/\D/g, '');
+    
+    // 🔥 FILTRO INTELIGENTE DE WHATSAPP 🔥
+    // 1. Pega o número e limpa tudo que não for dígito
+    let numeroLimpo = getTelefone(alunoObjeto).replace(/\D/g, '');
+    
+    // 2. Se tiver um número e ele não começar com o código do Brasil (55), injetamos automaticamente!
+    if (numeroLimpo && !numeroLimpo.startsWith('55')) {
+      numeroLimpo = `55${numeroLimpo}`;
+    }
+    
     const textoCodificado = encodeURIComponent(textoFinal);
     const url = numeroLimpo ? `https://wa.me/${numeroLimpo}?text=${textoCodificado}` : `https://wa.me/?text=${textoCodificado}`;
+    
     aplicarFeedback(idCopia, () => window.open(url, '_blank'));
   };
 
