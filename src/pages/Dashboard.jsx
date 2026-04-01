@@ -209,12 +209,26 @@ export default function Dashboard() {
               timeCriacao,
               isFutura: timeInicio > hojeTime,
               isPassada: timeFim > 0 && timeFim < hojeTime,
-              diasRestantes: Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24)) 
+              diasRestantes: timeFim > 0 ? Math.ceil((timeFim - hojeTime) / (1000 * 3600 * 24)) : 999 
             };
           }).filter(t => t.status !== 'lixeira' && tIds.includes(t.turmaId));
 
-          const tarefasAtivas = tarefasProcessadas.filter(t => !t.isFutura && !t.isPassada);
-          setTarefasEmAndamento(tarefasAtivas.sort((a,b) => a.diasRestantes - b.diasRestantes).slice(0, 5));
+          const tarefasAtivas = tarefasProcessadas.filter(t => {
+            // Se não tem data de início nem fim, é ativa
+            if (t.timeInicio === 0 && t.timeFim === 0) return true;
+            // Se tem data de início mas não tem fim, é ativa se já começou
+            if (t.timeInicio > 0 && t.timeFim === 0) return !t.isFutura;
+            // Se tem data de fim mas não tem início, é ativa se não passou
+            if (t.timeInicio === 0 && t.timeFim > 0) return !t.isPassada;
+            // Se tem as duas, é ativa se já começou e não passou
+            return !t.isFutura && !t.isPassada;
+          });
+          setTarefasEmAndamento(tarefasAtivas.sort((a,b) => {
+            // Tarefas sem prazo vão pro final
+            if (a.diasRestantes === 999 && b.diasRestantes !== 999) return 1;
+            if (a.diasRestantes !== 999 && b.diasRestantes === 999) return -1;
+            return a.diasRestantes - b.diasRestantes;
+          }));
 
           const calcularDevedores = (tarefa) => {
             let alvo = listaAlunosVivos.filter(a => a.turmaId === tarefa.turmaId);
@@ -396,7 +410,7 @@ export default function Dashboard() {
                 <div className="bg-blue-600 p-1.5 rounded-lg"><Calendar size={16} /></div>
                 <h2 className="text-base font-black tracking-tight">Tarefas em andamento</h2>
              </div>
-             <div className="space-y-2">
+             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {tarefasEmAndamento.length > 0 ? 
                   (
                   tarefasEmAndamento.map(t => (
@@ -404,7 +418,9 @@ export default function Dashboard() {
                       <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0"></div>
                         <span className="text-sm font-bold text-slate-200 truncate" title={t.nomeTarefa}>{t.nomeTarefa}</span>
-                        <span className="text-xs font-black text-green-500 shrink-0 whitespace-nowrap">Faltam {t.diasRestantes} dias</span>
+                        <span className="text-xs font-black text-green-500 shrink-0 whitespace-nowrap">
+                          {t.diasRestantes === 999 ? 'Sem prazo' : `Faltam ${t.diasRestantes} dias`}
+                        </span>
                       </div>
                       <Link to={`/revisar/${t.id}`} className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-600 border border-blue-500/30 text-blue-400 hover:text-white transition-all shrink-0 ml-2" title="Corrigir Tarefa">
                         <Pencil size={16} />
