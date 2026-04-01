@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { collection, query, where, getDocs } from 'firebase/firestore'; // NOVO
-import { db } from '../services/firebase'; // NOVO
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, X, GraduationCap, FileText, UserPlus, PlayCircle } from 'lucide-react'; // NOVO: Ícone PlayCircle adicionado
+import { Plus, X, GraduationCap, FileText, UserPlus, PlayCircle } from 'lucide-react';
 
 export default function BotaoGlobal() {
   const { escolaSelecionada } = useAuth();
   const location = useLocation();
   const [aberto, setAberto] = useState(false);
-  const [tarefaAtualId, setTarefaAtualId] = useState(null); // NOVO: Guarda o ID da tarefa vigente
+  const [tarefasAtivas, setTarefasAtivas] = useState([]); // NOVO: Guarda a lista de todas as tarefas vigentes
   const menuRef = useRef(null);
 
   // Fecha o menu ao clicar fora dele
@@ -44,7 +44,7 @@ export default function BotaoGlobal() {
                                  .filter(t => t.status !== 'lixeira' && t.tipo === 'entrega');
 
         const hojeTime = new Date().getTime();
-        let tarefaVigente = null;
+        const vigentes = [];
 
         for (let t of tarefas) {
           if (!t.dataFim) continue;
@@ -54,15 +54,13 @@ export default function BotaoGlobal() {
 
           // Verifica se hoje está dentro do prazo
           if (startObj.getTime() <= hojeTime && endObj.getTime() >= hojeTime) {
-            if (!tarefaVigente || endObj.getTime() < tarefaVigente.timeFim) {
-              tarefaVigente = { id: t.id, timeFim: endObj.getTime() };
-            }
+            vigentes.push(t);
           }
         }
 
-        setTarefaAtualId(tarefaVigente ? tarefaVigente.id : null);
+        setTarefasAtivas(vigentes);
       } catch (e) {
-        console.error("Erro ao buscar tarefa atual para o FAB", e);
+        console.error("Erro ao buscar tarefas atuais para o FAB", e);
       }
     }
 
@@ -70,7 +68,7 @@ export default function BotaoGlobal() {
   }, [escolaSelecionada, aberto]);
 
   // AJUSTE: Oculta o botão se não houver escola ou se estiver em páginas de acesso
-  const paginasOcultas = ['/login', '/cadastro', '/assinatura-vencida']; // Aproveitei para esconder na tela de bloqueio
+  const paginasOcultas = ['/login', '/cadastro', '/assinatura-vencida']; 
   if (!escolaSelecionada?.id || paginasOcultas.includes(location.pathname)) return null;
 
   return (
@@ -83,9 +81,15 @@ export default function BotaoGlobal() {
         }`}
       >
         {/* NOVO (0º LUGAR VIP): CORRIGIR TAREFA ATUAL (Aparece só se houver tarefa rolando) */}
-        {tarefaAtualId && (
-          <Link to={`/revisar/${tarefaAtualId}`} onClick={() => setAberto(false)} className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-indigo-200 hover:bg-indigo-50 transition-all group">
-            <span className="font-black text-indigo-700 text-sm group-hover:text-indigo-800">Corrigir tarefa atual</span>
+        {tarefasAtivas.length > 0 && (
+          <Link 
+            to={tarefasAtivas.length === 1 ? `/revisar/${tarefasAtivas[0].id}` : '/tarefas'} 
+            onClick={() => setAberto(false)} 
+            className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-indigo-200 hover:bg-indigo-50 transition-all group"
+          >
+            <span className="font-black text-indigo-700 text-sm group-hover:text-indigo-800">
+              {tarefasAtivas.length === 1 ? 'Corrigir tarefa atual' : 'Ver tarefas abertas'}
+            </span>
             <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
               <PlayCircle size={20} />
             </div>
