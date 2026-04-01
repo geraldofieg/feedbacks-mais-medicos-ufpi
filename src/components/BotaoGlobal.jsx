@@ -84,7 +84,7 @@ export default function BotaoGlobal() {
       >
         {/* NOVO (0º LUGAR VIP): CORRIGIR TAREFA ATUAL (Aparece só se houver tarefa rolando) */}
         {tarefaAtualId && (
-          <Link to={`/revisar/${tarefaAtualId}`} className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-indigo-200 hover:bg-indigo-50 transition-all pointer-events-auto group">
+          <Link to={`/revisar/${tarefaAtualId}`} onClick={() => setAberto(false)} className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-indigo-200 hover:bg-indigo-50 transition-all group">
             <span className="font-black text-indigo-700 text-sm group-hover:text-indigo-800">Corrigir tarefa atual</span>
             <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
               <PlayCircle size={20} />
@@ -93,7 +93,7 @@ export default function BotaoGlobal() {
         )}
 
         {/* 1º LUGAR: NOVO REGISTRO / TAREFA (O mais usado na esteira) */}
-        <Link to="/tarefas" className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-gray-100 hover:bg-orange-50 transition-all pointer-events-auto group">
+        <Link to="/tarefas" onClick={() => setAberto(false)} className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-gray-100 hover:bg-orange-50 transition-all group">
           <span className="font-black text-gray-600 text-sm group-hover:text-orange-700">Novo Registro</span>
           <div className="bg-orange-100 text-orange-600 p-2 rounded-xl shadow-sm group-hover:bg-orange-600 group-hover:text-white transition-colors">
             <FileText size={20} />
@@ -101,7 +101,7 @@ export default function BotaoGlobal() {
         </Link>
 
         {/* 2º LUGAR: NOVO ALUNO */}
-        <Link to="/alunos" className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-gray-100 hover:bg-green-50 transition-all pointer-events-auto group">
+        <Link to="/alunos" onClick={() => setAberto(false)} className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-gray-100 hover:bg-green-50 transition-all group">
           <span className="font-black text-gray-600 text-sm group-hover:text-green-700">Novo Aluno</span>
           <div className="bg-green-100 text-green-600 p-2 rounded-xl shadow-sm group-hover:bg-green-600 group-hover:text-white transition-colors">
             <UserPlus size={20} />
@@ -109,7 +109,7 @@ export default function BotaoGlobal() {
         </Link>
 
         {/* 3º LUGAR: NOVA TURMA */}
-        <Link to="/turmas" className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-gray-100 hover:bg-blue-50 transition-all pointer-events-auto group">
+        <Link to="/turmas" onClick={() => setAberto(false)} className="flex items-center gap-3 bg-white px-5 py-3.5 rounded-2xl shadow-xl border border-gray-100 hover:bg-blue-50 transition-all group">
           <span className="font-black text-gray-600 text-sm group-hover:text-blue-700">Nova Turma</span>
           <div className="bg-blue-100 text-blue-600 p-2 rounded-xl shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors">
             <GraduationCap size={20} />
