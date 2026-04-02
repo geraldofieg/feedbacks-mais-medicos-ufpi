@@ -10,7 +10,12 @@ import {
   Lock, Settings, CalendarDays, RotateCcw, Trash2, MousePointer2, Paperclip, FileUp, FileCheck, ExternalLink
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configurar o worker do PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
 
 export default function RevisarAtividade() {
   const { id } = useParams();
@@ -73,7 +78,8 @@ export default function RevisarAtividade() {
 
         setAlunos(listaAlunos);
 
-        const qAtividades = query(collection(db, 'atividades'), where('tarefaId', '==', id));
+        const qAtividades = query(collection(db, 'atividades'), 
+where('tarefaId', '==', id));
         const snapAtividades = await getDocs(qAtividades);
         const mapa = {};
         snapAtividades.docs.forEach(d => { mapa[d.data().alunoId] = { id: d.id, ...d.data() }; });
@@ -154,7 +160,24 @@ export default function RevisarAtividade() {
     );
   }
 
-  // 🔥 NOVA FUNÇÃO DA IA: AGORA LÊ PDFS DO ENUNCIADO E DA RESPOSTA
+  async function extractTextFromPdf(url) {
+    try {
+      const loadingTask = pdfjsLib.getDocument(url);
+      const pdf = await loadingTask.promise;
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        fullText += pageText + '\n';
+      }
+      return fullText;
+    } catch (error) {
+      console.error("Erro ao extrair texto do PDF:", error);
+      return "[Não foi possível extrair o texto deste PDF]";
+    }
+  }
+
   async function handleGerarIA() {
     if (isTier1) {
       if (window.confirm("🔒 Deseja conhecer o Plano Premium para usar a IA?")) navigate('/planos');
@@ -165,80 +188,36 @@ export default function RevisarAtividade() {
       return;
     }
     if (respostaEstaVazia) return;
-    
     setGerandoIA(true);
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const genAI = new GoogleGenerativeAI(apiKey);
-      // Usando o modelo gemini-1.5-flash que tem excelente suporte a leitura de PDFs e arquivos
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const ai = new GoogleGenAI({ apiKey: apiKey });
       
-      const parts = [];
-      
-      parts.push({ text: `Aja como um preceptor médico.\nEstilo: ${promptVivo}.\n\nGere um feedback pedagógico direto avaliando a resposta do aluno em relação à questão proposta.` });
-      
-      if (tarefa?.enunciado) {
-        parts.push({ text: `\n\nQUESTÃO (Texto):\n${tarefa.enunciado}` });
-      }
-      
-      // Se tiver PDF no enunciado, baixa e anexa para a IA ler
-      if (tarefa?.enunciadoArquivoUrl) {
-        try {
-          const response = await fetch(tarefa.enunciadoArquivoUrl);
-          const blob = await response.blob();
-          const base64data = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result.split(',')[1]);
-            reader.readAsDataURL(blob);
-          });
-          parts.push({ text: `\n\nQUESTÃO (Arquivo em anexo):` });
-          parts.push({
-            inlineData: {
-              data: base64data,
-              mimeType: blob.type || 'application/pdf'
-            }
-          });
-        } catch (err) {
-          console.error("Erro ao carregar anexo do enunciado para a IA:", err);
-          parts.push({ text: `\n\n[Aviso: Não foi possível ler o anexo do enunciado automaticamente devido a bloqueios de segurança do navegador.]` });
-        }
-      }
-      
-      if (novaResposta) {
-        parts.push({ text: `\n\nRESPOSTA DO ALUNO (Texto):\n${novaResposta}` });
-      }
-      
-      // Se tiver PDF na resposta do aluno, baixa e anexa para a IA ler
-      if (arquivoUrl) {
-        try {
-          const response = await fetch(arquivoUrl);
-          const blob = await response.blob();
-          const base64data = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result.split(',')[1]);
-            reader.readAsDataURL(blob);
-          });
-          parts.push({ text: `\n\nRESPOSTA DO ALUNO (Arquivo em anexo):` });
-          parts.push({
-            inlineData: {
-              data: base64data,
-              mimeType: blob.type || 'application/pdf'
-            }
-          });
-        } catch (err) {
-          console.error("Erro ao carregar anexo da resposta para a IA:", err);
-          parts.push({ text: `\n\n[Aviso: Não foi possível ler o anexo da resposta do aluno automaticamente devido a bloqueios de segurança do navegador.]` });
-        }
+      let textoEnunciado = tarefa?.enunciado || "";
+      if (tarefa?.enunciadoArquivoUrl && tarefa?.enunciadoArquivoUrl.toLowerCase().includes('.pdf')) {
+        const pdfText = await extractTextFromPdf(tarefa.enunciadoArquivoUrl);
+        textoEnunciado += `\n\n[Conteúdo do PDF do Enunciado]:\n${pdfText}`;
       }
 
-      const result = await model.generateContent(parts);
-      setFeedbackEditado(result.response.text());
+      let textoResposta = novaResposta || "";
+      if (arquivoUrl && arquivoUrl.toLowerCase().includes('.pdf')) {
+        const pdfText = await extractTextFromPdf(arquivoUrl);
+        textoResposta += `\n\n[Conteúdo do PDF da Resposta]:\n${pdfText}`;
+      }
+
+      const promptCompleto = `Aja como um preceptor médico.
+Estilo: ${promptVivo}. QUESTÃO: ${textoEnunciado}. RESPOSTA: "${textoResposta}". Gere um feedback pedagógico direto.`;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-lite-preview",
+        contents: promptCompleto,
+      });
+      setFeedbackEditado(response.text);
     } catch (e) { 
       console.error(e);
       alert("Erro ao ligar com a IA da Google. Verifique se os PDFs são muito grandes ou tente novamente.");
     }
-    finally { 
-      setGerandoIA(false);
+    finally { setGerandoIA(false);
     }
   }
 
@@ -251,15 +230,19 @@ export default function RevisarAtividade() {
         arquivoUrl: arquivoUrl,
         nomeArquivo: nomeArquivo,
         feedbackFinal: feedbackEditado.trim(), 
-        feedbackSugerido: atividadeAtual?.feedbackSugerido || (isPremium || isTier2 ? feedbackEditado.trim() : ''),
-        nota: notaAluno.trim() || null, 
-        status: atividadeAtual?.status === 'aprovado' ? 'aprovado' : 'pendente',
+        feedbackSugerido: atividadeAtual?.feedbackSugerido ||
+(isPremium || isTier2 ? feedbackEditado.trim() : ''),
+        nota: notaAluno.trim() ||
+null, 
+        status: atividadeAtual?.status === 'aprovado' ?
+'aprovado' : 'pendente',
         nomeAluno: alunoAtual.nome, 
         nomeTarefa: tarefa.nomeTarefa,
         aluno: alunoAtual.nome,
         tarefa: tarefa.nomeTarefa,
         modulo: tarefa.nomeTarefa,
-        revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
+        revisadoPor: userProfile?.nome ||
+currentUser?.email || 'Professor'
       };
 
       if (atividadeAtual?.status === 'aprovado') {
@@ -296,7 +279,8 @@ export default function RevisarAtividade() {
         aluno: alunoAtual.nome,
         tarefa: tarefa.nomeTarefa,
         modulo: tarefa.nomeTarefa,
-        revisadoPor: userProfile?.nome || currentUser?.email || 'Professor'
+        revisadoPor: userProfile?.nome ||
+currentUser?.email || 'Professor'
       };
       
       if (atividadeAtual) {
@@ -311,6 +295,7 @@ export default function RevisarAtividade() {
           dataCriacao: serverTimestamp(), 
           postado: false, 
           ...payload 
+   
         };
         const docRef = await addDoc(collection(db, 'atividades'), novaAtiv);
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { id: docRef.id, ...novaAtiv } }));
@@ -321,7 +306,8 @@ export default function RevisarAtividade() {
         setCopiado(true);
         setTimeout(() => setCopiado(false), 2000);
       }
-    } catch (error) { console.error(error); } finally { setSalvando(false); }
+    } catch (error) { console.error(error); } finally { setSalvando(false);
+    }
   }
 
   async function handleMarcarPostado() {
@@ -330,7 +316,8 @@ export default function RevisarAtividade() {
     try {
       await updateDoc(doc(db, 'atividades', atividadeAtual.id), { postado: true, dataPostagem: serverTimestamp() });
       setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], postado: true } }));
-    } catch (error) { console.error(error); } finally { setMarcandoPostado(false); }
+    } catch (error) { console.error(error); } finally { setMarcandoPostado(false);
+    }
   }
 
   async function handleDevolverRevisao() {
@@ -339,7 +326,8 @@ export default function RevisarAtividade() {
     try {
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), { status: 'pendente', postado: false, dataAprovacao: deleteField() });
         setAtividadesMap(prev => ({ ...prev, [alunoAtual.id]: { ...prev[alunoAtual.id], status: 'pendente', postado: false, dataAprovacao: null } }));
-    } catch (e) { console.error(e); } finally { setSalvando(false); }
+    } catch (e) { console.error(e);
+    } finally { setSalvando(false); }
   }
 
   async function handleExcluirAtividade() {
@@ -355,7 +343,6 @@ export default function RevisarAtividade() {
   const isStep1Done = !!(novaResposta || arquivoUrl);
   const isStep2Done = atividadeAtual?.status === 'aprovado' || atividadeAtual?.postado;
   const isStep3Done = atividadeAtual?.postado;
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans">
       
@@ -363,6 +350,7 @@ export default function RevisarAtividade() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3 self-start md:self-auto">
              <Link to="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><ArrowLeft size={20} /></Link>
+    
              
             <div>
                <h2 className="text-lg font-black text-slate-900 line-clamp-2 leading-tight max-w-[280px] sm:max-w-full">{tarefa?.nomeTarefa}</h2>
@@ -371,12 +359,14 @@ export default function RevisarAtividade() {
           </div>
           
           <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-2xl w-full md:w-[450px]">
+  
             <Search size={16} className="text-blue-500" />
             <select 
               className="bg-transparent font-black text-slate-700 outline-none w-full cursor-pointer text-xs md:text-sm"
               value={alunoSelecionadoId}
               onChange={(e) => setAlunoSelecionadoId(e.target.value)}
             >
+           
                <option value="">Buscar Aluno na Lista...</option>
               {alunos.map(a => {
                 const registro = atividadesMap[a.id];
@@ -388,7 +378,8 @@ export default function RevisarAtividade() {
                   } else if (registro.status === 'aprovado') {
                     icone = '🟡';
                   } else {
-                    const temConteudo = (registro.resposta && registro.resposta.trim() !== '') || registro.arquivoUrl;
+                    const temConteudo = (registro.resposta && registro.resposta.trim() !== '') ||
+registro.arquivoUrl;
                     icone = temConteudo ? '🟡' : '🔴';
                   }
                 }
@@ -403,55 +394,75 @@ export default function RevisarAtividade() {
         
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 mb-6">
           <div className="flex items-center justify-between relative px-4 md:px-12">
-            <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
+            <div 
+className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 -z-10 rounded-full"></div>
             
             <div className={`absolute left-10 top-1/2 -translate-y-1/2 h-1 transition-all duration-500 -z-10 rounded-full ${
-              isStep2Done ? 'w-[calc(100%-5rem)] bg-green-500' : (isStep1Done ? 'w-1/2 bg-green-500' : 'w-0')
+              isStep2Done ?
+'w-[calc(100%-5rem)] bg-green-500' : (isStep1Done ? 'w-1/2 bg-green-500' : 'w-0')
             }`}></div>
 
-            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!alunoAtual ? 'text-slate-400' : (isStep1Done ? 'text-green-600' : 'text-blue-600')}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!alunoAtual ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep1Done ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg ring-4 ring-blue-50')}`}>
-                {isStep1Done ? '✓' : '1'}
+            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!alunoAtual ?
+'text-slate-400' : (isStep1Done ? 'text-green-600' : 'text-blue-600')}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!alunoAtual ?
+'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep1Done ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg ring-4 ring-blue-50')}`}>
+                {isStep1Done ?
+'✓' : '1'}
               </div>
-              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">1. Resposta do Aluno</span>
+              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">1.
+Resposta do Aluno</span>
             </div>
 
-            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!isStep1Done ? 'text-slate-400' : (isStep2Done ? 'text-green-600' : 'text-amber-500')}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!isStep1Done ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep2Done ? 'bg-green-500 text-white shadow-lg' : 'bg-amber-400 text-white shadow-lg ring-4 ring-amber-50')}`}>
-                {isStep2Done ? '✓' : '2'}
+            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!isStep1Done ?
+'text-slate-400' : (isStep2Done ? 'text-green-600' : 'text-amber-500')}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!isStep1Done ?
+'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep2Done ? 'bg-green-500 text-white shadow-lg' : 'bg-amber-400 text-white shadow-lg ring-4 ring-amber-50')}`}>
+                {isStep2Done ?
+'✓' : '2'}
               </div>
-              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">2. Área de Feedback</span>
+              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">2.
+Área de Feedback</span>
             </div>
 
-            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!isStep2Done ? 'text-slate-400' : (isStep3Done ? 'text-green-600' : 'text-blue-600')}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!isStep2Done ? 'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep3Done ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-500 text-white shadow-lg ring-4 ring-blue-50')}`}>
-                {isStep3Done ? '✓' : '3'}
+            <div className={`flex flex-col items-center gap-2 bg-white px-3 ${!isStep2Done ?
+'text-slate-400' : (isStep3Done ? 'text-green-600' : 'text-blue-600')}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition-colors ${!isStep2Done ?
+'bg-slate-100 text-slate-400 border-2 border-slate-200' : (isStep3Done ? 'bg-green-500 text-white shadow-lg' : 'bg-blue-500 text-white shadow-lg ring-4 ring-blue-50')}`}>
+                {isStep3Done ?
+'✓' : '3'}
               </div>
-              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">3. Pronto p/ Postar</span>
+              <span className="text-[10px] md:text-xs uppercase font-black tracking-widest text-center leading-tight">3.
+Pronto p/ Postar</span>
             </div>
           </div>
         </div>
 
-        {!alunoAtual ? (
+        {!alunoAtual ?
+(
           <div className="bg-white p-12 md:p-24 rounded-[48px] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center">
             <div className="flex flex-col items-center mb-10 text-center animate-in fade-in slide-in-from-top-4 duration-700">
               <div className="bg-blue-100 text-blue-600 p-4 rounded-full mb-4">
                 <MousePointer2 size={32} />
               </div>
+       
                <h3 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight mb-4">A esteira de revisão está vazia</h3>
               <div className="text-slate-600 max-w-md text-left space-y-3 bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm text-lg font-medium">
+                {/* 🔥 TEXTO ATUALIZADO AQUI 🔥 */}
                 <p><strong className="text-blue-600">1.</strong> Selecione um aluno pendente no menu acima.</p>
-                <p><strong className="text-amber-500">2.</strong> Cole a resposta dele aqui no sistema.</p>
+          
+               <p><strong className="text-amber-500">2.</strong> Cole a resposta dele aqui no sistema.</p>
                 <p><strong className="text-green-600">3.</strong> Avalie e aprove para movê-lo para a lista final.</p>
               </div>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 
+gap-8 items-start">
             <div className="lg:col-span-8 space-y-6">
               <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-6 md:p-10 space-y-12">
                   <section>
-                    <h4 className="text-xs font-black text-slate-900 uppercase mb-4">1. Enunciado</h4>
+                    <h4 className="text-xs font-black text-slate-900 uppercase mb-4">1.
+Enunciado</h4>
                     <div className="bg-slate-50 p-6 md:p-8 rounded-2xl text-slate-700 leading-relaxed font-medium text-lg whitespace-pre-wrap">
                       {renderizarComLinks(tarefa?.enunciado)}
                     </div>
@@ -513,52 +524,67 @@ export default function RevisarAtividade() {
               </div>
             </div>
 
+     
         <div className="lg:col-span-4 lg:sticky lg:top-24">
               <div className="bg-slate-900 rounded-[32px] p-6 md:p-8 text-white shadow-2xl">
                 <div className="mb-6">
                   <h3 className="text-xl font-black flex items-center gap-3 mb-6"><CheckCircle className="text-green-400" size={24}/>Avaliação</h3>
-                  <button onClick={handleGerarIA} disabled={gerandoIA || respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-600 to-blue-600 mb-4 flex items-center justify-center gap-3 shadow-lg shadow-indigo-500/20 active:scale-95 transition-transform">
-                    {gerandoIA ? <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>} Gerar Feedback IA
+                  <button onClick={handleGerarIA} disabled={gerandoIA ||
+respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-600 to-blue-600 mb-4 flex items-center justify-center gap-3 shadow-lg shadow-indigo-500/20 active:scale-95 transition-transform">
+                    {gerandoIA ?
+<RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>} Gerar Feedback IA
                   </button>
                 </div>
                 <div className="space-y-6">
                   <textarea rows="10" placeholder="Feedback aparecerá aqui..." className="w-full bg-slate-800 rounded-2xl p-5 text-sm text-slate-100 outline-none resize-none focus:ring-2 focus:ring-indigo-500 transition-all" value={feedbackEditado} onChange={e => setFeedbackEditado(e.target.value)}/>
     
+
                    <input type="text" placeholder="Nota" className="bg-slate-800 p-4 rounded-2xl font-black text-white w-full outline-none focus:ring-2 focus:ring-indigo-500 transition-all" value={notaAluno} onChange={e => setNotaAluno(e.target.value)}/>
                   
-                  {atividadeAtual?.postado ? (
+                  {atividadeAtual?.postado ?
+(
                       <div className="w-full bg-green-500/20 text-green-400 py-4 rounded-2xl text-xs font-black flex justify-center items-center gap-2 border border-green-500/30"><CheckCheck size={18}/> LANÇADO OFICIALMENTE</div>
-                  ) : atividadeAtual?.status === 'aprovado' ? (
+                  ) : atividadeAtual?.status === 'aprovado' ?
+(
                         <div className="pt-4 border-t border-slate-800 space-y-4">
                           <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                            <div className="bg-green-500 text-white rounded-full p-1.5 shrink-0 mt-0.5">
+                            <div className="bg-green-500 text-white rounded-full p-1.5 shrink-0 
+mt-0.5">
                               <CheckCircle size={18} />
                             </div>
                             <div>
+            
                   <h4 className="text-green-400 font-black text-sm tracking-wide">PASSO 3 LIBERADO!</h4>
                               <p className="text-green-500/80 text-xs font-bold mt-1 leading-snug">Feedback aprovado. Copie o texto abaixo e encerre a tarefa.</p>
                             </div>
+    
                       </div>
 
                           <div className="space-y-3">
-                            <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"><Copy size={18}/> {copiado ? 'Copiado!' : '1. Copiar Feedback'}</button>
+                            <button onClick={() => handleAprovar(true)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 hover:bg-slate-100 transition-colors"><Copy size={18}/> {copiado ?
+'Copiado!' : '1. Copiar Feedback'}</button>
                             <button onClick={handleMarcarPostado} disabled={marcandoPostado} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl text-sm flex justify-center items-center gap-2 shadow-xl hover:bg-indigo-700 transition-colors"><Send size={18}/> 2. Marcar Oficial (Move p/ Histórico)</button>
                           </div>
+                   
      </div>
                   ) : (
                         <div className="grid grid-cols-2 gap-3">
                            <button onClick={handleSalvarRascunho} disabled={salvando || (!feedbackEditado && !novaResposta && !arquivoUrl)} className="bg-slate-800 py-3.5 rounded-2xl text-xs font-black border border-slate-700 hover:bg-slate-700 transition-colors leading-tight px-2">
+  
                             {salvoFeedback ? '✅ Salvo!' : '💾 Salvar (Mantém na Revisão)'}
                            </button>
 
-                          <button onClick={() => handleAprovar(true)} disabled={salvando || !feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black hover:bg-blue-700 transition-colors leading-tight px-2">🚀 Aprovar (Move p/ Postar)</button>
+                          <button onClick={() => handleAprovar(true)} disabled={salvando ||
+!feedbackEditado} className="bg-blue-600 py-3.5 rounded-2xl text-xs font-black hover:bg-blue-700 transition-colors leading-tight px-2">🚀 Aprovar (Move p/ Postar)</button>
                         </div>
                   )}
 
                   {atividadeAtual && (
-                    <div className="mt-8 border-t border-slate-800 pt-8 space-y-3">
+                    <div className="mt-8 border-t border-slate-800 pt-8 
+space-y-3">
                        <button onClick={handleDevolverRevisao} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-[10px] font-bold text-amber-500 py-2 hover:bg-amber-500/10 rounded-lg transition-colors"><RotateCcw size={14}/> Devolver p/ Revisão</button>
                         <button onClick={handleExcluirAtividade} disabled={salvando} className="w-full flex items-center justify-center gap-2 text-[10px] font-bold text-red-500 py-2 hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 size={14}/> Excluir Resposta</button>
+                  
   </div>
                  )}
                 </div>
