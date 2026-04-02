@@ -461,10 +461,17 @@ gap-8 items-start">
             <div className="lg:col-span-8 space-y-6">
               <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-6 md:p-10 space-y-12">
                   <section>
-                    <h4 className="text-xs font-black text-slate-900 uppercase mb-4">1.
-Enunciado</h4>
+                    <h4 className="text-xs font-black text-slate-900 uppercase mb-4">1. Enunciado</h4>
                     <div className="bg-slate-50 p-6 md:p-8 rounded-2xl text-slate-700 leading-relaxed font-medium text-lg whitespace-pre-wrap">
-                      {renderizarComLinks(tarefa?.enunciado)}
+                      {tarefa?.enunciado ? renderizarComLinks(tarefa.enunciado) : (!tarefa?.enunciadoArquivoUrl && "Sem enunciado.")}
+                      
+                      {tarefa?.enunciadoArquivoUrl && (
+                        <div className="mt-4">
+                          <a href={tarefa.enunciadoArquivoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-sm font-black uppercase tracking-wider hover:bg-blue-100 transition-colors border border-blue-200">
+                            <Paperclip size={16}/> {tarefa.enunciadoArquivoNome || 'Ver Anexo do Enunciado'} <ExternalLink size={14}/>
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </section>
            
