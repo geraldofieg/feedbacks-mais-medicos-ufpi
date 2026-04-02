@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.3.3",
     "@google/genai": "latest",
     "@tailwindcss/vite": "^4.0.0",
     "@vitejs/plugin-react": "^4.3.1",
