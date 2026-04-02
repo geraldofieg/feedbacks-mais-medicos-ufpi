@@ -4,7 +4,7 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDZ7iAX0BMOazbrooDwsLDqLZO4IpwOkdA",
+  apiKey: "AIzaSyDNBcuKR0yl9PmzJ4ryY1p8UooYN78gFvU",
   authDomain: "feedbacks-mais-medicos-novo.firebaseapp.com",
   projectId: "feedbacks-mais-medicos-novo",
   storageBucket: "feedbacks-mais-medicos-novo.firebasestorage.app",
