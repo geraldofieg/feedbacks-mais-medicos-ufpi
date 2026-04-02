@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { Lock, Mail, User, Phone, GraduationCap, CheckCircle2, ArrowLeft } from 'lucide-react';
 import emailjs from '@emailjs/browser'; 
 
-// 🔥 O ERRO DA VERCEL ESTAVA AQUI: Faltava o "export default" nesta linha
 export default function Signup() {
   const [nome, setNome] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
