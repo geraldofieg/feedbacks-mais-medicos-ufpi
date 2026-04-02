@@ -149,6 +149,11 @@ export default function Tarefas() {
        else if (dias > 0) status = 'futuro';
        else status = 'atual';
        timestampVal = dataInicio.getTime();
+    } else {
+       // Se não tem data de início nem fim, é atual
+       status = 'atual';
+       dias = 999;
+       timestampVal = hoje.getTime();
     }
 
     if (dataInicio && dataFim) dataFormatada = `${dataInicio.toLocaleDateString('pt-BR')} até ${dataFim.toLocaleDateString('pt-BR')}`;
@@ -163,7 +168,12 @@ export default function Tarefas() {
     try {
       let d = ts.toDate ? ts.toDate() : new Date(ts);
       if (isNaN(d.getTime())) return "";
-      return d.toISOString().split('T')[0];
+      
+      // Fix timezone issue: Format the date using local time instead of UTC
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     } catch (e) { return ""; }
   };
 
@@ -192,29 +202,55 @@ export default function Tarefas() {
     
     setTituloEdicao(t.nomeTarefa || t.titulo || 'Tarefa sem nome');
     setEnunciadoEdicao(t.enunciado || '');
+    
+    // Fix timezone issue by using the local date string directly if available, or formatting the timestamp
     setDataInicioEdicao(tsToDateInput(t.dataInicio));
     setHoraInicioEdicao(tsToTimeInput(t.dataInicio));
     setDataFimEdicao(tsToDateInput(t.dataFim));
     setHoraFimEdicao(tsToTimeInput(t.dataFim));
+    
     setTipoEdicao(tiposValidos.includes(tipoNormalizado) ? tipoNormalizado : 'entrega');
     setEditandoId(t.id); 
+    
+    // Carregar dados do arquivo anexo para edição
+    setEnunciadoArquivoUrl(t.enunciadoArquivoUrl || '');
+    setEnunciadoArquivoNome(t.enunciadoArquivoNome || '');
   };
 
   async function handleSalvarEdicao(id) {
     if (!tituloEdicao.trim()) return;
     try {
+      // Use the exact date string provided by the user to avoid timezone shifts
       const prazoInicial = dataInicioEdicao ? Timestamp.fromDate(criarDataSegura(dataInicioEdicao, horaInicioEdicao, false)) : null;
       const prazoFinal = dataFimEdicao ? Timestamp.fromDate(criarDataSegura(dataFimEdicao, horaFimEdicao, true)) : null;
+      
       await updateDoc(doc(db, 'tarefas', id), { 
         nomeTarefa: tituloEdicao.trim(), 
         enunciado: enunciadoEdicao.trim(),
+        enunciadoArquivoUrl: enunciadoArquivoUrl,
+        enunciadoArquivoNome: enunciadoArquivoNome,
         dataInicio: prazoInicial,
         dataFim: prazoFinal, 
         tipo: tipoEdicao
       });
-      const listaAtualizada = tarefas.map(t => t.id === id ? { ...t, nomeTarefa: tituloEdicao.trim(), enunciado: enunciadoEdicao.trim(), dataInicio: prazoInicial, dataFim: prazoFinal, tipo: tipoEdicao } : t);
+      
+      const listaAtualizada = tarefas.map(t => t.id === id ? { 
+        ...t, 
+        nomeTarefa: tituloEdicao.trim(), 
+        enunciado: enunciadoEdicao.trim(), 
+        enunciadoArquivoUrl: enunciadoArquivoUrl,
+        enunciadoArquivoNome: enunciadoArquivoNome,
+        dataInicio: prazoInicial, 
+        dataFim: prazoFinal, 
+        tipo: tipoEdicao 
+      } : t);
+      
       setTarefas(listaAtualizada);
       setEditandoId(null);
+      
+      // Limpar os estados de arquivo após salvar
+      setEnunciadoArquivoUrl('');
+      setEnunciadoArquivoNome('');
     } catch (error) { console.error("Erro ao salvar:", error); }
   }
 
@@ -458,7 +494,24 @@ export default function Tarefas() {
                                <input type="text" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800" value={tituloEdicao} onChange={e => setTituloEdicao(e.target.value)} autoFocus />
                              </div>
                              <div>
-                               <label className="text-[10px] font-black text-slate-500 uppercase">Enunciado / Link</label>
+                               <div className="flex items-center justify-between mb-2">
+                                 <label className="text-[10px] font-black text-slate-500 uppercase">Enunciado / Link</label>
+                                 <div className="flex items-center gap-2">
+                                   {enunciadoArquivoUrl ? (
+                                     <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 animate-in zoom-in">
+                                       <FileCheck size={12}/>
+                                       <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{enunciadoArquivoNome || 'Anexo'}</span>
+                                       <button type="button" onClick={() => { setEnunciadoArquivoUrl(''); setEnunciadoArquivoNome(''); }} className="hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
+                                     </div>
+                                   ) : (
+                                     <label className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
+                                       {uploading ? <RefreshCw size={12} className="animate-spin"/> : <FileUp size={12}/>}
+                                       <span className="text-[10px] font-black uppercase">{uploading ? 'Subindo...' : 'Anexar PDF/Doc'}</span>
+                                       <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={handleUploadEnunciado} disabled={uploading}/>
+                                     </label>
+                                   )}
+                                 </div>
+                               </div>
                                <textarea rows="3" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none font-medium text-slate-700" value={enunciadoEdicao} onChange={e => setEnunciadoEdicao(e.target.value)} />
                              </div>
                              <div className="grid grid-cols-2 gap-3">
