@@ -237,6 +237,23 @@ ${estiloAprendido ? `ESTILO E TOM PREFERIDOS PELA PROFESSORA (siga estes padrõe
     }
   }
 
+  // 📊 CÁLCULO DE SIMILARIDADE JACCARD — local, zero custo de token
+  function calcularSimilaridadeJaccard(textoA, textoB) {
+    if (!textoA || !textoB) return null;
+    const tokenizar = (t) => new Set(
+      t.toLowerCase()
+       .replace(/[.,!?;:()\[\]"']/g, ' ')
+       .split(/\s+/)
+       .filter(w => w.length > 1)
+    );
+    const setA = tokenizar(textoA);
+    const setB = tokenizar(textoB);
+    if (setA.size === 0 || setB.size === 0) return null;
+    const intersecao = new Set([...setA].filter(w => setB.has(w)));
+    const uniao = new Set([...setA, ...setB]);
+    return Math.round((intersecao.size / uniao.size) * 100);
+  }
+
   // 🧠 ANÁLISE DE ESTILO EM BACKGROUND — roda a cada 3 edições reais da professora
   async function dispararAnaliseEstilo(feedbackOriginalIA, feedbackAprovado) {
     try {
@@ -378,6 +395,13 @@ currentUser?.email || 'Professor'
         revisadoPor: userProfile?.nome ||
 currentUser?.email || 'Professor'
       };
+
+      // 📊 Calcular e salvar similaridade Jaccard
+      const feedbackSugeridoParaSimilaridade = atividadeAtual?.feedbackSugerido || '';
+      if (feedbackSugeridoParaSimilaridade.trim() !== '') {
+        const score = calcularSimilaridadeJaccard(feedbackSugeridoParaSimilaridade, feedbackEditado.trim());
+        if (score !== null) payload.similaridadeIA = score;
+      }
       
       if (atividadeAtual) {
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
