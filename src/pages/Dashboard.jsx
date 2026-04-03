@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, Pencil, X } from 'lucide-react';
+import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, Pencil, X, Brain } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import OnboardingModal from '../components/OnboardingModal';
 
@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [tarefasEmAndamento, setTarefasEmAndamento] = useState([]);
   const [kanban, setKanban] = useState({ pendentes: 0, faltaLancar: 0, finalizados: 0 });
   const [metricasIA, setMetricasIA] = useState({ total: 0, originais: 0, percentual: 0 });
+  const [aderenciaEstilo, setAderenciaEstilo] = useState({ media: null, total: 0 });
   const [temAlunos, setTemAlunos] = useState(true);
   const [temTarefasGeral, setTemTarefasGeral] = useState(true);
   const [gestaoVista, setGestaoVista] = useState({ atuais: [], anteriores: [] });
@@ -190,6 +191,18 @@ export default function Dashboard() {
 
           setKanban({ pendentes: p, faltaLancar: f, finalizados: ok });
           setMetricasIA({ total: iaTotal, originais: iaOriginais, percentual: iaTotal > 0 ? Math.round((iaOriginais / iaTotal) * 100) : 0 });
+
+          // 📊 Calcular média de aderência ao estilo (campo similaridadeIA salvo por RevisarAtividade)
+          const scoresValidos = activities
+            .filter(d => typeof d.similaridadeIA === 'number' && (d.status === 'aprovado' || d.postado))
+            .map(d => d.similaridadeIA);
+          
+          if (scoresValidos.length > 0) {
+            const media = Math.round(scoresValidos.reduce((acc, v) => acc + v, 0) / scoresValidos.length);
+            setAderenciaEstilo({ media, total: scoresValidos.length });
+          } else {
+            setAderenciaEstilo({ media: null, total: 0 });
+          }
 
           const qTar = query(collection(db, 'tarefas'), where('instituicaoId', '==', escolaSelecionada.id));
           const snapTar = await getDocs(qTar);
@@ -454,19 +467,48 @@ export default function Dashboard() {
           </div>
 
           {mostrarTermometroIA && (
-            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
-              <div className="flex items-start sm:items-center gap-3">
-                <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl shrink-0"><Sparkles size={22}/></div>
-                <div>
-                  <h3 className="text-xs font-black text-purple-700 uppercase tracking-widest">Termômetro de Autonomia da IA</h3>
-                  <p className="text-xs font-medium text-purple-600 mt-1 leading-relaxed max-w-xl">
-                    Mede a eficácia da IA. Mostra a porcentagem de feedbacks que a IA gerou e você aprovou para enviar ao aluno <strong>sem precisar fazer nenhuma edição</strong> no texto original.
-                  </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              {/* Card 1: Termômetro de Autonomia (existente) */}
+              <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="bg-purple-100 text-purple-600 p-2.5 rounded-xl shrink-0"><Sparkles size={20}/></div>
+                  <div>
+                    <h3 className="text-xs font-black text-purple-700 uppercase tracking-widest">Autonomia da IA</h3>
+                    <p className="text-xs font-medium text-purple-500 mt-1 leading-relaxed">
+                      Feedbacks aprovados <strong>sem nenhuma edição</strong>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-purple-100 shadow-sm w-full sm:w-auto text-right">
+                  <span className="text-3xl font-black text-purple-700">{metricasIA.percentual}%</span>
+                  <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">{metricasIA.originais} de {metricasIA.total} exatos</span>
                 </div>
               </div>
-              <div className="flex flex-col items-start sm:items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-purple-100 shadow-sm w-full sm:w-auto text-right">
-                <span className="text-3xl font-black text-purple-700 w-full">{metricasIA.percentual}%</span>
-                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest w-full">{metricasIA.originais} de {metricasIA.total} exatos</span>
+
+              {/* Card 2: Aderência ao Estilo (novo) */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 md:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="bg-emerald-100 text-emerald-600 p-2.5 rounded-xl shrink-0"><Brain size={20}/></div>
+                  <div>
+                    <h3 className="text-xs font-black text-emerald-700 uppercase tracking-widest">Aderência ao Estilo</h3>
+                    <p className="text-xs font-medium text-emerald-500 mt-1 leading-relaxed">
+                      Similaridade média entre sugestão da IA e aprovação final
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end shrink-0 bg-white px-4 py-2 rounded-xl border border-emerald-100 shadow-sm w-full sm:w-auto text-right">
+                  {aderenciaEstilo.media !== null ? (
+                    <>
+                      <span className="text-3xl font-black text-emerald-700">{aderenciaEstilo.media}%</span>
+                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">em {aderenciaEstilo.total} feedback{aderenciaEstilo.total !== 1 ? 's' : ''}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-lg font-black text-emerald-300">—</span>
+                      <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest">Aprovações pendentes</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}
