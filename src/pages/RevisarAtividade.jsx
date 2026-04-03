@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, deleteField } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, deleteField, increment } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, CheckCircle, User, Copy, 
   Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck, Eraser,
-  Lock, Settings, CalendarDays, RotateCcw, Trash2, MousePointer2, Paperclip, FileUp, FileCheck, ExternalLink
+  Lock, Settings, CalendarDays, RotateCcw, Trash2, MousePointer2, Paperclip, FileUp, FileCheck, ExternalLink, Brain
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenAI } from '@google/genai';
@@ -41,6 +41,12 @@ export default function RevisarAtividade() {
   const [uploading, setUploading] = useState(false);
   const [arquivoUrl, setArquivoUrl] = useState('');
   const [nomeArquivo, setNomeArquivo] = useState('');
+
+  // 🧠 APRENDIZADO DE ESTILO
+  const [estiloAprendido, setEstiloAprendido] = useState('');
+  const [edicoesPendentes, setEdicoesPendentes] = useState(0);
+  const [totalEdicoesIncorporadas, setTotalEdicoesIncorporadas] = useState(0);
+  const [analisandoEstilo, setAnalisandoEstilo] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const isPremium = userProfile?.plano === 'premium' || isAdmin;
@@ -85,6 +91,16 @@ where('tarefaId', '==', id));
         snapAtividades.docs.forEach(d => { mapa[d.data().alunoId] = { id: d.id, ...d.data() }; });
         
         setAtividadesMap(mapa);
+
+        // 🧠 Carregar dados de estilo aprendido do usuário
+        const docRefUser = doc(db, 'usuarios', currentUser.uid);
+        const docSnapUser = await getDoc(docRefUser);
+        if (docSnapUser.exists()) {
+          const dadosUser = docSnapUser.data();
+          setEstiloAprendido(dadosUser?.estiloAprendido || '');
+          setEdicoesPendentes(dadosUser?.edicoesPendentesAnalise || 0);
+          setTotalEdicoesIncorporadas(dadosUser?.totalEdicoesIncorporadas || 0);
+        }
       } catch (error) { 
         console.error(error);
       } 
@@ -206,7 +222,7 @@ where('tarefaId', '==', id));
       }
 
       const promptCompleto = `Aja como um preceptor médico.
-Estilo: ${promptVivo}. QUESTÃO: ${textoEnunciado}. RESPOSTA: "${textoResposta}". Gere um feedback pedagógico direto.`;
+${estiloAprendido ? `ESTILO E TOM PREFERIDOS PELA PROFESSORA (siga estes padrões com prioridade):\n${estiloAprendido}\n\n` : ''}Instruções de avaliação: ${promptVivo}. QUESTÃO: ${textoEnunciado}. RESPOSTA: "${textoResposta}". Gere um feedback pedagógico direto.`;
       
       const response = await ai.models.generateContent({
         model: "gemini-3.1-flash-lite-preview",
@@ -218,6 +234,86 @@ Estilo: ${promptVivo}. QUESTÃO: ${textoEnunciado}. RESPOSTA: "${textoResposta}"
       alert("Erro ao ligar com a IA da Google. Verifique se os PDFs são muito grandes ou tente novamente.");
     }
     finally { setGerandoIA(false);
+    }
+  }
+
+  // 🧠 ANÁLISE DE ESTILO EM BACKGROUND — roda a cada 3 edições reais da professora
+  async function dispararAnaliseEstilo(feedbackOriginalIA, feedbackAprovado) {
+    try {
+      const docRefUser = doc(db, 'usuarios', currentUser.uid);
+      const docSnap = await getDoc(docRefUser);
+      const dadosUser = docSnap.data() || {};
+
+      const edicoesRecentes = dadosUser.edicoesRecentes || [];
+      const novoPar = {
+        sugerido: feedbackOriginalIA || '',
+        aprovado: feedbackAprovado,
+      };
+      const edicoesAtualizadas = [...edicoesRecentes, novoPar].slice(-3);
+      const novoContador = (dadosUser.edicoesPendentesAnalise || 0) + 1;
+
+      if (novoContador < 3) {
+        // Acumula silenciosamente, sem chamar a IA ainda
+        await updateDoc(docRefUser, {
+          edicoesRecentes: edicoesAtualizadas,
+          edicoesPendentesAnalise: novoContador,
+        });
+        setEdicoesPendentes(novoContador);
+        return;
+      }
+
+      // Chegou a 3 edições: hora de destilar o estilo
+      setAnalisandoEstilo(true);
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const ai = new GoogleGenAI({ apiKey });
+      const estiloAtual = dadosUser.estiloAprendido || '';
+
+      const promptAnalise = `Você é um analisador de estilo pedagógico.
+Sua tarefa é atualizar um documento de "Estilo Aprendido" com base nos padrões de edição de uma professora de medicina.
+
+ESTILO ATUAL REGISTRADO:
+${estiloAtual || '(Nenhum estilo registrado ainda — crie do zero.)'}
+
+PARES DE EDIÇÃO — feedback gerado pela IA versus versão final aprovada pela professora:
+${edicoesAtualizadas.map((par, i) => `
+--- Par ${i + 1} ---
+IA sugeriu: "${par.sugerido}"
+Professora aprovou: "${par.aprovado}"
+`).join('')}
+
+TAREFA: Analise o que a professora adicionou, removeu ou reformulou em cada par. Atualize o documento de estilo para capturar esses padrões.
+
+REGRAS RÍGIDAS DE RESPOSTA:
+• Máximo absoluto de 300 palavras
+• Use bullet points curtos (•)
+• Organize em tópicos: Tom, Estrutura, Expressões Preferidas, Expressões Evitadas, Comprimento
+• Preserve o que estava correto no estilo anterior
+• Adicione ou corrija apenas o que as novas edições ensinaram
+• Responda SOMENTE o documento de estilo atualizado, sem explicações, sem preâmbulo`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite-preview',
+        contents: promptAnalise,
+      });
+
+      const novoEstilo = response.text.trim();
+      const totalAnterior = dadosUser.totalEdicoesIncorporadas || 0;
+
+      await updateDoc(docRefUser, {
+        estiloAprendido: novoEstilo,
+        edicoesRecentes: [],
+        edicoesPendentesAnalise: 0,
+        totalEdicoesIncorporadas: totalAnterior + edicoesAtualizadas.length,
+        ultimaAtualizacaoEstilo: serverTimestamp(),
+      });
+
+      setEstiloAprendido(novoEstilo);
+      setEdicoesPendentes(0);
+      setTotalEdicoesIncorporadas(totalAnterior + edicoesAtualizadas.length);
+    } catch (error) {
+      console.error('Erro na análise de estilo:', error);
+    } finally {
+      setAnalisandoEstilo(false);
     }
   }
 
@@ -305,6 +401,13 @@ currentUser?.email || 'Professor'
         navigator.clipboard.writeText(feedbackEditado.trim()); 
         setCopiado(true);
         setTimeout(() => setCopiado(false), 2000);
+      }
+
+      // 🧠 Disparar análise de estilo em background se a professora editou o feedback da IA
+      const feedbackSugerido = atividadeAtual?.feedbackSugerido || '';
+      const foiEditadoPelaProf = feedbackSugerido.trim() !== '' && feedbackEditado.trim() !== feedbackSugerido.trim();
+      if (foiEditadoPelaProf && (isPremium || isTier2)) {
+        dispararAnaliseEstilo(feedbackSugerido, feedbackEditado.trim());
       }
     } catch (error) { console.error(error); } finally { setSalvando(false);
     }
@@ -541,6 +644,27 @@ respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-grad
                     {gerandoIA ?
 <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>} Gerar Feedback IA
                   </button>
+
+                  {/* 🧠 Badge de Aprendizado de Estilo */}
+                  {(isPremium || isTier2) && (
+                    <div className={`mb-4 px-4 py-3 rounded-2xl border flex items-center gap-3 text-xs font-bold transition-all ${
+                      analisandoEstilo
+                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 animate-pulse'
+                        : estiloAprendido
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : 'bg-slate-800 border-slate-700 text-slate-500'
+                    }`}>
+                      <Brain size={14} className="shrink-0" />
+                      <span className="leading-tight">
+                        {analisandoEstilo
+                          ? 'Aprendendo com esta edição...'
+                          : estiloAprendido
+                          ? `Estilo aprendido ativo · ${totalEdicoesIncorporadas} edições incorporadas${edicoesPendentes > 0 ? ` · ${3 - edicoesPendentes} edições p/ próx. atualização` : ''}`
+                          : `Aprendizado de estilo inativo · ${edicoesPendentes > 0 ? `${3 - edicoesPendentes} edições p/ ativar` : 'edite e aprove 3 feedbacks p/ ativar'}`
+                        }
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-6">
                   <textarea rows="10" placeholder="Feedback aparecerá aqui..." className="w-full bg-slate-800 rounded-2xl p-5 text-sm text-slate-100 outline-none resize-none focus:ring-2 focus:ring-indigo-500 transition-all" value={feedbackEditado} onChange={e => setFeedbackEditado(e.target.value)}/>
