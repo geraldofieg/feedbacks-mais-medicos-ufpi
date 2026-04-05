@@ -560,9 +560,9 @@ export default function Tarefas() {
                                <button onClick={() => handleLixeira(item.id, item.nomeTarefa || item.titulo)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir Tarefa"><Trash2 size={18}/></button>
                              </div>
                              
-                             {(item.tipo === 'entrega' || !item.tipo) && status !== 'futuro' && (
-                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto flex items-center justify-center gap-2 ${status === 'passado' ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
-                                 {status === 'passado' ? <><Pencil size={16}/> Avaliar Atrasados</> : 'Corrigir tarefas'}
+                             {(item.tipo === 'entrega' || !item.tipo) && (
+                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto flex items-center justify-center gap-2 ${status === 'passado' ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200' : status === 'futuro' ? 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
+                                 {status === 'passado' ? <><Pencil size={16}/> Avaliar Atrasados</> : status === 'futuro' ? <><Pencil size={16}/> Corrigir Antecipado</> : 'Corrigir tarefas'}
                                </Link>
                              )}
                            </div>
