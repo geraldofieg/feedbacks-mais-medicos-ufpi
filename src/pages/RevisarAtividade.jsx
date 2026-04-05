@@ -44,6 +44,7 @@ export default function RevisarAtividade() {
 
   // 🧠 APRENDIZADO DE ESTILO
   const [estiloAprendido, setEstiloAprendido] = useState('');
+  const [promptAtivo, setPromptAtivo] = useState(''); // prompt unificado: base + estilo aprendido
   const [edicoesPendentes, setEdicoesPendentes] = useState(0);
   const [totalEdicoesIncorporadas, setTotalEdicoesIncorporadas] = useState(0);
   const [analisandoEstilo, setAnalisandoEstilo] = useState(false);
@@ -98,6 +99,7 @@ where('tarefaId', '==', id));
         if (docSnapUser.exists()) {
           const dadosUser = docSnapUser.data();
           setEstiloAprendido(dadosUser?.estiloAprendido || '');
+          setPromptAtivo(dadosUser?.promptAtivo || '');
           setEdicoesPendentes(dadosUser?.edicoesPendentesAnalise || 0);
           setTotalEdicoesIncorporadas(dadosUser?.totalEdicoesIncorporadas || 0);
         }
@@ -118,6 +120,9 @@ where('tarefaId', '==', id));
     const sincronizarPrompt = (e) => {
       if (e.key === '@SaaS_PromptVivo' && e.newValue) {
         setPromptVivo(e.newValue);
+        // Quando a professora edita o prompt base manualmente, o promptAtivo é resetado
+        // para que seja gerado novamente na próxima destilação de estilo
+        setPromptAtivo('');
       }
     };
 
@@ -221,8 +226,15 @@ where('tarefaId', '==', id));
         textoResposta += `\n\n[Conteúdo do PDF da Resposta]:\n${pdfText}`;
       }
 
+      // 🎯 Usa o prompt unificado se existir, senão usa o prompt base — nunca os dois juntos
+      const instrucoes = promptAtivo || promptVivo;
       const promptCompleto = `Aja como um preceptor médico.
-${estiloAprendido ? `ESTILO E TOM PREFERIDOS PELA PROFESSORA (siga estes padrões com prioridade):\n${estiloAprendido}\n\n` : ''}Instruções de avaliação: ${promptVivo}. QUESTÃO: ${textoEnunciado}. RESPOSTA: "${textoResposta}". Gere um feedback pedagógico direto.`;
+${instrucoes}
+
+QUESTÃO: ${textoEnunciado}
+RESPOSTA DO ALUNO: "${textoResposta}"
+
+Gere um feedback pedagógico direto.`;
       
       const response = await ai.models.generateContent({
         model: "gemini-3.1-flash-lite-preview",
@@ -316,8 +328,43 @@ REGRAS RÍGIDAS DE RESPOSTA:
       const novoEstilo = response.text.trim();
       const totalAnterior = dadosUser.totalEdicoesIncorporadas || 0;
 
+      // 🔀 SEGUNDA CHAMADA: gerar o prompt unificado (base + estilo aprendido fundidos)
+      // O prompt original da professora fica como âncora. O promptAtivo é o que a IA realmente usa.
+      const promptOriginal = dadosUser.promptPersonalizado || promptVivo || '';
+      let novoPromptAtivo = promptOriginal; // fallback seguro
+
+      if (promptOriginal.trim()) {
+        const promptFusao = `Você é um especialista em instrução pedagógica médica.
+
+Você receberá dois inputs:
+1. INSTRUÇÕES BASE: as diretrizes que a professora escreveu manualmente
+2. ESTILO APRENDIDO: padrões detectados a partir das edições reais que ela fez nos feedbacks
+
+Sua tarefa é criar um ÚNICO conjunto de instruções coerente, sem contradições, que incorpore os dois.
+
+INSTRUÇÕES BASE DA PROFESSORA:
+${promptOriginal}
+
+ESTILO APRENDIDO DAS EDIÇÕES:
+${novoEstilo}
+
+REGRAS DE RESPOSTA:
+• Escreva na segunda pessoa dirigida à IA que vai gerar os feedbacks ("Você deve...", "Sempre...", "Evite...")
+• Máximo de 400 palavras
+• Se houver contradição entre os dois inputs, o ESTILO APRENDIDO tem prioridade (ele reflete o comportamento real da professora)
+• Preserve todas as instruções de conteúdo das INSTRUÇÕES BASE que não conflitem
+• Responda SOMENTE as instruções unificadas, sem explicações, sem preâmbulo`;
+
+        const responseFusao = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite-preview',
+          contents: promptFusao,
+        });
+        novoPromptAtivo = responseFusao.text.trim();
+      }
+
       await updateDoc(docRefUser, {
         estiloAprendido: novoEstilo,
+        promptAtivo: novoPromptAtivo,
         edicoesRecentes: [],
         edicoesPendentesAnalise: 0,
         totalEdicoesIncorporadas: totalAnterior + edicoesAtualizadas.length,
@@ -325,6 +372,7 @@ REGRAS RÍGIDAS DE RESPOSTA:
       });
 
       setEstiloAprendido(novoEstilo);
+      setPromptAtivo(novoPromptAtivo);
       setEdicoesPendentes(0);
       setTotalEdicoesIncorporadas(totalAnterior + edicoesAtualizadas.length);
     } catch (error) {
@@ -681,10 +729,12 @@ respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-grad
                       <Brain size={14} className="shrink-0" />
                       <span className="leading-tight">
                         {analisandoEstilo
-                          ? 'Aprendendo com esta edição...'
+                          ? 'Atualizando instruções da IA...'
+                          : promptAtivo
+                          ? `Instruções otimizadas ativas · ${totalEdicoesIncorporadas} edições incorporadas${edicoesPendentes > 0 ? ` · ${3 - edicoesPendentes} p/ próx. atualização` : ''}`
                           : estiloAprendido
-                          ? `Estilo aprendido ativo · ${totalEdicoesIncorporadas} edições incorporadas${edicoesPendentes > 0 ? ` · ${3 - edicoesPendentes} edições p/ próx. atualização` : ''}`
-                          : `Aprendizado de estilo inativo · ${edicoesPendentes > 0 ? `${3 - edicoesPendentes} edições p/ ativar` : 'edite e aprove 3 feedbacks p/ ativar'}`
+                          ? `Estilo aprendido · gerando instruções unificadas...`
+                          : `IA usando instruções base · ${edicoesPendentes > 0 ? `${3 - edicoesPendentes} edições p/ otimizar` : 'edite e aprove 3 feedbacks p/ otimizar'}`
                         }
                       </span>
                     </div>
