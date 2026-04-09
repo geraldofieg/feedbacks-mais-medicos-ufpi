@@ -42,6 +42,13 @@ export default function Tarefas() {
   
   // ESTADOS DE EDIÇÃO
   const [editandoId, setEditandoId] = useState(null);
+  const [enunciadosExpandidos, setEnunciadosExpandidos] = useState(new Set());
+
+  const toggleEnunciado = (id) => setEnunciadosExpandidos(prev => {
+    const novo = new Set(prev);
+    if (novo.has(id)) novo.delete(id); else novo.add(id);
+    return novo;
+  });
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
   const [dataInicioEdicao, setDataInicioEdicao] = useState('');
@@ -388,7 +395,12 @@ export default function Tarefas() {
   const itensComPrazo = itensFiltrados
     .map(t => ({ ...t, statusObj: getStatusPrazo(t.dataInicio, t.dataFim) }))
     .filter(t => !esconderPassados || t.statusObj.status !== 'passado')
-    .sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal);
+    .sort((a, b) => {
+      const ordem = { atual: 0, futuro: 1, passado: 2 };
+      const diffStatus = (ordem[a.statusObj.status] ?? 1) - (ordem[b.statusObj.status] ?? 1);
+      if (diffStatus !== 0) return diffStatus;
+      return a.statusObj.timestampVal - b.statusObj.timestampVal;
+    });
 
   if (!escolaSelecionada?.id) {
     return <div className="p-20 text-center font-bold text-gray-400">Selecione uma instituição no Início...</div>;
@@ -545,7 +557,21 @@ export default function Tarefas() {
                              <h3 className="text-xl font-black text-gray-800">{item.nomeTarefa || item.titulo}</h3>
                              <p className="text-sm font-bold text-gray-500 mt-1"><Calendar size={14} className="inline mr-1" />{dataFormatada}</p>
                              
-                             {item.enunciado && <p className="text-sm text-gray-600 mt-4 bg-gray-50 border border-gray-100 p-4 rounded-xl whitespace-pre-wrap">{item.enunciado}</p>}
+                             {item.enunciado && (
+                               <div className="mt-4">
+                                 <p className={`text-sm text-gray-600 bg-gray-50 border border-gray-100 p-4 rounded-xl whitespace-pre-wrap ${enunciadosExpandidos.has(item.id) ? '' : 'line-clamp-3'}`}>
+                                   {item.enunciado}
+                                 </p>
+                                 {item.enunciado.length > 200 && (
+                                   <button
+                                     onClick={() => toggleEnunciado(item.id)}
+                                     className="mt-2 text-[11px] font-black text-blue-600 hover:text-blue-800 uppercase tracking-widest transition-colors"
+                                   >
+                                     {enunciadosExpandidos.has(item.id) ? '▲ Recolher enunciado' : '▼ Ver enunciado completo'}
+                                   </button>
+                                 )}
+                               </div>
+                             )}
                              
                              {item.enunciadoArquivoUrl && (
                                <a href={item.enunciadoArquivoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider mt-3 hover:bg-blue-100 transition-colors">
