@@ -1,8 +1,9 @@
 # Documentação de Arquitetura - Plataforma do Professor (SaaS V3)
-**Status:** Em desenvolvimento (Fase 2: Motor Gemini 3.1, Lógica Tricolor e Nova Estação de Correção Ficha Médica)
+**Status:** Produção ativa — Motor Gemini 3.1 + Aprendizado de Estilo Adaptativo + Suporte a Word
 
 ## 1. Visão Geral
-Sistema SaaS (*Software as a Service*) de *dashboard* para professores avaliarem e gerenciarem o *feedback* de alunos. A plataforma possui arquitetura *Multitenant* (múltiplas instituições), permitindo que um mesmo sistema atenda a diversas faculdades de forma isolada, ágil e segura. 
+Sistema SaaS (*Software as a Service*) de *dashboard* para professores avaliarem e gerenciarem o *feedback* de alunos. A plataforma possui arquitetura *Multitenant* (múltiplas instituições), permitindo que um mesmo sistema atenda a diversas faculdades de forma isolada, ágil e segura.
+
 **Regra de Ouro:** O sistema é **100% focado no educador**. Não existe "Portal do Aluno" para envio de tarefas. O professor (ou assistente) atua como o alimentador ágil dos dados (o "digitador"), usando o sistema não apenas como avaliador, mas como uma **Agenda Pessoal, Esteira de Produção e Histórico Acadêmico** unificado, que serve como ponte oficial para o sistema da instituição.
 
 ## 2. O 'Botão de Pânico' (Regra Crítica de Negócio)
@@ -27,107 +28,150 @@ O sistema opera em uma hierarquia plana de três níveis protegida por *Tenant I
 
 ## 5. Estrutura do Banco de Dados (Firestore)
 Todas as consultas devem conter a trava estrutural: `where('instituicaoId', '==', escolaSelecionada.id)` e ignorar documentos com `status: 'lixeira'`.
-* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` (`'admin'` | `'professor'`), `plano`, `promptPersonalizado`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`, `status` (`'ativo'` | `'bloqueado'`), `ultimoAcesso`, `emailVerificado`, `vistoPeloAdmin`.
-* **`tarefas`:** Agora possuem **Atribuição Específica** (`atribuicaoEspecifica: boolean`, `alunosSelecionados: array`). Tarefas podem ser exclusivas para certos alunos, prevenindo cobranças indevidas (falsos positivos). Sempre geram `dataInicio` na hora 00:00 e `dataFim` às 23:59.
-* **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` (`'pendente'` | `'aprovado'`), `nota`, `feedbackSugerido`, `feedbackFinal`, `postado` (booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`, `arquivoUrl`, `nomeArquivo`. 
-* **Campos de Retrocompatibilidade V1/V3 (Estratégia Poliglota/Dupla Etiqueta):** Salva simultaneamente `nomeAluno` (V3) e `aluno` (V1), `nomeTarefa` (V3) e `tarefa`/`modulo` (V1), `revisadoPor` (nome do revisor). 
-* **Regra Crítica de Sincronia (Prevenção de Falsos Positivos na V1):** Em rascunhos (`status: 'pendente'`) ou ao devolver para revisão, o campo `dataAprovacao` não pode ser salvo como `null`. Ele deve ser fisicamente retirado do banco de dados utilizando a diretriz `deleteField()` do Firestore. Isso impede que a V1 (que valida a mera existência da chave para mudar de funil) jogue o aluno acidentalmente para a caixa de "Falta Postar".
-* **Regra de Validação de Entrega (Texto ou Arquivo):** Para fins de contagem em *dashboards*, mapas e listas de pendências, uma atividade só é considerada "entregue/em revisão" se possuir texto no campo `resposta` **OU** se possuir um *link* de anexo no campo `arquivoUrl`. Ambas as condições devem ser verificadas simultaneamente para evitar a invisibilidade de alunos nas listagens.
 
-## 6. Regras de Negócio e Gestão à Vista (Dashboard/Porteiro)
+* **`usuarios`**: `uid`, `nome`, `email`, `whatsapp`, `role` (`'admin'` | `'professor'`), `plano`, `promptPersonalizado`, `promptAtivo`, `estiloAprendido`, `edicoesRecentes`, `edicoesPendentesAnalise`, `totalEdicoesIncorporadas`, `ultimaAtualizacaoEstilo`, `dataExpiracao`, `isVitalicio`, `historicoAssinatura`, `status` (`'ativo'` | `'bloqueado'`), `ultimoAcesso`, `emailVerificado`, `vistoPeloAdmin`.
+* **`tarefas`:** Possuem **Atribuição Específica** (`atribuicaoEspecifica: boolean`, `alunosSelecionados: array`). Tarefas podem ser exclusivas para certos alunos, prevenindo cobranças indevidas. Sempre geram `dataInicio` na hora 00:00 e `dataFim` às 23:59.
+* **`atividades` (Respostas e Notas):** `id`, `alunoId`, `turmaId`, `instituicaoId`, `tarefaId`, `resposta`, `status` (`'pendente'` | `'aprovado'`), `nota`, `feedbackSugerido`, `feedbackFinal`, `similaridadeIA` (0–100, calculado no momento da aprovação via Jaccard), `postado` (booleano), `dataAprovacao`, `dataPostagem`, `dataCriacao`, `arquivoUrl`, `nomeArquivo`.
+* **Campos de Retrocompatibilidade V1/V3 (Estratégia Poliglota/Dupla Etiqueta):** Salva simultaneamente `nomeAluno` (V3) e `aluno` (V1), `nomeTarefa` (V3) e `tarefa`/`modulo` (V1), `revisadoPor` (nome do revisor).
+* **Regra Crítica de Sincronia:** Em rascunhos (`status: 'pendente'`) ou ao devolver para revisão, o campo `dataAprovacao` deve ser fisicamente retirado do banco usando `deleteField()` do Firestore.
+* **Regra de Validação de Entrega:** Uma atividade só é considerada "entregue/em revisão" se possuir texto no campo `resposta` **OU** um *link* de anexo no campo `arquivoUrl`.
+
+## 6. Regras de Negócio e Gestão à Vista (Dashboard)
 * **O Porteiro (Gatekeeper):** Se o professor não possuir uma instituição selecionada, o *Dashboard* exibe a interface de criação de Nível 1.
-* **Atalho VIP de Ação Rápida (Card Multitarefas):** A barra preta superior exibe tarefas **estritamente em andamento hoje** (não futuras, não passadas). Otimizada para *mobile* com ícone de lápis para acesso direto à correção, liberando espaço para o título.
-* **Gestão à Vista (Lista de Devedores):** Exibe nominalmente os alunos com pendências, cruzando tarefas ativas (hoje) e **tarefas anteriores** criadas a partir de um marco de corte temporal (`05/01/2026`).
-* **A Esteira de Produção (Kanban Matemático Blindado):** Os alunos só entram no funil a partir do momento em que o professor **cola a resposta deles** no sistema (ou anexa um arquivo).
-    * **Desfragmentador Anticlones (Deduplicação Client-Side):** As listagens ignoram versões antigas ou fantasmas na memória, agrupando pela chave `Tarefa + Aluno` e processando sempre apenas o documento mais recente.
-    * **Caixa 1: Aguardando Revisão (`/aguardandorevisao`):** Resposta colada ou arquivo anexado, mas *feedback* não aprovado (ordenação: mais recente no topo).
-    * **Caixa 2: Aguardando Postar (`/faltapostar`):** *feedback* aprovado, mas `postado` é `false` (oculta para o Tier 2).
+* **Atalho VIP de Ação Rápida:** A barra preta superior exibe tarefas **estritamente em andamento hoje**. Ícone de lápis para acesso direto à correção.
+* **Gestão à Vista (Lista de Devedores):** Exibe nominalmente os alunos com pendências, cruzando tarefas ativas (hoje) e tarefas anteriores criadas a partir de um marco de corte temporal (`05/01/2026`).
+* **A Esteira de Produção (Kanban Matemático Blindado):**
+    * **Caixa 1: Aguardando Revisão (`/aguardandorevisao`):** Resposta colada ou arquivo anexado, mas *feedback* não aprovado.
+    * **Caixa 2: Aguardando Postar (`/faltapostar`):** *Feedback* aprovado, mas `postado` é `false` (oculta para o Tier 2).
     * **Caixa 3: Histórico Finalizado (`/historico`):** `postado` é `true`. Ciclo encerrado.
-* **Termômetro da IA:** Mede a eficiência do *prompt*. Regra: A avaliação entra na conta verificando a exata `dataAprovacao` contra o `timestampPrompt` do usuário (para zerar estatísticas se o *prompt* mudar). Se `feedbackFinal.trim() === feedbackSugerido.trim()`, a atividade é 100% original da IA. Visível para Tier Premium e Admin.
+
+### Painel de Inteligência Artificial (Dois Indicadores)
+Visível para Tier Premium e Admin. Exibe dois cards lado a lado:
+
+* **Termômetro de Autonomia da IA (card roxo):** Percentual de *feedbacks* gerados pela IA e aprovados **sem nenhuma edição** (`feedbackFinal.trim() === feedbackSugerido.trim()`). Avalia a partir do `timestampPrompt` do usuário — se o prompt for editado manualmente, a contagem é zerada. Mede o acerto absoluto da IA.
+
+* **Aderência ao Estilo (card verde):** Média do campo `similaridadeIA` de todas as atividades aprovadas. Esse campo é calculado no momento da aprovação via **Similaridade de Jaccard** (comparação de palavras em comum entre `feedbackSugerido` e `feedbackFinal`), processada localmente no *frontend* com zero custo de token. Faixa de referência: 95–100% = idêntico; 75–94% = pequenos ajustes; 50–74% = reescrita parcial; abaixo de 50% = reescrita significativa. Este indicador cresce gradualmente à medida que o `promptAtivo` aprende com as edições da professora, permitindo visualizar a evolução do aprendizado mesmo quando o Termômetro de Autonomia ainda está em 0%.
 
 ## 7. Perfis de Acesso (RBAC SaaS) e Painel Admin
 * **Segurança Clean Code:** Nenhuma verificação de autorização utiliza *hardcode* de *e-mails*. Toda validação de acesso é baseada unicamente no campo `role === 'admin'` proveniente do `AuthContext`.
 * **Perfil Professor:** Só enxerga dados onde seu `uid` conste como criador.
 * **Perfil Gestor (Admin):** Possui a **"chave mestra"**, ignorando a trava do `professorUid` para auditar a operação completa da instituição.
-* **Painel SaaS (`/admin`):** Tela gerencial restrita. Permite: 
+* **Painel SaaS (`/admin`):** Tela gerencial restrita. Permite:
     * Gestão visual de assinaturas (vencido, vitalício, ativo).
     * Ações de faturamento (estender dias, conceder/revogar vitalício, edição manual de datas).
-    * Suspensão instantânea de acesso (bloqueio de usuário).
-    * **Gestão de Engajamento e Filtros (Custo Zero):** Rastreio em tempo real do engajamento do usuário na plataforma exibindo os status "Não ativou a conta", "Nunca logou" ou a exata data de "Último acesso". A tabela gerencial possui um motor de ordenação e filtros dinâmicos processados 100% no *frontend* (via estado do React), garantindo a reordenação instantânea dos dados com zero custo de novas requisições (leituras) ao banco de dados.
+    * Suspensão instantânea de acesso.
+    * **Gestão de Engajamento:** Rastreio em tempo real com os status "Não ativou a conta" (campo `emailVerificado === false` — pessoa nunca clicou no link de confirmação do e-mail), "Nunca logou" (`emailVerificado === true` mas `ultimoAcesso` é nulo — confirmou o e-mail mas nunca entrou) ou a exata data de "Último acesso". O campo `emailVerificado` é atualizado a cada login via `user.emailVerified` do Firebase Auth. Motor de ordenação e filtros dinâmicos processados 100% no *frontend*.
     * Botão de Emergência (*Hard Delete*): apaga todos os rastros de um usuário no banco via `writeBatch`.
-    * **Relatório de Log da IA:** Painel/relatório focado na comparação entre os *feedbacks* originais gerados pela IA e os *feedbacks* finais aprovados. O sistema registra e exibe **apenas as avaliações que sofreram edições/mudanças**, permitindo auditar os ajustes feitos pelo professor sobre o conteúdo gerado.
+    * **Relatório de Log da IA:** Painel focado na comparação entre *feedbacks* originais gerados pela IA e *feedbacks* finais aprovados. Exibe apenas avaliações que sofreram edições.
 
 ## 8. Modelos de Operação (Tiers/Planos de Assinatura)
-* **Tier 1: Básico ("O Organizador Pessoal"):** Focado na gestão visual e cobrança. Faz a operação manual. A interface da IA atua como **vitrine de vendas** (cadeado 🔒), redirecionando para a nova página de `/planos`.
-* **Tier 2: Intermediário ("SaaS Assistido"):** Operação terceirizada. O professor atua apenas como revisor. O botão de "Lançar Oficialmente" é removido de sua tela. **Blindagem física:** Este usuário é impedido de acessar a página `/faltapostar` (URL direta), garantindo que apenas o administrador finalize o processo.
-* **Tier 3: Premium ("O Lobo Solitário Turbo"):** Automação completa integrada via IA Gemini 3.1 Flash. 
-    * **Configuração Privada:** O campo `promptPersonalizado` aparece na página de configurações para treinar a personalidade da IA.
+* **Tier 1: Básico ("O Organizador Pessoal"):** Focado na gestão visual e cobrança. Opera manualmente. A interface da IA atua como vitrine de vendas (cadeado 🔒), redirecionando para `/planos`.
+* **Tier 2: Intermediário ("SaaS Assistido"):** Professor atua apenas como revisor. O botão "Lançar Oficialmente" é removido de sua tela. Blindagem física: usuário é impedido de acessar `/faltapostar` diretamente.
+* **Tier 3: Premium ("O Lobo Solitário Turbo"):** Automação completa com IA Gemini. Inclui `promptPersonalizado` nas configurações e acesso ao sistema de **Aprendizado de Estilo Adaptativo**.
 
-## 9. A Nova Estação de Correção (Fluxo "Ficha Médica" e IA)
+## 9. A Estação de Correção — Fluxo, IA e Aprendizado Adaptativo
 A página de Revisar Atividade (`/revisar/id`) é o *HUB* principal do sistema.
-* **Barra de Progresso (UX E-commerce):** Exibe os 3 passos: `1. Trazer Resposta` ➔ `2. Revisar Feedback` ➔ `3. Lançar Oficial`.
-* **Prevenção de Tap-Through (Anticlique Fantasma):** Todos os modais de sucesso (`alert`) nativos foram substituídos por microinterações visuais *inline* (ex.: botões mudando para '✅ Salvo!').
-* **UX Educativa (Textos Inteligentes):** A interface "conversa" com o professor novato. Se o aluno não tem resposta colada, exibe instruções claras de colagem; se já tem resposta, os textos mudam orientando a geração ou revisão da IA.
-* **Upload de Arquivos Inteligente e IA:** O sistema aceita o envio de arquivos (PDF, DOC, etc.) para análise de inteligência com proteções ativas:
-    * **Trava de Custo (5MB):** Validação processada estritamente no *frontend* para bloquear o envio de arquivos imensos (acima de 5MB), blindando o custo de *Storage* e tempo da IA.
-    * **UX de Resolução (iLovePDF):** O sistema fornece atalhos educativos de resolução para o cliente, exibindo um link direto para a ferramenta de compressão caso precise reduzir o arquivo.
-    * **Leitura Server-Side Inteligente:** Em vez de travar o navegador do cliente decodificando PDFs localmente, a plataforma envia a URL pública do *Firebase Storage* diretamente para o prompt do Gemini 3.1, permitindo que a IA lide com a extração bruta remotamente.
-* **Fluxo de Rascunho e Avisos Dinâmicos:** Ao salvar em rascunho, o sistema emite um alerta visual claro informando que a atividade continua "Em Revisão" (sinal amarelo) e não foi finalizada.
-* **Mensagens Pós-Aprovação Guiadas:** Ao clicar em "Aprovar Feedback", em vez de exibir bruscamente os botões finais, o sistema injeta um texto de sucesso orientativo explicando os próximos passos lógicos (ir para a página de cópia ou copiar ali mesmo).
-* **Assinatura e Log:** Toda atividade aprovada exibe a hora exata e o nome de quem revisou (*log* de auditoria visível na tela).
-* **IA Gemini 3.1 Flash Lite:** Integra modelo avançado com *Search Grounding* ativo.
-* **Layout "Sticky":** No *desktop*, a mesa de avaliação (coluna direita) fica fixada durante a rolagem.
 
-## 10. Semáforo Acadêmico e Fluxo de Trabalho (Linha de Chegada)
-O sistema orienta o professor através de ícones tricolores no buscador de alunos:
-* 🔴 **Aguardando:** O aluno está na turma, mas a resposta ainda não foi trazida para a plataforma.
-* 🟡 **Em Revisão:** A resposta (texto ou arquivo) já está aqui, mas o *feedback* não foi aprovado ou a atividade não foi marcada como lançada no portal oficial.
-* ✅ **Lançado:** Trabalho concluído! O *feedback* e a nota já foram lançados para o portal oficial da instituição. *Status* blindado no histórico.
+* **Barra de Progresso (UX):** Exibe os 3 passos: `1. Resposta do Aluno` ➔ `2. Área de Feedback` ➔ `3. Pronto p/ Postar`.
+* **Semáforo de Alunos:** 🔴 Sem resposta / 🟡 Em revisão ou aprovado aguardando postagem / ✅ Lançado oficialmente.
 
-## 11. Gestão de Tarefas, Automação e Motor de Clonagem
-* **Batch Write:** Ao criar uma "Tarefa do Aluno", o sistema distribui automaticamente o registro.
-* **Atribuição Específica e Guardrails Visuais:** O sistema permite a criação de tarefas restritas a um grupo seleto de alunos. Para evitar erros de professores iniciantes, a interface exibe **alertas educativos contextuais**:
-    * *Aviso Azul (Turma Completa):* Informa explicitamente que a tarefa gerará demanda/pendência para 100% dos alunos matriculados.
-    * *Aviso Âmbar (Alunos Específicos):* Informa que a tarefa ficará completamente invisível no sistema para os alunos que não forem marcados no *checklist* (isolando a inadimplência).
-* **O Motor de Clonagem (Turma Modelo):** Professores podem "Criar Turma a partir de Modelo", replicando 100% das tarefas e enunciados de uma turma *master*, sem copiar os alunos.
+### Upload e Leitura de Arquivos
+O botão **"Anexar PDF/DOC"** aceita múltiplos formatos. A estratégia de leitura varia por tipo:
 
-## 12. Módulo de Comunicação e Cobrança
-Automatização de cobranças baseada no cruzamento de alunos *versus* tarefas pendentes, protegida por um **Filtro Temporal V3** (oculta o passado) e **Trava de Atribuição** (isenta não participantes). 
+* **PDF:** Extraído via `pdfjs-dist` diretamente no *browser*. O texto é injetado no prompt da IA.
+* **.docx (Word moderno):** Extraído via biblioteca `mammoth` no *browser* no momento do upload, sem necessidade de conversão pelo professor. O texto é guardado em `textoExtraidoDoc` e injetado no prompt da IA da mesma forma que o PDF. Um banner verde confirma "✅ Texto do Word extraído com sucesso".
+* **.doc / .rtf (Word legado, formato binário):** Não são legíveis no *browser*. O sistema exibe um aviso laranja explicando o problema com instruções passo a passo e um botão direto para o **iLovePDF Word→PDF** (`https://www.ilovepdf.com/pt/word_para_pdf`).
+* **Trava de Custo (5MB):** Validação no *frontend* bloqueia arquivos acima de 5MB.
+* **Link iLovePDF Comprimir:** Atalho para redução de PDFs grandes.
 
-### Inteligência de Urgência, Resumo Geral e Prazos:
-* **O "Resumo Geral" (Padrão):** O sistema carrega por padrão focado no botão "Resumo Geral". Ele varre, compila e consolida todas as tarefas ativas atrasadas de cada aluno em uma única mensagem, exibindo-as em formato de lista.
-* **Algoritmo de Maior Urgência e Prazos:** Ao consolidar várias pendências de um aluno, o sistema calcula nos bastidores qual delas está mais perto de vencer (menor número de dias restantes). A mensagem gerada adapta o seu "senso de urgência" baseando-se estritamente nesta tarefa mais crítica, incluindo o detalhamento do prazo:
-    * **Reta Final:** Avisos para tarefas que encerram em poucos dias.
-    * **Fase Intermediária:** Prazos regulares em andamento.
-    * **Prazo Encerrado:** Cobrança direta de tarefas vencidas.
-* **Foco Específico:** O professor ainda pode clicar no botão de uma única textos no topo da tela para isolar a cobrança e os textos exclusivamente para aquele módulo.
+### Sistema de Aprendizado de Estilo Adaptativo (Tier Premium e Intermediário)
+O sistema aprende com as edições da professora e evolui o prompt da IA automaticamente, eliminando contradições entre o que ela escreveu e o que ela realmente aprova na prática.
 
-### Ações de Disparo e Templates (Detalhamento de Mensagens):
-* **Grupo Geral da Turma (Coluna Esquerda):** Mensagens contextuais dinâmicas prontas para copiar para o grupo. Utiliza o algoritmo de maior urgência para avisar a turma e detalha os prazos específicos (ex.: "A entrega mais próxima encerra em X dias", informando com exatidão a linha do tempo das atividades).
-* **Copiar para a Plataforma (Coluna Direita):** Textos gerados individualmente utilizando o primeiro nome do aluno e os detalhes da tarefa para colagem manual em sistemas oficiais (ex.: Gov.br).
-* **Zap Direto (Coluna Esquerda):** Abre *link* direto do `wa.me`. Possui um **filtro curinga de telefone** que busca pelas chaves `whatsapp`, `telefone` ou `celular`, garantindo que alunos importados via cópia em lote da V1 não fiquem ocultos na cobrança.
+**Três campos no documento `/usuarios/{uid}`:**
 
-## 13. Mapa de Entregas e Pendências
-* **Mapa de Entregas:** Tabela dinâmica indicando o *status* através de ícones (✅ Entregue, ❌ Pendente, ⚪ Isento/Traço). Possui uma **Cortina de Tempo V3** controlada via *toggle*, permitindo ao professor esconder o legado antigo (tarefas anteriores a jan/2026). No *mobile*, o contador X/Y não penaliza alunos isentos de atividades específicas.
-* **Relatório de Pendências:** Organiza a inadimplência utilizando a mesma taxonomia visual do cronograma, cruzando estritamente devedores reais e tarefas ativas da V3. Possui atalho de redirecionamento focado (`alunoAlvo`) para a página de Comunicação.
+| Campo | Papel |
+|---|---|
+| `promptPersonalizado` | O que a professora escreveu à mão nas Configurações — âncora permanente, nunca alterado automaticamente |
+| `estiloAprendido` | Documento vivo de até 300 palavras com padrões detectados nas edições (tom, estrutura, expressões preferidas/evitadas, comprimento) |
+| `promptAtivo` | O que a IA **realmente usa** — fusão coerente e sem contradições dos dois campos acima, gerada automaticamente a cada ciclo de aprendizado |
 
-## 14. Gestão de Alunos e Matrículas Inteligentes
+**Fluxo de aprendizado (custo controlado):**
+
+1. Quando a professora aprova um *feedback* com edição real (texto diferente do sugerido pela IA), o sistema acumula silenciosamente o par `{feedbackSugerido, feedbackFinal}` no campo `edicoesRecentes`.
+2. Ao acumular **3 edições**, dispara-se uma sequência de **2 chamadas à IA em background** (invisível para o usuário, ~1.500 tokens no total):
+   * **Chamada 1:** Analisa os 3 pares e atualiza o `estiloAprendido` (máximo 300 palavras em *bullet points*).
+   * **Chamada 2:** Funde o `promptPersonalizado` com o `estiloAprendido` num único `promptAtivo` coerente (máximo 400 palavras). Em caso de contradição entre os dois, o `estiloAprendido` tem prioridade — ele reflete o comportamento real da professora.
+3. O campo `edicoesRecentes` é zerado e o ciclo recomeça.
+4. **Se a professora aprovar sem editar** (caso "✨ 100% IA"), zero tokens extras são consumidos.
+5. **Se a professora editar o prompt manualmente nas Configurações**, o `promptAtivo` é zerado automaticamente. Será regenerado na próxima destilação, incorporando as novas instruções manuais junto com o estilo já aprendido.
+
+**Badge visual na Estação de Correção (abaixo do botão "Gerar Feedback IA"):**
+* ⚫ Cinza: "IA usando instruções base · X edições p/ otimizar"
+* 🟣 Roxo pulsando: "Atualizando instruções da IA..."
+* 🟢 Verde: "Instruções otimizadas ativas · X edições incorporadas"
+
+**Cálculo de Similaridade Jaccard (zero custo de token):**
+No momento de cada aprovação, o sistema calcula localmente a similaridade entre o texto sugerido e o aprovado usando a fórmula `intersecção ÷ união` de palavras únicas tokenizadas. O resultado (0–100) é salvo no campo `similaridadeIA` da atividade e alimenta o card "Aderência ao Estilo" no Dashboard.
+
+**O ciclo virtuoso:** `promptAtivo` melhora → IA gera textos mais alinhados → Aderência ao Estilo sobe no Dashboard → professora edita menos → Termômetro de Autonomia sobe → menos destilações necessárias.
+
+## 10. Gestão de Tarefas e Cronograma
+* **Ordenação Inteligente por Status:** As tarefas são exibidas sempre na ordem: **Em andamento** primeiro, depois **Em breve**, depois **Encerradas**. Dentro de cada grupo, ordenadas por data de fim crescente. Isso garante que tarefas futuras com prazo de encerramento anterior ao de uma tarefa ativa nunca apareçam indevidamente no topo da lista.
+* **Enunciado Colapsável:** Enunciados com mais de 200 caracteres são exibidos com apenas 3 linhas visíveis e reticências automáticas (`line-clamp-3`). Um botão **"▼ Ver enunciado completo"** expande o texto individualmente por card, sem afetar os demais. Isso mantém a página de Tarefas como guia visual rápido, sem scroll excessivo.
+* **Correção Antecipada (Tarefas Futuras):** O botão de correção agora aparece também para tarefas com status **"Em breve"**, com visual diferenciado (cinza) e texto **"Corrigir Antecipado"**. Isso permite ao professor lançar respostas que os alunos já enviaram antes da abertura oficial do período, sem impacto nas páginas de Pendências, Comunicação ou Gestão à Vista (que continuam filtrando apenas tarefas ativas).
+* **Atribuição Específica e Guardrails Visuais:** O sistema permite tarefas restritas a um grupo seleto de alunos, com avisos educativos contextuais (azul para turma completa, âmbar para alunos específicos).
+* **Motor de Clonagem:** Professores podem "Criar Turma a partir de Modelo", replicando 100% das tarefas e enunciados de uma turma *master*, sem copiar os alunos.
+
+## 11. Módulo de Comunicação e Cobrança
+Automatização de cobranças baseada no cruzamento de alunos *versus* tarefas pendentes, protegida por **Filtro Temporal V3** e **Trava de Atribuição**.
+
+### Inteligência de Urgência e Prazos
+O algoritmo calcula qual tarefa pendente está mais perto de vencer e adapta o tom da mensagem:
+
+| Dias restantes | Tom da mensagem |
+|---|---|
+| Prazo encerrado (< 0) | Cobrança direta de tarefa vencida |
+| **Hoje (= 0)** | **"vence HOJE"** |
+| **Amanhã (= 1)** | **"vence AMANHÃ"** |
+| Reta final (2–7 dias) | Senso de urgência elevado |
+| Fase intermediária (8–19 dias) | Lembrete regular |
+| Prazo folgado (≥ 20 dias) | Tom informativo |
+
+**Nota:** Os casos "0 dias" e "1 dia" recebem tratamento explícito para evitar a geração de textos sem sentido como "vence em 0 dias". As mensagens são geradas em 4 variantes (coletiva/individual × todas as tarefas/tarefa específica), todas cobertas pela correção.
+
+### Ações de Disparo
+* **Grupo Geral da Turma:** Mensagens contextuais dinâmicas prontas para copiar para o grupo.
+* **Copiar para a Plataforma:** Textos individuais com primeiro nome do aluno para colagem em sistemas oficiais (ex.: Gov.br).
+* **Zap Direto:** Abre *link* `wa.me` com filtro curinga de telefone (`whatsapp`, `telefone` ou `celular`).
+
+## 12. Mapa de Entregas e Pendências
+* **Mapa de Entregas:** Tabela dinâmica com ícones (✅ Entregue, ❌ Pendente, ⚪ Isento). Possui Cortina de Tempo V3 controlada via *toggle*.
+* **Relatório de Pendências:** Organiza inadimplência cruzando devedores reais e tarefas ativas da V3. Possui atalho de redirecionamento focado (`alunoAlvo`) para a página de Comunicação.
+
+## 13. Gestão de Alunos e Matrículas
 * **Matrícula Vapt-Vupt:** Modal de cadastro único que, ao salvar, limpa os campos e devolve o foco ao primeiro *input*.
-* **Importador Mágico (Lote):** Recurso para importar alunos do Excel/Word via "copiar e colar" com proteção contra duplicidade em tempo real.
+* **Importador Mágico (Lote):** Importação via "copiar e colar" com proteção contra duplicidade em tempo real.
 
-## 15. Cronograma Dinâmico e Fichas Técnicas SaaS
-* **Aba 1 (Agenda de Entregas):** Processa tarefas em tempo real com agrupamento visual por urgência (laranja, azul, cinza). **O botão de ação rápida na tarefa é inteligente e muda de "Lápis (Corrigir)" para "Consultar Histórico" dependendo da vigência da tarefa.**
-* **Aba 2 (Ficha Técnica Oficial):** Exibe documentos curriculares estáticos locais (`src/data/`). Acesso restrito via Trava de Segurança (*Strict Match*) entre instituição e turma.
+## 14. Padrões de Usabilidade e Navegação
+1. **Teletransporte Contextual:** *Links* que carregam a Estação de Correção enviando o `alunoId` via `location.state`.
+2. **Estado Vazio Educativo:** Bloqueia tabelas vazias e orienta a criação da entidade pai.
+3. **CRUD Dinâmico e Soft Delete:** Oculta dados via `status: 'lixeira'`. Resgate via `/lixeira`.
+4. **Memória de Navegação:** Pré-seleção da última turma ativa nos *dropdowns*.
+5. **Global Utility Menu:** Canto superior direito para configurações, lixeira e *logout*.
+6. **Super Auto-Linker (Migração Silenciosa):** Normaliza nomes de tarefas e reconecta tarefas órfãs importadas da V1 de forma transparente.
 
-## 16. Padrões de Usabilidade e Navegação (Camadas de Defesa UX)
-1. **Teletransporte Contextual:** *Links* que carregam a Estação de Correção enviando o `alunoId` via `location.state`, garantindo que o aluno clicado já apareça selecionado e carregado automaticamente.
-2. **Estado Vazio Educativo (Empty States):** Bloqueia tabelas vazias e orienta a criação da entidade pai.
-3. **Criação "Just-in-Time":** Permite criar turmas dentro do fluxo de cadastro de alunos.
-4. **CRUD Dinâmico e Soft Delete:** Oculta dados via `status: 'lixeira'`. Resgate via `/lixeira`.
-5. **Memória de Navegação (Auto-Foco):** Pré-seleção da última turma ativa ou tarefa mais recente nos *dropdowns*.
-6. **Global Utility Menu:** Alocado no canto superior direito para configurações privadas, resgate de lixeira e *logout*.
-7. **Super Auto-Linker (Migração Silenciosa):** Nas listas de pendências da V3, o sistema normaliza agressivamente os nomes das tarefas (removendo espaços e maiúsculas). Se detectar uma tarefa órfã importada via cronograma da V1, ele a recria dinamicamente no banco e amarra o `tarefaId` correto sob o capô, prevenindo *links* quebrados (chutes para a *Home*) de forma 100% transparente ao usuário.
-
-## 17. Acelerador de Fluxo: Botão Global (FAB)
+## 15. Acelerador de Fluxo: Botão Global (FAB)
 * **Atalho Flutuante:** Acesso rápido à criação de turmas, tarefas e alunos.
-* **O "Espião" Inteligente (Onipresente):** Avalia a base de dados e injeta dinamicamente o sub-botão VIP **"Corrigir tarefa atual"** se houver uma tarefa ativa hoje.
+* **O "Espião" Inteligente:** Injeta dinamicamente o sub-botão VIP "Corrigir tarefa atual" se houver uma tarefa ativa hoje.
+
+## 16. Dependências Externas (npm)
+Além das dependências de base (React, Firebase, Tailwind, Vite), o sistema utiliza:
+
+| Pacote | Versão | Uso |
+|---|---|---|
+| `pdfjs-dist` | ^4.4.168 | Extração de texto de PDFs no *browser* |
+| `mammoth` | ^1.8.0 | Extração de texto de arquivos `.docx` no *browser* |
+| `@google/genai` | latest | Integração com Gemini (geração de *feedback* e aprendizado de estilo) |
+| `lucide-react` | ^0.428.0 | Ícones |
+| `react-router-dom` | ^6.26.1 | Roteamento |
+| `@emailjs/browser` | ^4.3.3 | Disparo de e-mail de alerta no cadastro de novos professores |
