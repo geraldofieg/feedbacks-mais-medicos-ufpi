@@ -12,6 +12,7 @@ import {
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenAI } from '@google/genai';
 import * as pdfjsLib from 'pdfjs-dist';
+import * as mammoth from 'mammoth';
 
 // Configurar o worker do PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -41,6 +42,10 @@ export default function RevisarAtividade() {
   const [uploading, setUploading] = useState(false);
   const [arquivoUrl, setArquivoUrl] = useState('');
   const [nomeArquivo, setNomeArquivo] = useState('');
+
+  // 📄 EXTRAÇÃO DE TEXTO DE WORD
+  const [textoExtraidoDoc, setTextoExtraidoDoc] = useState('');
+  const [erroLeituraDoc, setErroLeituraDoc] = useState(false); // true para .doc legado que não conseguimos ler
 
   // 🧠 APRENDIZADO DE ESTILO
   const [estiloAprendido, setEstiloAprendido] = useState('');
@@ -169,6 +174,25 @@ where('tarefaId', '==', id));
     const file = e.target.files[0];
     if (!file || !alunoAtual) return;
     setUploading(true);
+    setTextoExtraidoDoc('');
+    setErroLeituraDoc(false);
+
+    // 📄 Extração de texto de .docx diretamente no browser (mammoth)
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext === 'docx') {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const resultado = await mammoth.extractRawText({ arrayBuffer });
+        setTextoExtraidoDoc(resultado.value || '');
+      } catch (err) {
+        console.error('Erro ao extrair texto do DOCX:', err);
+        setTextoExtraidoDoc('');
+      }
+    } else if (ext === 'doc' || ext === 'rtf') {
+      // .doc legado (binário) e .rtf não são legíveis no browser
+      setErroLeituraDoc(true);
+    }
+
     const storageRef = ref(storage, `atividades/${currentUser.uid}/${alunoAtual.id}_${Date.now()}_${file.name}`);
     const uploadTask = uploadBytesResumable(storageRef, file);
     uploadTask.on('state_changed', null, (error) => { console.error(error); setUploading(false); }, 
@@ -221,9 +245,15 @@ where('tarefaId', '==', id));
       }
 
       let textoResposta = novaResposta || "";
-      if (arquivoUrl && arquivoUrl.toLowerCase().includes('.pdf')) {
-        const pdfText = await extractTextFromPdf(arquivoUrl);
-        textoResposta += `\n\n[Conteúdo do PDF da Resposta]:\n${pdfText}`;
+      if (arquivoUrl) {
+        const urlLower = arquivoUrl.toLowerCase();
+        if (urlLower.includes('.pdf')) {
+          const pdfText = await extractTextFromPdf(arquivoUrl);
+          textoResposta += `\n\n[Conteúdo do PDF da Resposta]:\n${pdfText}`;
+        } else if (textoExtraidoDoc) {
+          // .docx extraído pelo mammoth durante o upload
+          textoResposta += `\n\n[Conteúdo do documento Word da Resposta]:\n${textoExtraidoDoc}`;
+        }
       }
 
       // 🎯 Usa o prompt unificado se existir, senão usa o prompt base — nunca os dois juntos
@@ -674,12 +704,12 @@ gap-8 items-start">
                         ) : (
                           <label className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
                             {uploading ? <RefreshCw size={14} className="animate-spin"/> : <FileUp size={14}/>}
-                            <span className="text-[10px] font-black uppercase">{uploading ? 'Subindo...' : 'Anexar PDF'}</span>
+                            <span className="text-[10px] font-black uppercase">{uploading ? 'Subindo...' : 'Anexar PDF/DOC'}</span>
                             <input type="file" className="hidden" accept=".pdf,.doc,.docx,.rtf,.txt" onChange={handleUploadArquivo} disabled={uploading}/>
                           </label>
                         )}
               
-                        <button onClick={() => { setNovaResposta(''); setArquivoUrl(''); setNomeArquivo(''); }} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center gap-1">
+                        <button onClick={() => { setNovaResposta(''); setArquivoUrl(''); setNomeArquivo(''); setTextoExtraidoDoc(''); setErroLeituraDoc(false); }} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center gap-1">
                           <Eraser size={14}/> Limpar
                         </button>
                       </div>
@@ -687,6 +717,44 @@ gap-8 items-start">
                     
                     <textarea rows="14" placeholder="Cole a resposta aqui..." className="w-full p-6 md:p-8 rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-lg" value={novaResposta} onChange={(e) => setNovaResposta(e.target.value)}/>
                     
+                    {/* ⚠️ Aviso para .doc/.rtf legado que não conseguimos ler */}
+                    {erroLeituraDoc && (
+                      <div className="mt-4 p-5 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col gap-3">
+                        <div className="flex items-start gap-3">
+                          <span className="text-amber-500 text-lg shrink-0">⚠️</span>
+                          <div>
+                            <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-1">Formato não suportado para leitura automática</p>
+                            <p className="text-xs font-medium text-amber-700 leading-relaxed">
+                              Arquivos <strong>.doc</strong> e <strong>.rtf</strong> (Word antigo) não podem ser lidos automaticamente pela IA neste formato.
+                              Para que a IA consiga analisar a resposta do aluno, converta o arquivo para <strong>PDF ou .docx</strong> antes de anexar.
+                            </p>
+                            <div className="mt-3 flex flex-col gap-2">
+                              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Como converter:</p>
+                              <div className="flex flex-wrap gap-2">
+                                <a href="https://www.ilovepdf.com/pt/word_para_pdf" target="_blank" rel="noopener noreferrer"
+                                   className="inline-flex items-center gap-1.5 bg-white text-amber-700 border border-amber-300 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-amber-100 transition-colors">
+                                  <ExternalLink size={10}/> 1. Abrir iLovePDF — Word para PDF
+                                </a>
+                              </div>
+                              <p className="text-[10px] text-amber-600 font-medium leading-relaxed">
+                                Acesse o link → arraste o arquivo .doc → clique em "Converter para PDF" → baixe o PDF → anexe aqui no lugar do arquivo atual.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ✅ Confirmação de leitura bem-sucedida de .docx */}
+                    {textoExtraidoDoc && !erroLeituraDoc && (
+                      <div className="mt-3 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2">
+                        <span className="text-emerald-600 text-sm">✅</span>
+                        <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                          Texto do Word extraído com sucesso — a IA conseguirá ler a resposta
+                        </p>
+                      </div>
+                    )}
+
                     {linksNaResposta.length > 0 && (
                       <div className="mt-4 p-5 bg-indigo-50 border border-indigo-100 rounded-2xl flex flex-col gap-3 shadow-inner">
                         <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-2">
