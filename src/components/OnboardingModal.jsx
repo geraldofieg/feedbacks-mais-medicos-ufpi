@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, Users, LayoutDashboard, ChevronRight, ChevronLeft, X, Rocket, GitMerge, MessageCircle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, X, AlertTriangle, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function OnboardingModal({ isOpen, onClose }) {
   const [step, setStep] = useState(0);
 
-  // Trava o scroll do fundo quando o modal está aberto
   useEffect(() => {
     if (isOpen) document.body.style.overflow = 'hidden';
     else document.body.style.overflow = 'unset';
@@ -13,107 +13,205 @@ export default function OnboardingModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const slides = [
-    {
-      icone: <Rocket size={48} className="text-indigo-500" />,
-      titulo: "Bem-vindo à sua nova Esteira de Produção",
-      texto: "A Plataforma do Professor é um assistente inteligente criado para organizar seu fluxo acadêmico e reduzir o trabalho braçal. Se você é novo por aqui, vamos entender a lógica de como operar o sistema passo a passo para você não se sentir perdido.",
-      cor: "bg-indigo-50"
-    },
-    {
-      icone: <Users size={48} className="text-blue-500" />,
-      titulo: "1. A Lógica de Organização",
-      texto: "O fluxo do sistema é simples e hierárquico. Primeiro, você seleciona a sua Instituição e cadastra suas Turmas. Com as turmas prontas, você lança as Tarefas (definindo o que e quando entregar) e, por fim, insere os Alunos que farão parte delas.",
-      cor: "bg-blue-50"
-    },
-    {
-      icone: <Sparkles size={48} className="text-purple-500" />,
-      titulo: "2. Correção e Inteligência",
-      texto: "Lembre-se: o aluno não acessa esta plataforma. Ao receber o trabalho no sistema oficial, você copia o texto ou faz upload do PDF da resposta do aluno aqui. Na hora de lançar a nota e o feedback, você pode fazer manualmente ou usar nossa Inteligência Artificial, customizando o seu comando (prompt) para garantir o seu tom pessoal. Mas a regra é clara: a IA é apenas uma opção assistente. A revisão e a palavra final são sempre suas!",
-      cor: "bg-purple-50"
-    },
-    {
-      icone: <GitMerge size={48} className="text-orange-500" />,
-      titulo: "3. O Cruzamento Automático",
-      texto: "Aqui está o grande segredo: o sistema cruza as suas tarefas e prazos com os alunos matriculados automaticamente. Sem você fazer nada, ele gera o Mapa de Entregas (uma visão geral rápida de quem já entregou e quem falta) e a lista de Pendências (que mostra estritamente apenas os devedores das tarefas atuais e passadas).",
-      cor: "bg-orange-50"
-    },
-    {
-      icone: <LayoutDashboard size={48} className="text-emerald-500" />,
-      titulo: "4. Seu Centro de Comando",
-      texto: "Agora tudo faz sentido no seu Dashboard! Ele resume a operação: avisa o que vence hoje e organiza seu fluxo num modelo Kanban. Veja quem está 'Aguardando Revisão', quais feedbacks prontos estão 'Aguardando Postar' na faculdade, e seu 'Histórico' de concluídos.",
-      cor: "bg-emerald-50"
-    },
-    {
-      icone: <MessageCircle size={48} className="text-pink-500" />,
-      titulo: "5. Cobrança de Elite",
-      texto: "O sistema consolida tudo o que o aluno deve num único recado de urgência. Na Central de Comunicação, com apenas um clique, você manda uma mensagem direto no WhatsApp do aluno cobrando a pendência, ou simplesmente copia o texto pronto para colar no site oficial da instituição de ensino.",
-      cor: "bg-pink-50"
-    }
-  ];
-
-  const currentSlide = slides[step];
-
   const handleNext = () => {
     if (step < slides.length - 1) setStep(step + 1);
     else handleClose();
   };
 
   const handleClose = () => {
-    // Grava no navegador que o usuário já viu o tour
     localStorage.setItem('@SaaS_TourVisto', 'true');
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-300">
-        
-        {/* Botão Fechar / Pular */}
-        <button onClick={handleClose} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors z-10" title="Pular introdução">
-          <X size={20} />
-        </button>
+  const cadeia = [
+    { emoji: '🏛️', label: 'Instituição' },
+    { emoji: '👥', label: 'Turma' },
+    { emoji: '👤', label: 'Alunos' },
+    { emoji: '📌', label: 'Tarefas' },
+    { emoji: '✅', label: 'Tudo funciona' },
+  ];
 
-        {/* Conteúdo do Slide */}
-        <div className="p-8 md:p-10 text-center flex flex-col items-center flex-1">
-          <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-inner ${currentSlide.cor}`}>
-            {currentSlide.icone}
+  const slides = [
+    {
+      conteudo: (
+        <div className="text-center">
+          <div className="text-4xl mb-4">👋</div>
+          <h2 className="text-xl font-black text-gray-800 mb-2">Bem-vindo(a), Professor(a)!</h2>
+          <p className="text-sm font-medium text-gray-500 mb-6">Antes de começar, isso te soa familiar?</p>
+          <div className="space-y-3 text-left">
+            <div className="flex items-start gap-3 bg-red-50 border border-red-100 rounded-2xl p-3.5">
+              <span className="text-lg shrink-0">📋</span>
+              <p className="text-sm font-medium text-gray-700">Planilha manual pra controlar quem entregou e quem não entregou</p>
+            </div>
+            <div className="flex items-start gap-3 bg-red-50 border border-red-100 rounded-2xl p-3.5">
+              <span className="text-lg shrink-0">⌨️</span>
+              <p className="text-sm font-medium text-gray-700">Feedbacks escritos do zero, um por um, pra cada aluno</p>
+            </div>
+            <div className="flex items-start gap-3 bg-red-50 border border-red-100 rounded-2xl p-3.5">
+              <span className="text-lg shrink-0">📱</span>
+              <p className="text-sm font-medium text-gray-700">Cobranças pelo WhatsApp digitadas na mão, lembrando de cabeça quem deve o quê</p>
+            </div>
           </div>
-          <h2 className="text-2xl font-black text-gray-800 mb-4">{currentSlide.titulo}</h2>
-          <p className="text-gray-500 font-medium leading-relaxed">
-            {currentSlide.texto}
+          <p className="text-sm font-black text-blue-600 mt-5">Essa plataforma foi feita pra acabar com isso. ↓</p>
+        </div>
+      )
+    },
+    {
+      conteudo: (
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-700 text-xs font-black px-3 py-1.5 rounded-full mb-4 uppercase tracking-wider">
+            <AlertTriangle size={13} /> Regra de ouro — leia com atenção
+          </div>
+          <h2 className="text-xl font-black text-gray-800 mb-2">O sistema funciona em cadeia</h2>
+          <p className="text-sm text-gray-500 mb-5">Cada nível depende do anterior. Pular uma etapa faz tudo parar.</p>
+          <div className="flex items-center justify-center gap-1 mb-5 flex-wrap">
+            {cadeia.map((item, i) => (
+              <div key={i} className="flex items-center gap-1">
+                <div className={`flex flex-col items-center border rounded-xl px-2 py-1.5 ${i === cadeia.length - 1 ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`}>
+                  <span className="text-base">{item.emoji}</span>
+                  <span className="text-[9px] font-black text-gray-600 mt-0.5 whitespace-nowrap">{item.label}</span>
+                </div>
+                {i < cadeia.length - 1 && <ArrowRight size={11} className="text-gray-300 shrink-0" />}
+              </div>
+            ))}
+          </div>
+          <div className="space-y-2 text-left">
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+              <AlertTriangle size={13} className="text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-bold text-red-700">Tarefa sem Data de Início e Data de Fim não aparece em Pendências nem nas cobranças.</p>
+            </div>
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <AlertTriangle size={13} className="text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-bold text-amber-700">O aluno não acessa esta plataforma. Você recebe a resposta dele no portal oficial e traz pra cá.</p>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      conteudo: (
+        <div className="text-center">
+          <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Sparkles size={32} className="text-purple-500" />
+          </div>
+          <h2 className="text-xl font-black text-gray-800 mb-2">A IA trabalha pra você</h2>
+          <p className="text-sm text-gray-500 mb-6">Sem você precisar aprender nada técnico.</p>
+          <div className="space-y-4 text-left">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 size={18} className="text-green-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-gray-800">Gera o feedback em segundos</p>
+                <p className="text-xs text-gray-500">Lê a resposta do aluno e sugere o texto completo no seu tom.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <CheckCircle2 size={18} className="text-green-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-gray-800">Aprende com você ao longo do tempo</p>
+                <p className="text-xs text-gray-500">Cada edição que você faz ensina a IA a acertar mais — automaticamente.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <CheckCircle2 size={18} className="text-green-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-gray-800">A palavra final é sempre sua</p>
+                <p className="text-xs text-gray-500">Revise, edite ou aprove direto. Nada é enviado sem a sua aprovação.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <CheckCircle2 size={18} className="text-green-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-gray-800">Gera mensagens de cobrança prontas</p>
+                <p className="text-xs text-gray-500">Um clique abre o WhatsApp do aluno com o texto já digitado.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      conteudo: (
+        <div className="text-center">
+          <div className="text-5xl mb-4">🚀</div>
+          <h2 className="text-xl font-black text-gray-800 mb-2">Pronto! Um passo de cada vez.</h2>
+          <p className="text-sm text-gray-500 mb-6">Comece pelo primeiro nível da cadeia. Vai levar menos de 2 minutos.</p>
+          <div className="space-y-3 mb-5">
+            <Link
+              to="/turmas"
+              onClick={handleClose}
+              className="flex items-center justify-between w-full bg-blue-600 text-white px-5 py-4 rounded-2xl hover:bg-blue-700 transition-colors group"
+            >
+              <div className="text-left">
+                <p className="font-black text-sm">1º Passo — Criar minha primeira turma</p>
+                <p className="text-blue-200 text-xs mt-0.5">Vincula à sua instituição e adiciona os alunos</p>
+              </div>
+              <ChevronRight size={20} className="shrink-0 group-hover:translate-x-1 transition-transform" />
+            </Link>
+            <button
+              onClick={handleClose}
+              className="flex items-center justify-between w-full bg-gray-50 border border-gray-200 text-gray-600 px-5 py-3.5 rounded-2xl hover:bg-gray-100 transition-colors"
+            >
+              <p className="font-bold text-sm">Já sei o que fazer — ir para o painel</p>
+              <ChevronRight size={18} className="shrink-0 text-gray-400" />
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">
+            💡 Se travar em algum momento, acesse <strong className="text-gray-600">Como Funciona</strong> no menu — tem um guia completo com as regras.
           </p>
         </div>
+      )
+    },
+  ];
 
-        {/* Rodapé e Controles */}
-        <div className="bg-gray-50 p-6 border-t border-gray-100">
-          
-          {/* Bolinhas de Progresso */}
-          <div className="flex justify-center gap-2 mb-6">
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-300">
+
+        <button
+          onClick={handleClose}
+          className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors z-10"
+          title="Pular introdução"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="p-6 md:p-8 flex flex-col flex-1 overflow-y-auto max-h-[72vh]">
+          {slides[step].conteudo}
+        </div>
+
+        <div className="bg-gray-50 px-6 py-4 border-t border-gray-100">
+          <div className="flex justify-center gap-2 mb-4">
             {slides.map((_, index) => (
-              <div key={index} className={`h-2 rounded-full transition-all duration-300 ${index === step ? 'w-6 bg-blue-600' : 'w-2 bg-gray-300'}`} />
+              <button
+                key={index}
+                onClick={() => setStep(index)}
+                className={`h-2 rounded-full transition-all duration-300 ${index === step ? 'w-6 bg-blue-600' : 'w-2 bg-gray-300 hover:bg-gray-400'}`}
+              />
             ))}
           </div>
 
           <div className="flex items-center justify-between gap-4">
-            <button 
-              onClick={() => setStep(Math.max(0, step - 1))} 
-              className={`px-4 py-2.5 rounded-xl font-bold flex items-center gap-1 transition-colors ${step === 0 ? 'text-transparent cursor-default pointer-events-none' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-800'}`}
+            <button
+              onClick={() => setStep(Math.max(0, step - 1))}
               disabled={step === 0}
+              className={`px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1 transition-colors ${step === 0 ? 'text-transparent cursor-default pointer-events-none' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-800'}`}
             >
-              <ChevronLeft size={18} /> Voltar
+              <ChevronLeft size={16} /> Voltar
             </button>
 
-            <button 
-              onClick={handleNext} 
-              className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black flex items-center gap-2 shadow-md hover:bg-blue-700 hover:-translate-y-0.5 transition-all"
-            >
-              {step === slides.length - 1 ? 'Começar a operar' : 'Próximo'} 
-              {step < slides.length - 1 && <ChevronRight size={18} />}
-            </button>
+            {step < slides.length - 1 ? (
+              <button
+                onClick={handleNext}
+                className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 shadow-md hover:bg-blue-700 hover:-translate-y-0.5 transition-all"
+              >
+                Próximo <ChevronRight size={16} />
+              </button>
+            ) : (
+              <span className="text-xs text-gray-400 font-medium">Escolha uma opção acima ↑</span>
+            )}
           </div>
-
         </div>
+
       </div>
     </div>
   );
