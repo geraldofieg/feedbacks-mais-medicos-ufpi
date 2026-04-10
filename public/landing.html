@@ -166,20 +166,23 @@
 
   /* Mobile mockup scaling */
   @media (max-width: 640px) {
-    .mockup-body { padding: 14px; }
-    .mockup-header { margin-bottom: 12px; }
-    .mockup-title { font-size: .9rem; }
-    .kanban-col { padding: 10px 8px; }
-    .kanban-label { font-size: .55rem; letter-spacing: .04em; }
-    .kanban-num { font-size: 1.5rem; }
-    .kanban-link { font-size: .55rem; }
-    .mockup-ia { padding: 10px 12px; }
-    .ia-label { font-size: .6rem; }
-    .ia-desc { font-size: .65rem; }
-    .ia-num { font-size: 1.5rem; }
-    .mockup-students .student-row { padding: 8px 10px; }
-    .student-name { font-size: .7rem; }
-    .student-tag { font-size: .58rem; padding: 2px 6px; }
+    .mockup-body { padding: 12px; }
+    .mockup-header { margin-bottom: 10px; }
+    .mockup-title { font-size: .85rem; }
+    /* Kanban: stack to 1 col on mobile — cleaner than 3 cramped cols */
+    .mockup-kanban { grid-template-columns: 1fr; gap: 6px; margin-bottom: 10px; }
+    .kanban-col { padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; }
+    .kanban-label { font-size: .6rem; letter-spacing: .04em; margin-bottom: 0; }
+    .kanban-num { font-size: 1.3rem; margin: 0 8px; }
+    .kanban-link { font-size: .6rem; }
+    /* IA card: simplify for mobile */
+    .mockup-ia { padding: 10px 12px; flex-direction: row; align-items: center; }
+    .ia-desc { display: none; }
+    .ia-label { font-size: .62rem; }
+    .ia-num { font-size: 1.4rem; }
+    .mockup-students .student-row { padding: 6px 10px; }
+    .student-name { font-size: .68rem; }
+    .student-tag { font-size: .56rem; padding: 2px 6px; }
   }
   .mockup-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
   .mockup-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem; }
@@ -316,7 +319,7 @@
     background: linear-gradient(to bottom, var(--blue), var(--border));
   }
   .step-num {
-    width: 40px; height: 40px; border-radius: 50%;
+    width: 40px; height: 40px; min-width: 40px; min-height: 40px; border-radius: 50%;
     background: var(--blue); color: #fff;
     font-family: 'Syne', sans-serif; font-weight: 800; font-size: .9rem;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -371,7 +374,7 @@
     .feature-row { grid-template-columns: 1fr; gap: 32px; }
     .feature-row.reverse { direction: ltr; }
     .mockup-kanban { grid-template-columns: repeat(3, 1fr); }
-    .mockup-ia { flex-direction: row; }
+    .mockup-ia { flex-direction: row; align-items: center; }
     .hero-actions { flex-direction: column; align-items: flex-start; }
     .pricing-card { padding: 32px 24px; }
   }
