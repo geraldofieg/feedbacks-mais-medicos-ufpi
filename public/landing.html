@@ -385,6 +385,72 @@
   /* ── SCROLL REVEAL ── */
   .reveal { opacity: 0; transform: translateY(32px); transition: opacity .7s ease, transform .7s ease; }
   .reveal.visible { opacity: 1; transform: none; }
+
+  /* ═══════════════════════════════════════════════════════
+     CORREÇÃO GLOBAL MOBILE — causa raiz: Syne weight 800
+     é uma fonte muito larga. No mobile usamos weight 700
+     que é significativamente mais estreita e proporcional.
+  ═══════════════════════════════════════════════════════ */
+  @media (max-width: 680px) {
+
+    /* 1. Reduz o peso de TODOS os headings — resolve o achatamento */
+    h1, h2, h3, h4,
+    .hero-title, .features-title h2,
+    .feature-text h3, .step-content h4,
+    .pricing-card h2, .pain-inner h2,
+    .mockup-title {
+      font-weight: 700 !important;
+    }
+
+    /* 2. Hero title — tamanho conservador */
+    h1.hero-title {
+      font-size: 1.75rem !important;
+      line-height: 1.2 !important;
+    }
+
+    /* 3. Títulos de seção (h2) */
+    .features-title h2 {
+      font-size: 1.35rem !important;
+    }
+
+    /* 4. Títulos de feature (h3) */
+    .feature-text h3 {
+      font-size: 1.15rem !important;
+      line-height: 1.3 !important;
+    }
+
+    /* 5. Títulos inline (pain section usa style inline) */
+    .pain-inner h2 {
+      font-size: 1.35rem !important;
+    }
+
+    /* 6. Passos 1-5 */
+    .step-content h4 {
+      font-size: 1rem !important;
+    }
+
+    /* 7. Preço */
+    .pricing-price {
+      font-size: 2rem !important;
+    }
+
+    /* 8. Stats — já em 2x2, só reduz o peso */
+    .stat-num {
+      font-weight: 700 !important;
+    }
+
+    /* 9. Badges hero e pricing */
+    .hero-badge, .pricing-badge {
+      font-size: .7rem;
+    }
+
+    /* 10. Subtítulo hero */
+    .hero-sub {
+      font-size: 1rem !important;
+    }
+
+  }
+
 </style>
 </head>
 <body>
