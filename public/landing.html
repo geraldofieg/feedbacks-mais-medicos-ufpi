@@ -163,6 +163,24 @@
   .mockup-url { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; font-size: .75rem; color: var(--muted); flex: 1; max-width: 360px; margin: 0 auto; text-align: center; }
 
   .mockup-body { padding: 24px; background: #f8fafc; min-height: 320px; }
+
+  /* Mobile mockup scaling */
+  @media (max-width: 640px) {
+    .mockup-body { padding: 14px; }
+    .mockup-header { margin-bottom: 12px; }
+    .mockup-title { font-size: .9rem; }
+    .kanban-col { padding: 10px 8px; }
+    .kanban-label { font-size: .55rem; letter-spacing: .04em; }
+    .kanban-num { font-size: 1.5rem; }
+    .kanban-link { font-size: .55rem; }
+    .mockup-ia { padding: 10px 12px; }
+    .ia-label { font-size: .6rem; }
+    .ia-desc { font-size: .65rem; }
+    .ia-num { font-size: 1.5rem; }
+    .mockup-students .student-row { padding: 8px 10px; }
+    .student-name { font-size: .7rem; }
+    .student-tag { font-size: .58rem; padding: 2px 6px; }
+  }
   .mockup-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
   .mockup-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem; }
   .mockup-badge { font-size: .7rem; font-weight: 700; padding: 4px 10px; border-radius: 100px; }
@@ -346,12 +364,11 @@
     .feature-row { grid-template-columns: 1fr; gap: 32px; }
     .feature-row.reverse { direction: ltr; }
     .mockup-kanban { grid-template-columns: repeat(3, 1fr); }
-    .mockup-ia { flex-direction: column; text-align: center; }
+    .mockup-ia { flex-direction: row; }
     .hero-actions { flex-direction: column; align-items: flex-start; }
     .pricing-card { padding: 32px 24px; }
   }
   @media (max-width: 480px) {
-    .mockup-kanban { grid-template-columns: 1fr; }
     nav .nav-logo { font-size: .95rem; }
   }
 
