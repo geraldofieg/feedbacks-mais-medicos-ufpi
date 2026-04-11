@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Clock, CheckCheck, Send, ChevronRight, Calendar, Sparkles, Building2, School, UserPlus, FileText, AlertTriangle, User, Pencil, X, Brain } from 'lucide-react';
@@ -48,8 +48,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (!currentUser || radarExecutado.current) return;
 
-    const jaViuTour = localStorage.getItem('@SaaS_TourVisto');
-    if (!jaViuTour) setMostrarTour(true);
+    // 🔥 Verifica tour pelo Firestore — funciona em qualquer dispositivo
+    async function verificarTour() {
+      try {
+        const docSnap = await getDoc(doc(db, 'usuarios', currentUser.uid));
+        if (docSnap.exists() && !docSnap.data()?.tourVisto) {
+          setMostrarTour(true);
+        }
+      } catch (e) {
+        // fallback: se falhar, não exibe o tour (não bloqueia a experiência)
+        console.error('Erro ao verificar tour:', e);
+      }
+    }
+    verificarTour();
 
     async function setupRadarGlobal() {
       radarExecutado.current = true; 
