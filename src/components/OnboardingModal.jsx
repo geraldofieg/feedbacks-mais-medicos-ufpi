@@ -145,13 +145,13 @@ export default function OnboardingModal({ isOpen, onClose }) {
           <p className="text-sm text-gray-500 mb-6">Comece pelo primeiro nível da cadeia. Vai levar menos de 2 minutos.</p>
           <div className="space-y-3 mb-5">
             <Link
-              to="/turmas"
+              to="/"
               onClick={handleClose}
               className="flex items-center justify-between w-full bg-blue-600 text-white px-5 py-4 rounded-2xl hover:bg-blue-700 transition-colors group"
             >
               <div className="text-left">
-                <p className="font-black text-sm">1º Passo — Criar minha primeira turma</p>
-                <p className="text-blue-200 text-xs mt-0.5">Vincula à sua instituição e adiciona os alunos</p>
+                <p className="font-black text-sm">Ir para o painel e começar a configurar</p>
+                <p className="text-blue-200 text-xs mt-0.5">O sistema vai guiar você passo a passo</p>
               </div>
               <ChevronRight size={20} className="shrink-0 group-hover:translate-x-1 transition-transform" />
             </Link>
