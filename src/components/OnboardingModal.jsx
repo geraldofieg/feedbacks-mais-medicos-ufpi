@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, X, AlertTriangle, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function OnboardingModal({ isOpen, onClose }) {
   const [step, setStep] = useState(0);
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     if (isOpen) document.body.style.overflow = 'hidden';
@@ -19,7 +23,11 @@ export default function OnboardingModal({ isOpen, onClose }) {
   };
 
   const handleClose = () => {
-    localStorage.setItem('@SaaS_TourVisto', 'true');
+    // 🔥 Marca tour como visto no Firestore — persiste em qualquer dispositivo
+    if (currentUser?.uid) {
+      updateDoc(doc(db, 'usuarios', currentUser.uid), { tourVisto: true })
+        .catch(e => console.error('Erro ao salvar tour:', e));
+    }
     onClose();
   };
 
