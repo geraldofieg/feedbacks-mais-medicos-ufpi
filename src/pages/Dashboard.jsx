@@ -331,6 +331,47 @@ export default function Dashboard() {
 
   if (loadingInst || loadingDados) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
 
+  // ── BARRA DE PROGRESSO DO ONBOARDING ─────────────────────────────────────
+  // Passos: 1=Instituição, 2=Turma, 3=Alunos, 4=Tarefas
+  // etapaAtual: qual está em destaque (azul pulsando)
+  // Concluídas: verde com ✓ | Atual: azul com anel | Pendentes: cinza
+  const BarraOnboarding = ({ etapaAtual }) => {
+    const etapas = [
+      { num: 1, label: 'Instituição' },
+      { num: 2, label: 'Turma' },
+      { num: 3, label: 'Alunos' },
+      { num: 4, label: 'Tarefas' },
+    ];
+    const larguraProgresso = { 1: 'w-0', 2: 'w-1/3', 3: 'w-2/3', 4: 'w-full' };
+    return (
+      <div className="flex items-center justify-between mb-10 relative">
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
+        <div className={`absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-blue-500 -z-10 rounded-full transition-all duration-500 ${larguraProgresso[etapaAtual - 1] || 'w-0'}`}></div>
+        {etapas.map(({ num, label }) => {
+          const concluida = num < etapaAtual;
+          const atual = num === etapaAtual;
+          const pendente = num > etapaAtual;
+          return (
+            <div key={num} className="flex flex-col items-center gap-2 bg-white px-2">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm ring-4 ring-white transition-all
+                ${concluida ? 'bg-green-500 text-white shadow-md' : ''}
+                ${atual ? 'bg-blue-600 text-white shadow-lg ring-blue-100 animate-pulse' : ''}
+                ${pendente ? 'bg-gray-100 text-gray-400' : ''}
+              `}>
+                {concluida ? '✓' : num}
+              </div>
+              <span className={`text-[10px] font-black uppercase tracking-widest hidden sm:block
+                ${concluida ? 'text-green-600' : ''}
+                ${atual ? 'text-blue-600' : ''}
+                ${pendente ? 'text-gray-400' : ''}
+              `}>{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   let bannerAssinatura = null;
 
   if (userProfile && !userProfile.isVitalicio && userProfile.dataExpiracao) {
@@ -385,15 +426,7 @@ export default function Dashboard() {
       {instituicoes.length === 0 ?
         (
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
-          
-          <div className="flex items-center justify-between mb-12 relative">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white">1</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">2</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Turma</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">3</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Alunos</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">4</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Tarefas</span></div>
-          </div>
-
+          <BarraOnboarding etapaAtual={1} />
           <div className="text-center">
             <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><School size={40}/></div>
             <h2 className="text-2xl font-black text-gray-800 mb-3">Bem-vindo(a) à Plataforma!</h2>
@@ -410,21 +443,44 @@ export default function Dashboard() {
       ) : minhasTurmas.length === 0 ?
         (
         <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
-          
-          <div className="flex items-center justify-between mb-12 relative">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1/3 h-1 bg-blue-600 -z-10 rounded-full"></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><CheckCheck size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white">2</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Turma</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">3</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Alunos</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">4</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Tarefas</span></div>
-          </div>
-
+          <BarraOnboarding etapaAtual={2} />
           <div className="text-center">
             <div className="bg-blue-50 text-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Building2 size={40}/></div>
             <h2 className="text-2xl font-black text-gray-800 mb-3">Excelente! A instituição foi vinculada.</h2>
             <p className="text-gray-500 font-medium mb-8 text-lg">A fundação está pronta. O próximo passo é configurar sua primeira turma nesta instituição.</p>
             <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 2: Configurar Turma <ChevronRight size={18}/></Link>
+          </div>
+        </div>
+
+      ) : !temAlunos ?
+        (
+        <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
+          <BarraOnboarding etapaAtual={3} />
+          <div className="text-center">
+            <div className="bg-orange-50 text-orange-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><UserPlus size={40}/></div>
+            <h2 className="text-2xl font-black text-gray-800 mb-3">Turma criada! Agora adicione os alunos.</h2>
+            <p className="text-gray-500 font-medium mb-4 text-lg">Sem alunos na turma, não há pendências, cobranças nem mapa de entregas. O sistema precisa saber quem são os participantes.</p>
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-8 text-left">
+              <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-bold text-amber-700">Dica: importe todos de uma vez colando a lista do Excel — não precisa cadastrar um por um.</p>
+            </div>
+            <Link to="/turmas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 3: Adicionar Alunos <ChevronRight size={18}/></Link>
+          </div>
+        </div>
+
+      ) : !temTarefasGeral ?
+        (
+        <div className="bg-white border border-gray-200 p-8 md:p-12 rounded-3xl max-w-3xl mx-auto shadow-sm mt-8">
+          <BarraOnboarding etapaAtual={4} />
+          <div className="text-center">
+            <div className="bg-green-50 text-green-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><FileText size={40}/></div>
+            <h2 className="text-2xl font-black text-gray-800 mb-3">Alunos cadastrados! Última etapa.</h2>
+            <p className="text-gray-500 font-medium mb-4 text-lg">Crie a primeira tarefa da turma — defina o que os alunos devem entregar e quando. A partir daí o sistema começa a trabalhar por você.</p>
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 mb-8 text-left">
+              <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-bold text-red-700">Importante: preencha a Data de Início e a Data de Fim. Sem datas, a tarefa não aparece em Pendências nem na Central de Comunicação.</p>
+            </div>
+            <Link to="/tarefas" className="inline-flex items-center gap-2 bg-blue-600 text-white font-black py-4 px-10 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-lg">Passo 4: Criar Primeira Tarefa <ChevronRight size={18}/></Link>
           </div>
         </div>
       ) : (
