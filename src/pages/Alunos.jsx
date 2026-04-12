@@ -247,7 +247,7 @@ export default function Alunos() {
       <Breadcrumb items={[{ label: 'Turmas', path: '/turmas' }, { label: 'Alunos' }]} />
       
       {/* 🔥 MODO FANTASMA: BARRA DE PROGRESSO DO ONBOARDING (SÓ APARECE SE TIVER ZERO ALUNOS NO SISTEMA) */}
-      {!loading && turmas.length > 0 && alunos.length === 0 && (
+      {!loading && turmas.length > 0 && alunosFiltrados.length === 0 && (
         <div className="bg-white border border-gray-200 p-8 md:p-10 rounded-3xl max-w-4xl mx-auto shadow-sm mt-6 mb-10 animate-in fade-in zoom-in-95">
           <BarraOnboarding etapaAtual={3} />
           <div className="text-center">
@@ -266,7 +266,7 @@ export default function Alunos() {
           <div className="flex flex-wrap items-center gap-3">
             
             {/* 🔥 A PONTE FINAL DO ONBOARDING: Botão Passo 4 */}
-            {turmas.length === 1 && alunos.length > 0 && (
+            {turmas.length === 1 && alunosFiltrados.length > 0 && (
               <Link 
                 to="/tarefas" 
                 state={{ turmaIdSelecionada: filtroTurma !== 'todas' ? filtroTurma : turmas[0].id }}
@@ -284,7 +284,7 @@ export default function Alunos() {
             </button>
             <button 
               onClick={() => setIsModalOpen(true)} 
-              className={`font-black px-6 py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${turmas.length === 1 && alunos.length > 0 ? 'bg-white text-blue-600 border border-blue-200 hover:bg-blue-50' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20'}`}
+              className={`font-black px-6 py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${turmas.length === 1 && alunosFiltrados.length > 0 ? 'bg-white text-blue-600 border border-blue-200 hover:bg-blue-50' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20'}`}
             >
               <Plus size={20}/> Novo Aluno
             </button>
