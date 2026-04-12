@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { BookOpen, Users, Plus, ArrowRight, Pencil, Trash2, X, Check, FileText, School, Star, Copy, RefreshCw, Building2 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
+import BarraOnboarding from '../components/BarraOnboarding';
 
 export default function Turmas() {
   const { currentUser, userProfile, escolaSelecionada, setEscolaSelecionada } = useAuth();
@@ -224,15 +225,7 @@ export default function Turmas() {
       
       {!loading && !precisaCriarEscola && turmas.length === 0 && (
         <div className="bg-white border border-gray-200 p-8 md:p-10 rounded-3xl max-w-4xl mx-auto shadow-sm mt-6 mb-10 animate-in fade-in zoom-in-95">
-          <div className="flex items-center justify-between mb-8 relative">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1/3 h-1 bg-blue-600 -z-10 rounded-full"></div>
-            
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white animate-pulse">2</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Turma</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">3</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Alunos</span></div>
-            <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center font-black text-sm ring-4 ring-white">4</div><span className="text-[10px] font-black uppercase text-gray-400 tracking-widest hidden sm:block">Tarefas</span></div>
-          </div>
+          <BarraOnboarding etapaAtual={2} />
           <div className="text-center">
             <h2 className="text-2xl font-black text-gray-800 mb-2">A fundação está pronta!</h2>
             <p className="text-gray-500 font-medium text-lg">O Passo 2 é configurar sua sala de aula. Use um dos cartões abaixo para criar uma turma limpa ou copiar toda a estrutura de um modelo existente.</p>
