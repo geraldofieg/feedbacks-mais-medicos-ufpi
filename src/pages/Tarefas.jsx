@@ -6,7 +6,6 @@ import { db, storage } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { FileText, Plus, Search, Pencil, Trash2, Calendar, CalendarDays, StickyNote, GraduationCap, Check, X, RefreshCw, Paperclip, FileUp, FileCheck, ExternalLink, Users, User } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
-import BarraOnboarding from '../components/BarraOnboarding';
 
 // IMPORTAÇÃO DAS EMENTAS ESTÁTICAS
 import { ementaMaisMedicos } from '../data/ementaMaisMedicos';
@@ -364,6 +363,45 @@ export default function Tarefas() {
       setTarefas(tarefas.filter(t => t.id !== id));
     } catch (error) { console.error("Erro remover:", error); }
   }
+
+
+  // ── BARRA DE ONBOARDING INLINE ────────────────────────────────────────────
+  const BarraOnboarding = ({ etapaAtual }) => {
+    const etapas = [
+      { num: 1, label: 'Instituição' },
+      { num: 2, label: 'Turma' },
+      { num: 3, label: 'Alunos' },
+      { num: 4, label: 'Tarefas' },
+    ];
+    const larguras = { 1: 'w-0', 2: 'w-1/3', 3: 'w-2/3', 4: 'w-full' };
+    return (
+      <div className="flex items-center justify-between mb-8 relative">
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full" />
+        <div className={`absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-blue-500 -z-10 rounded-full transition-all duration-500 ${larguras[etapaAtual - 1] || 'w-0'}`} />
+        {etapas.map(({ num, label }) => {
+          const concluida = num < etapaAtual;
+          const atual = num === etapaAtual;
+          const pendente = num > etapaAtual;
+          return (
+            <div key={num} className="flex flex-col items-center gap-2 bg-white px-2">
+              <div className={[
+                'w-9 h-9 rounded-full flex items-center justify-center font-black text-sm ring-4 ring-white transition-all duration-300',
+                concluida ? 'bg-green-500 text-white shadow-md' : '',
+                atual     ? 'bg-blue-600 text-white shadow-lg ring-blue-100 animate-pulse' : '',
+                pendente  ? 'bg-gray-100 text-gray-400' : '',
+              ].join(' ')}>{concluida ? '✓' : num}</div>
+              <span className={[
+                'text-[10px] font-black uppercase tracking-widest hidden sm:block',
+                concluida ? 'text-green-600' : '',
+                atual     ? 'text-blue-600'  : '',
+                pendente  ? 'text-gray-400'  : '',
+              ].join(' ')}>{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   const getIconeTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
