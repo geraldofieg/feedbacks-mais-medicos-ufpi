@@ -6,6 +6,7 @@ import { db, storage } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { FileText, Plus, Search, Pencil, Trash2, Calendar, CalendarDays, StickyNote, GraduationCap, Check, X, RefreshCw, Paperclip, FileUp, FileCheck, ExternalLink, Users, User } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import BarraOnboarding from '../components/BarraOnboarding';
 
 // IMPORTAÇÃO DAS EMENTAS ESTÁTICAS
 import { ementaMaisMedicos } from '../data/ementaMaisMedicos';
@@ -42,13 +43,6 @@ export default function Tarefas() {
   
   // ESTADOS DE EDIÇÃO
   const [editandoId, setEditandoId] = useState(null);
-  const [enunciadosExpandidos, setEnunciadosExpandidos] = useState(new Set());
-
-  const toggleEnunciado = (id) => setEnunciadosExpandidos(prev => {
-    const novo = new Set(prev);
-    if (novo.has(id)) novo.delete(id); else novo.add(id);
-    return novo;
-  });
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
   const [dataInicioEdicao, setDataInicioEdicao] = useState('');
@@ -395,12 +389,7 @@ export default function Tarefas() {
   const itensComPrazo = itensFiltrados
     .map(t => ({ ...t, statusObj: getStatusPrazo(t.dataInicio, t.dataFim) }))
     .filter(t => !esconderPassados || t.statusObj.status !== 'passado')
-    .sort((a, b) => {
-      const ordem = { atual: 0, futuro: 1, passado: 2 };
-      const diffStatus = (ordem[a.statusObj.status] ?? 1) - (ordem[b.statusObj.status] ?? 1);
-      if (diffStatus !== 0) return diffStatus;
-      return a.statusObj.timestampVal - b.statusObj.timestampVal;
-    });
+    .sort((a, b) => a.statusObj.timestampVal - b.statusObj.timestampVal);
 
   if (!escolaSelecionada?.id) {
     return <div className="p-20 text-center font-bold text-gray-400">Selecione uma instituição no Início...</div>;
@@ -414,15 +403,7 @@ export default function Tarefas() {
         {/* 🔥 MODO FANTASMA: BARRA DE PROGRESSO DO ONBOARDING (SÓ APARECE SE TIVER ZERO TAREFAS NO SISTEMA) */}
         {!loading && turmas.length > 0 && tarefas.length === 0 && (
           <div className="bg-white border border-gray-200 p-8 md:p-10 rounded-3xl max-w-4xl mx-auto shadow-sm mt-6 mb-10 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between mb-8 relative">
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-blue-600 -z-10 rounded-full"></div>
-              
-              <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
-              <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Turma</span></div>
-              <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Alunos</span></div>
-              <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white animate-pulse">4</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Tarefas</span></div>
-            </div>
+            <BarraOnboarding etapaAtual={4} />
             <div className="text-center">
               <h2 className="text-2xl font-black text-gray-800 mb-2">A sala está pronta. Hora de dar aula!</h2>
               <p className="text-gray-500 font-medium text-lg">O último passo é lançar a sua primeira tarefa ou compromisso no cronograma da turma.</p>
@@ -557,21 +538,7 @@ export default function Tarefas() {
                              <h3 className="text-xl font-black text-gray-800">{item.nomeTarefa || item.titulo}</h3>
                              <p className="text-sm font-bold text-gray-500 mt-1"><Calendar size={14} className="inline mr-1" />{dataFormatada}</p>
                              
-                             {item.enunciado && (
-                               <div className="mt-4">
-                                 <p className={`text-sm text-gray-600 bg-gray-50 border border-gray-100 p-4 rounded-xl whitespace-pre-wrap ${enunciadosExpandidos.has(item.id) ? '' : 'line-clamp-3'}`}>
-                                   {item.enunciado}
-                                 </p>
-                                 {item.enunciado.length > 200 && (
-                                   <button
-                                     onClick={() => toggleEnunciado(item.id)}
-                                     className="mt-2 text-[11px] font-black text-blue-600 hover:text-blue-800 uppercase tracking-widest transition-colors"
-                                   >
-                                     {enunciadosExpandidos.has(item.id) ? '▲ Recolher enunciado' : '▼ Ver enunciado completo'}
-                                   </button>
-                                 )}
-                               </div>
-                             )}
+                             {item.enunciado && <p className="text-sm text-gray-600 mt-4 bg-gray-50 border border-gray-100 p-4 rounded-xl whitespace-pre-wrap">{item.enunciado}</p>}
                              
                              {item.enunciadoArquivoUrl && (
                                <a href={item.enunciadoArquivoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider mt-3 hover:bg-blue-100 transition-colors">
@@ -586,9 +553,9 @@ export default function Tarefas() {
                                <button onClick={() => handleLixeira(item.id, item.nomeTarefa || item.titulo)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir Tarefa"><Trash2 size={18}/></button>
                              </div>
                              
-                             {(item.tipo === 'entrega' || !item.tipo) && (
-                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto flex items-center justify-center gap-2 ${status === 'passado' ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200' : status === 'futuro' ? 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
-                                 {status === 'passado' ? <><Pencil size={16}/> Avaliar Atrasados</> : status === 'futuro' ? <><Pencil size={16}/> Corrigir Antecipado</> : 'Corrigir tarefas'}
+                             {(item.tipo === 'entrega' || !item.tipo) && status !== 'futuro' && (
+                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto flex items-center justify-center gap-2 ${status === 'passado' ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
+                                 {status === 'passado' ? <><Pencil size={16}/> Avaliar Atrasados</> : 'Corrigir tarefas'}
                                </Link>
                              )}
                            </div>
