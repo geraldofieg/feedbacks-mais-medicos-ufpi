@@ -239,12 +239,12 @@ export default function Turmas() {
         </div>
       )}
 
-      {/* 🔥 PASSO 3: turma criada mas sem alunos ainda — mantém a barra visível */}
-      {!loading && !precisaCriarEscola && turmas.length > 0 && !temAlunos && (
+      {/* 🔥 PASSO 3: turma criada — mantém a barra visível sempre que há turma */}
+      {!loading && !precisaCriarEscola && turmas.length > 0 && (
         <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-3xl max-w-4xl mx-auto shadow-sm mt-6 mb-8 animate-in fade-in zoom-in-95">
           <BarraOnboarding etapaAtual={3} />
           <div className="text-center">
-            <p className="text-sm font-bold text-gray-500">✅ Turma criada! Próximo passo: adicione os alunos à turma.</p>
+            <p className="text-sm font-bold text-gray-500">✅ Turma criada! Próximo passo: adicione os alunos à turma usando os cartões abaixo.</p>
           </div>
         </div>
       )}
