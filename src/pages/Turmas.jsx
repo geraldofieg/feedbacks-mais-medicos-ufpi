@@ -22,6 +22,7 @@ export default function Turmas() {
   
   // Estados de Cópia
   const [turmasModelo, setTurmasModelo] = useState([]);
+  const [temAlunos, setTemAlunos] = useState(true); // assume true até checar
   const [modeloSelecionado, setModeloSelecionado] = useState('');
   const [nomeTurmaClonada, setNomeTurmaClonada] = useState('');
   const [clonando, setClonando] = useState(false);
@@ -97,6 +98,11 @@ export default function Turmas() {
       
         const snapModelos = await getDocs(qModelos);
         setTurmasModelo(snapModelos.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.status !== 'lixeira'));
+
+        // 🔥 Verifica se há alunos para controlar a barra de onboarding
+        const snapAlunos = await getDocs(query(collection(db, 'alunos'), where('instituicaoId', '==', escolaSelecionada.id)));
+        const alunosAtivos = snapAlunos.docs.filter(d => d.data().status !== 'lixeira');
+        setTemAlunos(alunosAtivos.length > 0);
       } catch (error) { console.error(error); } finally { setLoading(false); }
     }
     fetchTurmas();
@@ -229,6 +235,16 @@ export default function Turmas() {
           <div className="text-center">
             <h2 className="text-2xl font-black text-gray-800 mb-2">A fundação está pronta!</h2>
             <p className="text-gray-500 font-medium text-lg">O Passo 2 é configurar sua sala de aula. Use um dos cartões abaixo para criar uma turma limpa ou copiar toda a estrutura de um modelo existente.</p>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 PASSO 3: turma criada mas sem alunos ainda — mantém a barra visível */}
+      {!loading && !precisaCriarEscola && turmas.length > 0 && !temAlunos && (
+        <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-3xl max-w-4xl mx-auto shadow-sm mt-6 mb-8 animate-in fade-in zoom-in-95">
+          <BarraOnboarding etapaAtual={3} />
+          <div className="text-center">
+            <p className="text-sm font-bold text-gray-500">✅ Turma criada! Próximo passo: adicione os alunos à turma.</p>
           </div>
         </div>
       )}
