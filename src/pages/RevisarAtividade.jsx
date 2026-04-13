@@ -148,6 +148,26 @@ where('tarefaId', '==', id));
     setNotaAluno(atividadeAtual?.nota || '');
     setArquivoUrl(atividadeAtual?.arquivoUrl || '');
     setNomeArquivo(atividadeAtual?.nomeArquivo || '');
+    // 🔄 Quando troca de aluno, limpa o texto extraído anterior
+    // Se o arquivo salvo é um .docx, re-extrai via fetch para que a IA consiga ler
+    setTextoExtraidoDoc('');
+    setErroLeituraDoc(false);
+    const url = atividadeAtual?.arquivoUrl || '';
+    if (url) {
+      const urlLower = url.toLowerCase();
+      const isDocx = urlLower.includes('.docx') || (urlLower.includes('firebase') && atividadeAtual?.nomeArquivo?.toLowerCase().endsWith('.docx'));
+      const isDocLegado = urlLower.includes('.doc') && !urlLower.includes('.docx');
+      if (isDocLegado) {
+        setErroLeituraDoc(true);
+      } else if (isDocx) {
+        // Re-extrai o texto do .docx via fetch para manter na memória
+        fetch(url)
+          .then(r => r.arrayBuffer())
+          .then(buf => mammoth.extractRawText({ arrayBuffer: buf }))
+          .then(res => setTextoExtraidoDoc(res.value || ''))
+          .catch(e => console.error('Erro ao re-extrair docx:', e));
+      }
+    }
   }, [alunoSelecionadoId, atividadeAtual]);
 
   const renderizarComLinks = (texto) => {
