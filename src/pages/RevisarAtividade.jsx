@@ -868,7 +868,7 @@ respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-grad
                         : 'bg-slate-800 border-slate-700 text-slate-500'
                     }`}>
                       <Brain size={14} className="shrink-0" />
-                      <span className="leading-tight">
+                      <span className="leading-tight flex-1">
                         {analisandoEstilo
                           ? 'Atualizando instruções da IA...'
                           : promptAtivo
@@ -878,6 +878,14 @@ respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-grad
                           : `IA usando instruções base · ${edicoesPendentes > 0 ? `${3 - edicoesPendentes} edições p/ otimizar` : 'edite e aprove 3 feedbacks p/ otimizar'}`
                         }
                       </span>
+                      <Link
+                        to="/configuracoes"
+                        state={{ abaInicial: 'aprendizado' }}
+                        className="shrink-0 text-[10px] font-black opacity-60 hover:opacity-100 underline underline-offset-2 transition-opacity whitespace-nowrap"
+                        title="Ver histórico e configurar aprendizado"
+                      >
+                        Ver IA →
+                      </Link>
                     </div>
                   )}
                 </div>
