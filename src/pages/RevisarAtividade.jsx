@@ -43,6 +43,9 @@ export default function RevisarAtividade() {
   const [arquivoUrl, setArquivoUrl] = useState('');
   const [nomeArquivo, setNomeArquivo] = useState('');
 
+  // 🔒 REGRAS PERMANENTES — nunca modificadas pelo aprendizado automático
+  const [regrasPermanentes, setRegrasPermanentes] = useState('');
+
   // 📄 EXTRAÇÃO DE TEXTO DE WORD
   const [textoExtraidoDoc, setTextoExtraidoDoc] = useState('');
   const [erroLeituraDoc, setErroLeituraDoc] = useState(false); // true para .doc legado que não conseguimos ler
@@ -105,6 +108,7 @@ where('tarefaId', '==', id));
           const dadosUser = docSnapUser.data();
           setEstiloAprendido(dadosUser?.estiloAprendido || '');
           setPromptAtivo(dadosUser?.promptAtivo || '');
+          setRegrasPermanentes(dadosUser?.regrasPermanentes || '');
           setEdicoesPendentes(dadosUser?.edicoesPendentesAnalise || 0);
           setTotalEdicoesIncorporadas(dadosUser?.totalEdicoesIncorporadas || 0);
         }
@@ -258,8 +262,12 @@ where('tarefaId', '==', id));
 
       // 🎯 Usa o prompt unificado se existir, senão usa o prompt base — nunca os dois juntos
       const instrucoes = promptAtivo || promptVivo;
+      // 🔒 Regras permanentes sempre vêm primeiro — imunes ao aprendizado automático
+      const blocoRegras = regrasPermanentes.trim()
+        ? `REGRAS PERMANENTES (prioridade máxima, nunca ignore):\n${regrasPermanentes.trim()}\n\n`
+        : '';
       const promptCompleto = `Aja como um preceptor médico.
-${instrucoes}
+${blocoRegras}${instrucoes}
 
 QUESTÃO: ${textoEnunciado}
 RESPOSTA DO ALUNO: "${textoResposta}"
@@ -392,9 +400,54 @@ REGRAS DE RESPOSTA:
         novoPromptAtivo = responseFusao.text.trim();
       }
 
+      // ─── 3ª CHAMADA: gerar resumo do ciclo em linguagem simples ───────────
+      const promptResumoCiclo = `Você é um assistente de análise pedagógica.
+Analise o que foi aprendido neste ciclo de treinamento de IA e explique em 3-4 frases simples, na terceira pessoa, como se estivesse explicando para o professor o que a IA entendeu.
+
+PARES DE EDIÇÃO ANALISADOS:
+${edicoesAtualizadas.map((par, i) => `
+Par ${i + 1}:
+IA sugeriu: "${par.sugerido}"
+Professor aprovou: "${par.aprovado}"
+`).join('')}
+
+NOVO ESTILO APRENDIDO:
+${novoEstilo}
+
+Escreva um resumo curto (máx 4 frases) explicando:
+- O que a IA percebeu nas edições
+- O que foi ajustado no estilo
+- Em que direção o prompt evoluiu
+
+Responda SOMENTE o resumo, sem título, sem preâmbulo.`;
+
+      let resumoCiclo = 'Ciclo de aprendizado concluído.';
+      try {
+        const responseResumo = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite-preview',
+          contents: promptResumoCiclo,
+        });
+        resumoCiclo = responseResumo.text.trim();
+      } catch (e) {
+        console.error('Erro ao gerar resumo do ciclo:', e);
+      }
+
+      // ─── Salvar no histórico (máx 10 entradas) ─────────────────────────────
+      const novaEntradaHistorico = {
+        data: new Date().toISOString(),
+        promptAtivo: novoPromptAtivo,
+        estiloAprendido: novoEstilo,
+        resumoCiclo,
+        totalEdicoesNoCiclo: edicoesAtualizadas.length,
+        avaliacaoUsuario: null, // null | 'aprovado' | 'rejeitado'
+      };
+      const historicoAtual = dadosUser.historicoPrompts || [];
+      const novoHistorico = [novaEntradaHistorico, ...historicoAtual].slice(0, 10);
+
       await updateDoc(docRefUser, {
         estiloAprendido: novoEstilo,
         promptAtivo: novoPromptAtivo,
+        historicoPrompts: novoHistorico,
         edicoesRecentes: [],
         edicoesPendentesAnalise: 0,
         totalEdicoesIncorporadas: totalAnterior + edicoesAtualizadas.length,
