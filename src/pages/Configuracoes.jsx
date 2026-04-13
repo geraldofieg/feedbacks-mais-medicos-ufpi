@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { GoogleGenAI } from '@google/genai';
 import { 
   User, Phone, Sparkles, Save, ShieldCheck, Mail, 
@@ -14,7 +14,8 @@ import Breadcrumb from '../components/Breadcrumb';
 
 export default function Configuracoes() {
   const { currentUser, userProfile, escolaSelecionada } = useAuth();
-  const [abaAtiva, setAbaAtiva] = useState('conta');
+  const location = useLocation();
+  const [abaAtiva, setAbaAtiva] = useState(location.state?.abaInicial || 'conta');
 
   // Conta
   const [nome, setNome] = useState('');
