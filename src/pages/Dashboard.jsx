@@ -493,17 +493,21 @@ export default function Dashboard() {
                 {tarefasEmAndamento.length > 0 ? 
                   (
                   tarefasEmAndamento.map(t => (
-                    <div key={t.id} className="flex justify-between items-center px-4 py-2 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors group">
-                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0"></div>
-                        <span className="text-sm font-bold text-slate-200 truncate" title={t.nomeTarefa}>{t.nomeTarefa}</span>
-                        <span className="text-xs font-black text-green-500 shrink-0 whitespace-nowrap">
+                    <div key={t.id} className="px-4 py-3 bg-slate-800/40 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-colors group">
+                      {/* Linha 1: ponto + nome completo */}
+                      <div className="flex items-start gap-2 mb-1.5">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0 mt-1.5"></div>
+                        <span className="text-sm font-bold text-slate-200 leading-snug">{t.nomeTarefa}</span>
+                      </div>
+                      {/* Linha 2: badge de prazo + botão corrigir */}
+                      <div className="flex items-center justify-between pl-4">
+                        <span className="text-xs font-black text-green-500">
                           {t.diasRestantes === 999 ? 'Sem prazo' : `Faltam ${t.diasRestantes} dias`}
                         </span>
+                        <Link to={`/revisar/${t.id}`} className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-600 border border-blue-500/30 text-blue-400 hover:text-white transition-all" title="Corrigir Tarefa">
+                          <Pencil size={14} />
+                        </Link>
                       </div>
-                      <Link to={`/revisar/${t.id}`} className="p-2 rounded-lg bg-blue-500/10 hover:bg-blue-600 border border-blue-500/30 text-blue-400 hover:text-white transition-all shrink-0 ml-2" title="Corrigir Tarefa">
-                        <Pencil size={16} />
-                      </Link>
                     </div>
                   ))
                 ) : (
