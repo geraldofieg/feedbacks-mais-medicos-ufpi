@@ -162,7 +162,11 @@ export default function Dashboard() {
             const data = d.data();
             if (data.status === 'lixeira' || !tIds.includes(data.turmaId)) return;
             
-            const key = `${data.alunoId}_${data.tarefaId}`;
+            // 🔥 MESMA CHAVE DO AguardandoRevisao — por nome limpo + alunoId
+            // Evita descompasso quando há duplicatas por herança da V1
+            const nomeRaw = data.nomeTarefa || data.tarefa || data.modulo || data.tarefaId || '';
+            const nomeLimpo = nomeRaw.toLowerCase().replace(/[\s-]/g, '');
+            const key = `${nomeLimpo}_${data.alunoId}`;
             const existente = atividadesMap.get(key);
             
             const peso = (ativ) => {
