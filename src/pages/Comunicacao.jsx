@@ -77,7 +77,8 @@ export default function Comunicacao() {
         const limiteInferior = new Date(2026, 0, 5).getTime();
         const hoje = new Date().getTime();
 
-        const tarefasData = snapTarefas.docs
+        // 1. Filtro Inicial Bruto (Datas e Lixeira)
+        const tarefasDataBruta = snapTarefas.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(t => {
              if (t.status === 'lixeira') return false;
@@ -86,7 +87,6 @@ export default function Comunicacao() {
              const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
              let timeInicio = 0;
 
-             // Tratamento inteligente de datas corrompidas ou em formato BR (DD/MM/YYYY)
              if (startRaw) {
                  if (startRaw.toDate) {
                      timeInicio = startRaw.toDate().getTime();
@@ -105,21 +105,11 @@ export default function Comunicacao() {
                  }
              }
 
-             // Se a data está completamente ilegível (NaN), deixamos passar para não perder a tarefa.
              if (isNaN(timeInicio) || timeInicio === 0) return true;
-
-             // Aplicação rígida da trava que você pediu (Jan/2026) e bloqueio de tarefas futuras.
              return timeInicio >= limiteInferior && timeInicio <= hoje;
           });
         
-        tarefasData.sort((a, b) => (a.dataFim?.toMillis() || 0) - (b.dataFim?.toMillis() || 0));
-        setTarefasDaTurma(tarefasData);
-        
-        const tarefaAtualId = tarefaAtivaId && (tarefasData.some(t => t.id === tarefaAtivaId) || tarefaAtivaId === 'todas') ? tarefaAtivaId : 'todas';
-        setTarefaAtivaId(tarefaAtualId);
-
-        if (tarefasData.length === 0) { setDevedores([]); setLoadingDados(false); return; }
-
+        // 2. Busca de Alunos e Atividades (Para cruzar dados antes de exibir os botões)
         const qAlunos = query(collection(db, 'alunos'), where('turmaId', '==', turmaAtiva));
         const snapAlunos = await getDocs(qAlunos);
         const alunosData = snapAlunos.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'lixeira');
@@ -134,6 +124,25 @@ export default function Comunicacao() {
                 entregasFeitasMap.add(`${ativ.alunoId}_${ativ.tarefaId}`);
             }
         });
+
+        // 3. Filtro de Pendências (Exclui tarefas com 100% de entrega)
+        const tarefasData = tarefasDataBruta.filter(tarefa => {
+            const tarefaRestrita = tarefa.alunosSelecionados && tarefa.alunosSelecionados.length > 0;
+            
+            // Retorna true APENAS SE existir algum aluno devendo esta tarefa
+            return alunosData.some(aluno => {
+                const isAlvo = !tarefaRestrita || tarefa.alunosSelecionados.includes(aluno.id);
+                return isAlvo && !entregasFeitasMap.has(`${aluno.id}_${tarefa.id}`);
+            });
+        });
+        
+        tarefasData.sort((a, b) => (a.dataFim?.toMillis() || 0) - (b.dataFim?.toMillis() || 0));
+        setTarefasDaTurma(tarefasData);
+        
+        const tarefaAtualId = tarefaAtivaId && (tarefasData.some(t => t.id === tarefaAtivaId) || tarefaAtivaId === 'todas') ? tarefaAtivaId : 'todas';
+        setTarefaAtivaId(tarefaAtualId);
+
+        if (tarefasData.length === 0) { setDevedores([]); setLoadingDados(false); return; }
 
         let listaDevedores = [];
 
@@ -380,8 +389,9 @@ export default function Comunicacao() {
             </div>
 
             {tarefasDaTurma.length === 0 ? (
-              <div className="text-sm text-orange-600 font-bold bg-orange-50 p-4 rounded-xl border border-orange-200">
-                Nenhuma tarefa do aluno cadastrada para esta turma.
+              <div className="text-sm text-green-600 font-bold bg-green-50 p-4 rounded-xl border border-green-200 flex items-center gap-2">
+                <CheckCircle2 size={20} />
+                Nenhuma pendência na turma! Todos os alunos entregaram as tarefas ativas ou vencidas.
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
@@ -426,7 +436,7 @@ export default function Comunicacao() {
               </div>
             )}
 
-            {tarefaAtivaId !== 'todas' && tarefaAtivaId && (
+            {tarefaAtivaId !== 'todas' && tarefaAtivaId && tarefasDaTurma.length > 0 && (
               <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
                 {diasRestantesVisual !== null ? (
                   <div className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap shadow-sm ${diasRestantesVisual < 0 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
@@ -443,7 +453,7 @@ export default function Comunicacao() {
           </div>
 
           {/* DUAS COLUNAS */}
-          {tarefaAtivaId && (
+          {tarefaAtivaId && tarefasDaTurma.length > 0 && (
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
               
               {/* COLUNA ESQUERDA: ZAP E GRUPO */}
