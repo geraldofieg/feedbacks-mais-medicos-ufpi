@@ -82,8 +82,33 @@ export default function Comunicacao() {
           .filter(t => {
              if (t.status === 'lixeira') return false;
              if (t.tipo && t.tipo !== 'entrega') return false;
+             
              const startRaw = t.dataInicio || t.data_inicio || t.dataCriacao;
-             const timeInicio = startRaw ? (startRaw.toDate ? startRaw.toDate().getTime() : new Date(startRaw).getTime()) : 0;
+             let timeInicio = 0;
+
+             // Tratamento inteligente de datas corrompidas ou em formato BR (DD/MM/YYYY)
+             if (startRaw) {
+                 if (startRaw.toDate) {
+                     timeInicio = startRaw.toDate().getTime();
+                 } else {
+                     const stringData = String(startRaw);
+                     if (stringData.includes('/')) {
+                         const partes = stringData.split('/');
+                         if (partes.length === 3 && partes[0].length === 2) {
+                             timeInicio = new Date(`${partes[2]}-${partes[1]}-${partes[0]}T00:00:00`).getTime();
+                         } else {
+                             timeInicio = new Date(stringData).getTime();
+                         }
+                     } else {
+                         timeInicio = new Date(stringData).getTime();
+                     }
+                 }
+             }
+
+             // Se a data está completamente ilegível (NaN), deixamos passar para não perder a tarefa.
+             if (isNaN(timeInicio) || timeInicio === 0) return true;
+
+             // Aplicação rígida da trava que você pediu (Jan/2026) e bloqueio de tarefas futuras.
              return timeInicio >= limiteInferior && timeInicio <= hoje;
           });
         
@@ -112,7 +137,6 @@ export default function Comunicacao() {
 
         let listaDevedores = [];
 
-        // ✅ LÓGICA DE RESUMO GERAL COM INTELIGÊNCIA DE URGÊNCIA (minDiasRestantes)
         if (tarefaAtualId === 'todas') {
             alunosData.forEach(aluno => {
                 let tarefasDevidasDesseAluno = [];
@@ -123,12 +147,24 @@ export default function Comunicacao() {
                     if (isAlvoDaTarefa && !entregasFeitasMap.has(`${aluno.id}_${tarefa.id}`)) {
                         tarefasDevidasDesseAluno.push(tarefa.nomeTarefa || tarefa.titulo);
 
-                        // Calcula qual tarefa está mais urgente
                         if (tarefa.dataFim) {
-                            const timeFim = tarefa.dataFim.toDate ? tarefa.dataFim.toDate().getTime() : new Date(tarefa.dataFim).getTime();
-                            const dias = Math.ceil((timeFim - hoje) / (1000 * 3600 * 24));
-                            if (minDiasRestantes === null || dias < minDiasRestantes) {
-                                minDiasRestantes = dias;
+                            let timeFim = 0;
+                            if (tarefa.dataFim.toDate) {
+                                timeFim = tarefa.dataFim.toDate().getTime();
+                            } else {
+                                const stringFim = String(tarefa.dataFim);
+                                if (stringFim.includes('/')) {
+                                    timeFim = new Date(`${stringFim.split('/')[2]}-${stringFim.split('/')[1]}-${stringFim.split('/')[0]}T23:59:59`).getTime();
+                                } else {
+                                    timeFim = new Date(stringFim).getTime();
+                                }
+                            }
+                            
+                            if (!isNaN(timeFim)) {
+                                const dias = Math.ceil((timeFim - hoje) / (1000 * 3600 * 24));
+                                if (minDiasRestantes === null || dias < minDiasRestantes) {
+                                    minDiasRestantes = dias;
+                                }
                             }
                         }
                     }
@@ -139,7 +175,6 @@ export default function Comunicacao() {
                 }
             });
         } 
-        // LÓGICA ANTIGA: TAREFA ESPECÍFICA
         else {
             const tarefaAtualObjetoLocal = tarefasData.find(t => t.id === tarefaAtualId);
             const tarefaRestrita = tarefaAtualObjetoLocal?.alunosSelecionados && tarefaAtualObjetoLocal.alunosSelecionados.length > 0;
@@ -165,9 +200,20 @@ export default function Comunicacao() {
   }, [turmaAtiva, tarefaAtivaId, alunoAlvo, escolaSelecionada]);
 
   const getDiasRestantes = (timestampFim) => {
-    if (!timestampFim || !timestampFim.toDate) return null;
-    const agora = new Date(); const dataFim = timestampFim.toDate(); 
-    return Math.ceil((dataFim.getTime() - agora.getTime()) / (1000 * 3600 * 24));
+    if (!timestampFim) return null;
+    let timeFim = 0;
+    if (timestampFim.toDate) {
+        timeFim = timestampFim.toDate().getTime();
+    } else {
+        const stringFim = String(timestampFim);
+        if (stringFim.includes('/')) {
+            timeFim = new Date(`${stringFim.split('/')[2]}-${stringFim.split('/')[1]}-${stringFim.split('/')[0]}T23:59:59`).getTime();
+        } else {
+            timeFim = new Date(stringFim).getTime();
+        }
+    }
+    if (isNaN(timeFim)) return null;
+    return Math.ceil((timeFim - new Date().getTime()) / (1000 * 3600 * 24));
   };
 
   const getPrimeiroNome = (nomeCompleto) => {
@@ -175,7 +221,6 @@ export default function Comunicacao() {
     return nomeCompleto.trim().split(' ')[0].charAt(0).toUpperCase() + nomeCompleto.trim().split(' ')[0].slice(1).toLowerCase();
   };
 
-  // ✅ Busca telefones importados
   const getTelefone = (aluno) => {
     return aluno.whatsapp || aluno.telefone || aluno.celular || '';
   };
@@ -185,7 +230,6 @@ export default function Comunicacao() {
   const nomeTarefa = tarefaAtualObj?.nomeTarefa || tarefaAtualObj?.titulo || '';
 
   const gerarMensagemGeral = () => {
-    // ✅ TEXTO INTELIGENTE PARA "TODAS AS PENDÊNCIAS" DO GRUPO
     if (tarefaAtivaId === 'todas') {
       let minDiasGeral = null;
       devedores.forEach(d => {
@@ -220,7 +264,6 @@ export default function Comunicacao() {
   const gerarMensagemIndividual = (aluno) => {
     const primeiroNome = getPrimeiroNome(aluno.nome);
 
-    // ✅ TEXTO INTELIGENTE INDIVIDUAL PARA "TODAS AS PENDÊNCIAS"
     if (tarefaAtivaId === 'todas') {
         const listaFormatada = aluno.tarefasDevidas.map(t => `- *${t}*`).join('\n');
         const dias = aluno.minDiasRestantes;
@@ -237,7 +280,6 @@ export default function Comunicacao() {
         return `Olá, ${primeiroNome}! Tudo bem?\nNotei no sistema que você possui pendências nas seguintes atividades:\n\n${listaFormatada}\n\nPor favor, regularize essa situação o quanto antes para não acumular e evitarmos problemas com a aprovação. Qualquer dúvida, estou à disposição!`;
     }
 
-    // MENSAGEM ESPECÍFICA
     if (diasRestantesVisual !== null) {
       if (diasRestantesVisual < 0) return `Olá, ${primeiroNome}!\nTudo bem?\nO prazo oficial de *${nomeTarefa}* foi encerrado. Notei no sistema que ainda consta pendência para a entrega desta atividade.\n\nPor favor, regularize essa situação imediatamente para evitarmos problemas com a aprovação.\nFico no aguardo!`;
       if (diasRestantesVisual >= 20) return `Olá, ${primeiroNome}! Tudo bem?\n🌟\nPassando para avisar que a etapa de *${nomeTarefa}* já está em andamento.\nFaltam ${diasRestantesVisual} dias para o encerramento e notei pendência na sua entrega.\n\nRecomendo adiantar a execução, pra não ficar para a última hora.\nQualquer coisa, pode contar comigo!`;
@@ -265,11 +307,8 @@ export default function Comunicacao() {
     const textoFinal = gerarMensagemIndividual(alunoObjeto);
     navigator.clipboard.writeText(textoFinal);
     
-    // 🔥 FILTRO INTELIGENTE DE WHATSAPP 🔥
-    // 1. Pega o número e limpa tudo que não for dígito
     let numeroLimpo = getTelefone(alunoObjeto).replace(/\D/g, '');
     
-    // 2. Se tiver um número e ele não começar com o código do Brasil (55), injetamos automaticamente!
     if (numeroLimpo && !numeroLimpo.startsWith('55')) {
       numeroLimpo = `55${numeroLimpo}`;
     }
@@ -353,16 +392,37 @@ export default function Comunicacao() {
                   <Layers size={16} /> Resumo Geral
                 </button>
 
-                {tarefasDaTurma.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setTarefaAtivaId(t.id)}
-                    className={`px-5 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 border ${tarefaAtivaId === t.id ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${tarefaAtivaId === t.id ? 'bg-white' : 'bg-green-500 animate-pulse'}`}></span>
-                    {t.nomeTarefa || t.titulo}
-                  </button>
-                ))}
+                {tarefasDaTurma.map(t => {
+                  let isVencida = false;
+                  if (t.dataFim) {
+                      let fimTime = 0;
+                      if (t.dataFim.toDate) {
+                          fimTime = t.dataFim.toDate().getTime();
+                      } else {
+                          const stringFim = String(t.dataFim);
+                          if (stringFim.includes('/')) {
+                              fimTime = new Date(`${stringFim.split('/')[2]}-${stringFim.split('/')[1]}-${stringFim.split('/')[0]}T23:59:59`).getTime();
+                          } else {
+                              fimTime = new Date(stringFim).getTime();
+                          }
+                      }
+                      if (!isNaN(fimTime) && fimTime < new Date().getTime()) {
+                          isVencida = true;
+                      }
+                  }
+
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setTarefaAtivaId(t.id)}
+                      className={`px-5 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 border ${tarefaAtivaId === t.id ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-[1.02]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${tarefaAtivaId === t.id ? 'bg-white' : (isVencida ? 'bg-red-500' : 'bg-green-500 animate-pulse')}`}></span>
+                      {t.nomeTarefa || t.titulo}
+                      {isVencida && <span className="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded ml-1 uppercase font-black">Vencida</span>}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
