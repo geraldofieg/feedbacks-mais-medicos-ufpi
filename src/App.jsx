@@ -39,7 +39,21 @@ import Admin from './pages/Admin';
 // PÁGINA DE BLOQUEIO DO SAAS
 import AssinaturaVencida from './pages/AssinaturaVencida';
 
+// PORTAL DO SUPERVISOR
+import SupervisorLogin from './pages/supervisor/SupervisorLogin';
+import SupervisorCadastro from './pages/supervisor/SupervisorCadastro';
+import SupervisorPainel from './pages/supervisor/SupervisorPainel';
+
 const VERSAO_LOCAL_APP = 1;
+
+// SEGURANÇA DA PORTA PARA SUPERVISORES
+function PrivateRouteSupervisor({ children }) {
+  const { currentUser, loading, userProfile } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-500">Carregando...</div>;
+  if (!currentUser) return <Navigate to="/supervisor/login" />;
+  if (userProfile && userProfile.role !== 'supervisor') return <Navigate to="/supervisor/login" />;
+  return children;
+}
 
 // O NOSSO "SEGURANÇA DA PORTA" ATUALIZADO PARA O SAAS
 function PrivateRoute({ children, permiteVencido = false }) {
