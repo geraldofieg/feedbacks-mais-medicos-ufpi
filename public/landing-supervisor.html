@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mais Médicos Auto-Fill — Fim da papelada manual na UNASUS</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #0f1117;
+    --ink2: #2a2d3a;
+    --muted: #6b7280;
+    --green: #0f5132;
+    --green-mid: #1e7a4a;
+    --green-light: #f0fdf4;
+    --green-border: #bbf7d0;
+    --blue: #2563eb;
+    --blue-light: #eff6ff;
+    --amber: #d97706;
+    --amber-light: #fffbeb;
+    --border: #e5e7eb;
+    --surface: #f9fafb;
+    --white: #ffffff;
+    --radius: 20px;
+    --radius-sm: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,.07);
+    --shadow-lg: 0 12px 48px rgba(0,0,0,.12);
+  }
+
+  html { scroll-behavior: smooth; }
+  body { font-family: 'DM Sans', sans-serif; color: var(--ink); background: var(--white); overflow-x: hidden; line-height: 1.6; }
+  h1,h2,h3,h4 { font-family: 'Syne', sans-serif; line-height: 1.15; }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(255,255,255,.92); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 64px;
+  }
+  .nav-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.05rem; color: var(--ink); text-decoration: none; }
+  .nav-logo span { color: var(--green-mid); }
+  .nav-cta {
+    background: var(--green); color: #fff; font-weight: 700; font-size: .85rem;
+    padding: 10px 20px; border-radius: 100px; text-decoration: none;
+    transition: background .2s, transform .15s; white-space: nowrap;
+  }
+  .nav-cta:hover { background: #0a3d25; transform: translateY(-1px); }
+
+  /* ── SECTIONS ── */
+  section { padding: 80px 24px; max-width: 1080px; margin: 0 auto; }
+  .section-full { max-width: 100%; padding-left: 0; padding-right: 0; }
+
+  /* ── HERO ── */
+  .hero-wrap {
+    padding-top: 120px; padding-bottom: 80px;
+    background: linear-gradient(160deg, #f0fdf4 0%, #fafafa 55%, #fff7ed 100%);
+    max-width: 100%; position: relative; overflow: hidden;
+  }
+  .hero-wrap::before {
+    content: ''; position: absolute; top: -80px; right: -120px;
+    width: 480px; height: 480px;
+    background: radial-gradient(circle, rgba(15,81,50,.07) 0%, transparent 70%);
+    border-radius: 50%; pointer-events: none;
+  }
+  .hero-inner { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--green-light); color: var(--green);
+    font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    padding: 6px 14px; border-radius: 100px; border: 1px solid var(--green-border);
+    margin-bottom: 28px; animation: fadeUp .6s ease both;
+  }
+  .hero-badge::before { content: '●'; font-size: .5rem; animation: blink 2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  h1.hero-title {
+    font-size: clamp(1.9rem, 6vw, 4rem); font-weight: 800; color: var(--ink);
+    max-width: 780px; margin-bottom: 24px; animation: fadeUp .7s .1s ease both;
+  }
+  h1.hero-title s { color: var(--muted); text-decoration-color: var(--amber); }
+  h1.hero-title .accent { color: var(--green-mid); }
+
+  .hero-sub {
+    font-size: clamp(1rem, 2.5vw, 1.2rem); color: var(--muted); max-width: 600px;
+    margin-bottom: 40px; animation: fadeUp .7s .2s ease both;
+  }
+  .hero-ctas { display: flex; flex-wrap: wrap; gap: 14px; animation: fadeUp .7s .3s ease both; }
+  .btn-primary {
+    background: var(--green); color: #fff; font-weight: 700; font-size: 1rem;
+    padding: 14px 32px; border-radius: 100px; text-decoration: none;
+    transition: background .2s, transform .15s, box-shadow .2s;
+    box-shadow: 0 4px 20px rgba(15,81,50,.25);
+  }
+  .btn-primary:hover { background: #0a3d25; transform: translateY(-2px); box-shadow: 0 8px 28px rgba(15,81,50,.3); }
+  .btn-secondary {
+    background: #fff; color: var(--ink); font-weight: 600; font-size: 1rem;
+    padding: 14px 28px; border-radius: 100px; text-decoration: none; border: 1.5px solid var(--border);
+    transition: border-color .2s, transform .15s;
+  }
+  .btn-secondary:hover { border-color: var(--green); transform: translateY(-2px); }
+  .hero-note { margin-top: 18px; font-size: .82rem; color: var(--muted); }
+
+  @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── MOCKUP EXTENSÃO ── */
+  .mockup-wrap {
+    margin-top: 56px; animation: fadeUp .8s .4s ease both;
+    display: flex; justify-content: center; align-items: flex-start; gap: 20px; flex-wrap: wrap;
+  }
+  .ext-mockup {
+    background: #fff; border: 1.5px solid #e5e7eb; border-radius: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.12); overflow: hidden;
+    width: 320px; flex-shrink: 0;
+  }
+  .ext-header {
+    background: linear-gradient(135deg, #0f5132 0%, #1e7a4a 100%);
+    color: #fff; padding: 12px 16px 10px;
+  }
+  .ext-eyebrow { font-size: 9px; letter-spacing: 1.2px; opacity: .65; text-transform: uppercase; margin-bottom: 2px; }
+  .ext-h1 { font-size: 14px; font-weight: 700; }
+  .ext-sub { font-size: 11px; opacity: .75; margin-top: 1px; }
+  .ext-tabs { display: flex; background: #fff; border-bottom: 2px solid #e5e7eb; }
+  .ext-tab { flex: 1; padding: 9px 6px; font-size: 11px; font-weight: 600; color: #6b7280; text-align: center; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .ext-tab.active { color: #0f5132; border-bottom-color: #0f5132; }
+  .ext-body { padding: 14px; }
+  .ext-label { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; margin-top: 12px; display: block; }
+  .ext-label:first-child { margin-top: 0; }
+  .ext-field {
+    width: 100%; padding: 8px 10px; border: 1.5px solid #d1d5db; border-radius: 7px;
+    font-size: 12px; background: #fff; color: #374151;
+  }
+  .ext-select-val { color: #0f5132; font-weight: 600; }
+  .ext-card {
+    background: #fff; border: 1.5px solid #d1fae5; border-radius: 8px; padding: 10px 12px; margin-top: 8px;
+  }
+  .ext-card-name { font-weight: 700; color: #0f5132; font-size: 12px; margin-bottom: 2px; }
+  .ext-card-info { color: #6b7280; font-size: 11px; line-height: 1.5; }
+  .ext-btn {
+    width: 100%; padding: 10px; background: #0f5132; color: #fff;
+    border: none; border-radius: 8px; font-size: 13px; font-weight: 700; margin-top: 14px; cursor: pointer;
+  }
+  .ext-status { background: #dcfce7; color: #166534; font-size: 11px; padding: 7px 10px; border-radius: 6px; margin-top: 8px; }
+
+  /* Mockup tela em lote */
+  .batch-mockup {
+    background: #fff; border: 1.5px solid #e5e7eb; border-radius: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.1); overflow: hidden; width: 280px; flex-shrink: 0;
+  }
+  .batch-info { background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 11px; color: #166534; line-height: 1.5; }
+  .batch-resumo { background: #fff; border: 1.5px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-top: 12px; font-size: 11px; color: #374151; line-height: 1.8; }
+
+  /* ── STATS ── */
+  .stats-band {
+    background: var(--green); padding: 56px 24px;
+    max-width: 100%;
+  }
+  .stats-inner { max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
+  .stat-item { text-align: center; }
+  .stat-num { font-family: 'Syne', sans-serif; font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 800; color: #fff; line-height: 1; }
+  .stat-label { font-size: .85rem; color: rgba(255,255,255,.7); margin-top: 6px; font-weight: 500; }
+
+  /* ── PAIN ── */
+  .pain-wrap { background: #111; padding: 72px 24px; max-width: 100%; }
+  .pain-inner { max-width: 1080px; margin: 0 auto; }
+  .pain-inner h2 { font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 800; color: #fff; margin-bottom: 12px; }
+  .pain-inner .sub { color: rgba(255,255,255,.55); font-size: 1rem; margin-bottom: 40px; }
+  .pain-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .pain-card {
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: var(--radius);
+    padding: 22px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .pain-icon { font-size: 1.6rem; }
+  .pain-card p { color: rgba(255,255,255,.7); font-size: .9rem; line-height: 1.6; }
+  .pain-card strong { color: #fff; }
+
+  /* ── FEATURES ── */
+  .features-title { text-align: center; margin-bottom: 56px; }
+  .features-title .tag {
+    display: inline-block; background: var(--green-light); color: var(--green);
+    font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+    padding: 5px 14px; border-radius: 100px; border: 1px solid var(--green-border); margin-bottom: 16px;
+  }
+  .features-title h2 { font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 800; margin-bottom: 12px; }
+  .features-title p { color: var(--muted); max-width: 520px; margin: 0 auto; }
+
+  .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+  .feature-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius);
+    padding: 28px; transition: border-color .2s, transform .2s, box-shadow .2s;
+  }
+  .feature-card:hover { border-color: var(--green-border); transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+  .feature-icon { font-size: 2rem; margin-bottom: 16px; }
+  .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+  .feature-card p { color: var(--muted); font-size: .9rem; line-height: 1.6; }
+
+  /* ── HOW IT WORKS ── */
+  .how-wrap { background: var(--surface); padding: 80px 24px; max-width: 100%; }
+  .how-inner { max-width: 1080px; margin: 0 auto; }
+  .how-inner h2 { font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 800; text-align: center; margin-bottom: 48px; }
+  .steps { display: flex; flex-direction: column; gap: 0; max-width: 680px; margin: 0 auto; position: relative; }
+  .steps::before { content: ''; position: absolute; left: 19px; top: 12px; bottom: 12px; width: 2px; background: var(--green-border); }
+  .step { display: flex; gap: 20px; align-items: flex-start; padding: 16px 0; }
+  .step-num {
+    width: 40px; height: 40px; min-width: 40px; min-height: 40px; border-radius: 50%;
+    background: var(--green); color: #fff; font-family: 'Syne', sans-serif;
+    font-weight: 800; font-size: .9rem; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; box-shadow: 0 0 0 6px var(--green-light); position: relative; z-index: 1;
+  }
+  .step-content h4 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+  .step-content p { font-size: .9rem; color: var(--muted); line-height: 1.6; }
+
+  /* ── PRICING ── */
+  .pricing-wrap { padding: 80px 24px; max-width: 1080px; margin: 0 auto; text-align: center; }
+  .pricing-wrap h2 { font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 800; margin-bottom: 12px; }
+  .pricing-sub { color: var(--muted); margin-bottom: 48px; }
+  .pricing-card {
+    background: #fff; border: 2px solid var(--green); border-radius: 28px;
+    padding: 48px 40px; max-width: 480px; margin: 0 auto;
+    box-shadow: 0 12px 48px rgba(15,81,50,.12);
+  }
+  .pricing-badge {
+    display: inline-block; background: var(--green); color: #fff;
+    font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    padding: 6px 16px; border-radius: 100px; margin-bottom: 24px;
+  }
+  .pricing-price { font-family: 'Syne', sans-serif; font-size: 3.5rem; font-weight: 800; color: var(--ink); line-height: 1; }
+  .pricing-price span { font-size: 1rem; font-weight: 500; color: var(--muted); }
+  .pricing-free { color: var(--green); font-weight: 700; font-size: 1rem; margin: 12px 0 28px; }
+  .pricing-divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+  .pricing-feature { display: flex; align-items: flex-start; gap: 10px; text-align: left; margin-bottom: 14px; font-size: .9rem; }
+  .pricing-feature::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; }
+  .pricing-cta {
+    display: block; width: 100%; background: var(--green); color: #fff; font-weight: 700; font-size: 1rem;
+    padding: 16px; border-radius: 100px; text-decoration: none; margin-top: 28px;
+    transition: background .2s, transform .15s; box-shadow: 0 4px 20px rgba(15,81,50,.25);
+  }
+  .pricing-cta:hover { background: #0a3d25; transform: translateY(-2px); }
+  .pricing-note { font-size: .8rem; color: var(--muted); margin-top: 14px; }
+
+  /* ── FAQ ── */
+  .faq-wrap { background: var(--surface); padding: 80px 24px; max-width: 100%; }
+  .faq-inner { max-width: 720px; margin: 0 auto; }
+  .faq-inner h2 { font-size: clamp(1.5rem, 3.5vw, 2.2rem); font-weight: 800; margin-bottom: 40px; text-align: center; }
+  details { border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: #fff; margin-bottom: 12px; overflow: hidden; }
+  details[open] { border-color: var(--green-border); }
+  summary { padding: 18px 20px; font-weight: 600; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; font-size: .95rem; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: '+'; font-size: 1.2rem; color: var(--green); font-weight: 700; transition: transform .2s; flex-shrink: 0; }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { padding: 0 20px 18px; color: var(--muted); font-size: .9rem; line-height: 1.7; }
+
+  /* ── FINAL CTA ── */
+  .final-wrap {
+    background: linear-gradient(135deg, #0f5132 0%, #1e7a4a 100%);
+    padding: 80px 24px; max-width: 100%; text-align: center;
+  }
+  .final-inner { max-width: 680px; margin: 0 auto; }
+  .final-inner h2 { font-size: clamp(1.8rem, 4.5vw, 3rem); font-weight: 800; color: #fff; margin-bottom: 16px; }
+  .final-inner p { color: rgba(255,255,255,.75); font-size: 1rem; margin-bottom: 36px; }
+  .btn-white {
+    background: #fff; color: var(--green); font-weight: 700; font-size: 1rem;
+    padding: 16px 36px; border-radius: 100px; text-decoration: none;
+    transition: transform .15s, box-shadow .2s;
+    box-shadow: 0 4px 20px rgba(0,0,0,.15);
+  }
+  .btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.2); }
+
+  /* ── FOOTER ── */
+  footer { padding: 32px 24px; border-top: 1px solid var(--border); text-align: center; font-size: .82rem; color: var(--muted); }
+
+  /* ── MOBILE ── */
+  @media (max-width: 680px) {
+    h1.hero-title { font-size: 1.75rem; font-weight: 700; }
+    .stats-inner { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    .mockup-wrap { gap: 16px; }
+    .ext-mockup, .batch-mockup { width: 100%; max-width: 340px; }
+    .pricing-card { padding: 32px 24px; }
+    .features-title h2, .how-inner h2, .pricing-wrap h2 { font-weight: 700; }
+    .pain-inner h2, .final-inner h2 { font-weight: 700; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">Mais Médicos <span>Auto-Fill</span></a>
+  <a class="nav-cta" href="#pricing">Testar grátis →</a>
+</nav>
+
+<!-- ══════════════════════════════════════════
+     HERO
+══════════════════════════════════════════ -->
+<div class="hero-wrap section-full">
+  <div class="hero-inner">
+    <div class="hero-badge">Para supervisores do Programa Mais Médicos</div>
+
+    <h1 class="hero-title">
+      Chega de digitar<br>
+      o mesmo formulário<br>
+      <s>10 vezes</s> toda semana.<br>
+      <span class="accent">1 clique. Pronto.</span>
+    </h1>
+
+    <p class="hero-sub">
+      Extensão do Chrome que preenche o formulário de supervisão da UNASUS automaticamente — com os dados de cada médico que você supervisiona, sem digitar nada.
+    </p>
+
+    <div class="hero-ctas">
+      <a class="btn-primary" href="#pricing">Testar 30 dias grátis</a>
+      <a class="btn-secondary" href="#como-funciona">Ver como funciona ↓</a>
+    </div>
+    <p class="hero-note">✓ Sem cartão de crédito &nbsp;·&nbsp; ✓ Instala em 2 minutos &nbsp;·&nbsp; ✓ Funciona no seu Chrome</p>
+
+    <!-- MOCKUP DA EXTENSÃO -->
+    <div class="mockup-wrap">
+
+      <!-- Popup principal -->
+      <div class="ext-mockup">
+        <div class="ext-header">
+          <div class="ext-eyebrow">Programa Mais Médicos · Tocantins</div>
+          <div class="ext-h1">Preenchimento Automático</div>
+          <div class="ext-sub">Formulário de Supervisão UNASUS</div>
+        </div>
+        <div class="ext-tabs">
+          <div class="ext-tab active">📋 Preencher</div>
+          <div class="ext-tab">📅 Em Lote</div>
+          <div class="ext-tab">👥 Alunos</div>
+        </div>
+        <div class="ext-body">
+          <span class="ext-label">Aluno</span>
+          <div class="ext-field ext-select-val">Marina Souza Cavalcante</div>
+          <div class="ext-card">
+            <div class="ext-card-name">Marina Souza Cavalcante</div>
+            <div class="ext-card-info">Peixe · Região Rio Formoso<br>CNES: 7823410 · 3 equipes · URBANA<br>Pop: 4.200 · Resp: Josenilda Pereira</div>
+          </div>
+          <span class="ext-label">Data da Supervisão</span>
+          <div class="ext-field" style="color:#374151;">17/04/2026</div>
+          <span class="ext-label">Campo 5.4 — Grupo Prioritário</span>
+          <div class="ext-field ext-select-val">Gestante</div>
+          <button class="ext-btn">🚀 Preencher Formulário</button>
+          <div class="ext-status">✓ Formulário preenchido com sucesso!</div>
+        </div>
+      </div>
+
+      <!-- Aba em lote -->
+      <div class="batch-mockup">
+        <div class="ext-header">
+          <div class="ext-eyebrow">Configuração mensal</div>
+          <div class="ext-h1">Preencher Em Lote</div>
+          <div class="ext-sub">Salve uma vez, use para todos</div>
+        </div>
+        <div class="ext-tabs">
+          <div class="ext-tab">📋 Preencher</div>
+          <div class="ext-tab active">📅 Em Lote</div>
+          <div class="ext-tab">👥 Alunos</div>
+        </div>
+        <div class="ext-body">
+          <div class="batch-info">
+            Defina a data e o tema uma vez. Ao abrir cada aluno na aba Preencher, os campos já vêm preenchidos automaticamente.
+          </div>
+          <span class="ext-label">Data da Supervisão</span>
+          <div class="ext-field" style="color:#374151;">17/04/2026</div>
+          <span class="ext-label">Tema (para todos os alunos)</span>
+          <div class="ext-field ext-select-val">Gestante</div>
+          <button class="ext-btn" style="margin-top:12px;">💾 Salvar para todos</button>
+          <div class="batch-resumo">
+            📅 <strong>Data:</strong> 17/04/2026<br>
+            📚 <strong>Tema:</strong> Gestante<br>
+            👥 <strong>Alunos:</strong> 8 configurados
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     STATS
+══════════════════════════════════════════ -->
+<div class="stats-band section-full">
+  <div class="stats-inner">
+    <div class="stat-item">
+      <div class="stat-num">10×</div>
+      <div class="stat-label">menos cliques por formulário</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">2 min</div>
+      <div class="stat-label">para instalar e já usar</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">0</div>
+      <div class="stat-label">campos digitados manualmente</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">30 dias</div>
+      <div class="stat-label">de teste gratuito · sem cartão</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     DOR
+══════════════════════════════════════════ -->
+<div class="pain-wrap section-full">
+  <div class="pain-inner">
+    <h2>Você reconhece<br>alguma dessas situações?</h2>
+    <p class="sub">Se sim, você está perdendo horas toda semana com trabalho que pode ser automatizado.</p>
+    <div class="pain-cards">
+      <div class="pain-card">
+        <div class="pain-icon">⌨️</div>
+        <p><strong>Digitar CNES, cidade, população e responsável</strong> de cada médico, um por um, toda vez que precisa preencher o relatório.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">📋</div>
+        <p><strong>Abrir o formulário da UNASUS 10 vezes</strong> por ciclo de supervisão — uma para cada médico que você acompanha.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">🗂️</div>
+        <p><strong>Abrir um arquivo Word, Excel ou e-mail</strong> pra achar os dados do médico, copiar o CNES, a cidade, o responsável — e colar campo por campo no formulário.</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-icon">⏰</div>
+        <p><strong>Gastar 40 minutos ou mais</strong> preenchendo formulários que deveriam levar 5 — só pelo trabalho manual e repetitivo.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     FEATURES
+══════════════════════════════════════════ -->
+<section>
+  <div class="features-title">
+    <div class="tag">O que a ferramenta faz</div>
+    <h2>Tudo que você precisa,<br>num só lugar</h2>
+    <p>Três funcionalidades que vão transformar a sua rotina de supervisão.</p>
+  </div>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🚀</div>
+      <h3>Preenchimento automático com 1 clique</h3>
+      <p>Selecione o médico, a data e o tema. A extensão preenche CNES, cidade, responsável, número de equipes, população e todos os outros campos do formulário UNASUS — instantaneamente.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📅</div>
+      <h3>Configuração em lote para o mês</h3>
+      <p>Defina a data e o tema de supervisão do mês uma única vez. Quando abrir cada aluno na aba "Preencher", esses campos já aparecem preenchidos automaticamente — sem repetir a informação 10 vezes.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">☁️</div>
+      <h3>Dados salvos na nuvem</h3>
+      <p>Os dados dos seus médicos ficam no seu painel online — acessível de qualquer computador. Troca de máquina? Reinstala o Chrome? Seus dados continuam lá, intactos.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📚</div>
+      <h3>Temas pré-cadastrados</h3>
+      <p>Escolha entre os grupos prioritários já cadastrados na UNASUS (Gestante, Criança, Hipertensão, Diabetes, Saúde Mental, Idoso e outros) — sem precisar lembrar o nome exato que o sistema aceita.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">✏️</div>
+      <h3>Cadastro e edição dos médicos</h3>
+      <p>Adicione, edite ou remova médicos supervisionados diretamente na extensão ou no painel web. Os dados são sincronizados automaticamente.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <h3>Acesso controlado por assinatura</h3>
+      <p>A extensão verifica automaticamente se sua licença está ativa. Sem complicação: 30 dias de trial gratuito, e depois uma assinatura simples para continuar usando.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     COMO FUNCIONA
+══════════════════════════════════════════ -->
+<div class="how-wrap section-full" id="como-funciona">
+  <div class="how-inner">
+    <h2>Como funciona na prática</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h4>Instala a extensão no Chrome</h4>
+          <p>Você recebe o arquivo da extensão e instala em 2 minutos no seu Chrome. Cria sua conta de supervisor com e-mail e senha.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h4>Cadastra os médicos que você supervisiona</h4>
+          <p>Preenche os dados de cada médico uma única vez: nome, cidade, CNES, responsável pela UBS, telefone, população e zona. Isso fica salvo na nuvem para sempre.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h4>No dia da supervisão — configura o mês em lote</h4>
+          <p>Na aba "Em Lote", escolhe a data e o tema do mês. Salva uma vez. Todos os alunos ficam com essas informações pré-carregadas.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h4>Abre o formulário da UNASUS, seleciona o médico</h4>
+          <p>Com o formulário do médico aberto no sistema da UNASUS, clica na extensão, seleciona o nome — e clica em "Preencher Formulário".</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <h4>Confere e clica em Salvar na UNASUS. Ciclo encerrado ✅</h4>
+          <p>A extensão preenche todos os campos em segundos. Você confere rapidamente e clica em salvar. Repete para o próximo médico — mas sem digitar nada de novo.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PRICING
+══════════════════════════════════════════ -->
+<section class="pricing-wrap" id="pricing">
+  <h2>Simples e transparente</h2>
+  <p class="pricing-sub">30 dias gratuitos para você testar tudo sem compromisso.</p>
+
+  <div class="pricing-card">
+    <div class="pricing-badge">Trial Gratuito — 30 Dias</div>
+    <div class="pricing-price">R$ 0 <span>/ por 30 dias</span></div>
+    <p class="pricing-free">✓ Acesso completo a todas as funcionalidades</p>
+    <hr class="pricing-divider">
+    <div class="pricing-feature">Extensão do Chrome com preenchimento automático</div>
+    <div class="pricing-feature">Cadastro ilimitado de médicos supervisionados</div>
+    <div class="pricing-feature">Configuração em lote por mês</div>
+    <div class="pricing-feature">Temas pré-cadastrados da UNASUS</div>
+    <div class="pricing-feature">Dados salvos na nuvem — acesse de qualquer computador</div>
+    <div class="pricing-feature">Suporte por WhatsApp</div>
+    <a class="pricing-cta" href="https://feedbacks-mais-medicos-ufpi.vercel.app/supervisor/cadastro">Criar minha conta grátis →</a>
+    <p class="pricing-note">Sem cartão de crédito. Sem compromisso. Cancele quando quiser.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     FAQ
+══════════════════════════════════════════ -->
+<div class="faq-wrap section-full">
+  <div class="faq-inner">
+    <h2>Dúvidas frequentes</h2>
+    <details>
+      <summary>Funciona em qualquer computador?</summary>
+      <p>Funciona em qualquer computador com Google Chrome instalado (Windows, Mac ou Linux). A extensão não funciona em celular — ela foi feita para o Chrome no computador, que é onde o formulário da UNASUS é preenchido.</p>
+    </details>
+    <details>
+      <summary>Preciso instalar algum programa além da extensão?</summary>
+      <p>Não. A extensão é instalada diretamente no Chrome em 2 minutos. Não precisa instalar nenhum programa separado nem mexer em configurações do computador.</p>
+    </details>
+    <details>
+      <summary>O que acontece se eu trocar de computador?</summary>
+      <p>Seus dados ficam salvos na nuvem. Basta instalar a extensão no novo computador, fazer login com seu e-mail e senha — e todos os seus médicos já aparecem cadastrados.</p>
+    </details>
+    <details>
+      <summary>A extensão funciona com qualquer médico do programa?</summary>
+      <p>Sim. Você cadastra os médicos que você supervisiona com os dados deles, e a extensão fica disponível para preencher o formulário de qualquer um deles na UNASUS.</p>
+    </details>
+    <details>
+      <summary>E se o formulário da UNASUS mudar?</summary>
+      <p>Atualizamos a extensão sempre que o sistema da UNASUS é alterado. As atualizações chegam automaticamente — você não precisa fazer nada.</p>
+    </details>
+    <details>
+      <summary>Depois dos 30 dias, qual é o valor?</summary>
+      <p>Ao final do trial, entramos em contato para apresentar os planos disponíveis. Nenhuma cobrança é feita automaticamente — você decide se quer continuar.</p>
+    </details>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     FINAL CTA
+══════════════════════════════════════════ -->
+<div class="final-wrap section-full">
+  <div class="final-inner">
+    <h2>Comece a economizar tempo ainda hoje</h2>
+    <p>30 dias gratuitos para você testar tudo sem compromisso — e ver na prática quanto tempo você vai recuperar.</p>
+    <a class="btn-white" href="https://feedbacks-mais-medicos-ufpi.vercel.app/supervisor/cadastro">Criar minha conta grátis →</a>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p><strong>Mais Médicos Auto-Fill</strong> · Produto da <a href="https://feedbacks-mais-medicos-ufpi.vercel.app" style="color:var(--green-mid);text-decoration:none;">Plataforma do Professor</a></p>
+  <p style="margin-top:6px;">© 2026 · Feito para supervisores do Programa Mais Médicos</p>
+</footer>
+
+</body>
+</html>
