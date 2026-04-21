@@ -134,6 +134,14 @@ function App() {
           {/* Rota do Painel SaaS */}
           <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
           
+          {/* ── ROTAS DO PORTAL DO SUPERVISOR (sem Navbar, sem PrivateRoute de professor) ── */}
+          <Route path="/supervisor/login" element={<SupervisorLogin />} />
+          <Route path="/supervisor/cadastro" element={<SupervisorCadastro />} />
+          <Route path="/supervisor/painel" element={
+            <PrivateRouteSupervisor><SupervisorPainel /></PrivateRouteSupervisor>
+          } />
+          <Route path="/supervisor" element={<Navigate to="/supervisor/login" />} />
+
           {/* Rota de fallback */}
           <Route path="*" element={<Navigate to="/" />} />
           
