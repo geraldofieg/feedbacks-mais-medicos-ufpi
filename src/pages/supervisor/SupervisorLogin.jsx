@@ -21,12 +21,31 @@ export default function SupervisorLogin() {
       const snap = await getDoc(doc(db, 'usuarios', cred.user.uid));
       const perfil = snap.data();
 
-      // Barreira: só supervisores entram aqui
-      if (!perfil || perfil.role !== 'supervisor') {
+      // Se não tem perfil, bloqueia
+      if (!perfil) {
         await auth.signOut();
-        setError('Esta conta não é de supervisor. Use a Plataforma do Professor para professores.');
+        setError('Conta não encontrada. Tente novamente.');
         setLoading(false);
         return;
+      }
+
+      // Se já é supervisor — acesso normal
+      // Se é professor — concede acesso duplo (supervisorAccess: true)
+      // Qualquer outro role desconhecido — bloqueia
+      if (perfil.role !== 'supervisor' && perfil.role !== 'professor') {
+        await auth.signOut();
+        setError('Esta conta não tem permissão para acessar o portal do supervisor.');
+        setLoading(false);
+        return;
+      }
+
+      // Professor tentando acessar pela primeira vez → concede acesso de supervisor
+      if (perfil.role === 'professor' && !perfil.supervisorAccess) {
+        await updateDoc(doc(db, 'usuarios', cred.user.uid), {
+          supervisorAccess: true,
+          supervisorTrialInicio: new Date(),
+          supervisorDataExpiracao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        });
       }
 
       // Atualiza último acesso
