@@ -55,7 +55,7 @@ export default function SupervisorCadastro() {
       setSuccess(true);
     } catch (err) {
       if (err.code === 'auth/email-already-in-use') {
-        setError('Este e-mail já está cadastrado.');
+        setError('Este e-mail já está cadastrado — possivelmente na Plataforma do Professor. Vá para a tela de login do Portal do Supervisor e entre com o mesmo e-mail e senha. O acesso será liberado automaticamente.');
       } else {
         setError('Erro ao criar conta. Tente novamente.');
       }
