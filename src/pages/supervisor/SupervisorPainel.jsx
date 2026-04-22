@@ -17,13 +17,33 @@ async function verificarAcesso(uid) {
   const snap = await getDoc(doc(db, 'usuarios', uid));
   if (!snap.exists()) return { ok: false, motivo: 'Conta não encontrada.' };
   const p = snap.data();
-  if (p.role !== 'supervisor') return { ok: false, motivo: 'Conta sem permissão de supervisor.' };
+  // Bloqueia roles que não são supervisor nem professor com acesso duplo
+  const ehSupervisor = p.role === 'supervisor';
+  const ehProfessorComAcesso = p.role === 'professor' && p.supervisorAccess === true;
+  if (!ehSupervisor && !ehProfessorComAcesso) return { ok: false, motivo: 'Conta sem permissão de supervisor.' };
   if (p.status === 'bloqueado') return { ok: false, motivo: 'Conta suspensa. Entre em contato.' };
-  if (p.isVitalicio) return { ok: true, perfil: p };
-  if (p.dataExpiracao) {
-    const exp = p.dataExpiracao.toDate ? p.dataExpiracao.toDate() : new Date(p.dataExpiracao.seconds * 1000);
-    if (new Date() > exp) return { ok: false, motivo: 'Sua assinatura venceu. Renove para continuar.' };
+
+  // Supervisor puro — usa dataExpiracao normal
+  if (ehSupervisor) {
+    if (p.isVitalicio) return { ok: true, perfil: p };
+    if (p.dataExpiracao) {
+      const exp = p.dataExpiracao.toDate ? p.dataExpiracao.toDate() : new Date(p.dataExpiracao.seconds * 1000);
+      if (new Date() > exp) return { ok: false, motivo: 'Sua assinatura venceu. Renove para continuar.' };
+    }
+    return { ok: true, perfil: p };
   }
+
+  // Professor com acesso duplo — usa supervisorDataExpiracao
+  if (ehProfessorComAcesso) {
+    if (p.supervisorDataExpiracao) {
+      const exp = p.supervisorDataExpiracao.toDate
+        ? p.supervisorDataExpiracao.toDate()
+        : new Date(p.supervisorDataExpiracao.seconds ? p.supervisorDataExpiracao.seconds * 1000 : p.supervisorDataExpiracao);
+      if (new Date() > exp) return { ok: false, motivo: 'Seu acesso ao Portal do Supervisor venceu. Renove para continuar.' };
+    }
+    return { ok: true, perfil: p };
+  }
+
   return { ok: true, perfil: p };
 }
 
@@ -277,5 +297,4 @@ export default function SupervisorPainel() {
       )}
     </div>
   );
-                        }
-      
+}
