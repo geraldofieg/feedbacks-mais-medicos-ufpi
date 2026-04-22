@@ -51,7 +51,10 @@ function PrivateRouteSupervisor({ children }) {
   const { currentUser, loading, userProfile } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-500">Carregando...</div>;
   if (!currentUser) return <Navigate to="/supervisor/login" />;
-  if (userProfile && userProfile.role !== 'supervisor') return <Navigate to="/supervisor/login" />;
+  // Aceita: supervisor puro OU professor com supervisorAccess concedido no login
+  const ehSupervisor = userProfile?.role === 'supervisor';
+  const ehProfessorComAcesso = userProfile?.role === 'professor' && userProfile?.supervisorAccess === true;
+  if (userProfile && !ehSupervisor && !ehProfessorComAcesso) return <Navigate to="/supervisor/login" />;
   return children;
 }
 
