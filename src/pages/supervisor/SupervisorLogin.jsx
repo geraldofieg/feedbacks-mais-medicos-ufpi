@@ -54,9 +54,19 @@ export default function SupervisorLogin() {
         emailVerificado: cred.user.emailVerified,
       });
 
+      console.log('[SupervisorLogin] acesso liberado — role:', perfil.role, 'supervisorAccess:', perfil.supervisorAccess);
       setTimeout(() => navigate('/supervisor/painel'), 400);
     } catch (err) {
-      setError('E-mail ou senha incorretos. Tente novamente.');
+      console.error('[SupervisorLogin] erro:', err.code, err.message);
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('E-mail ou senha incorretos. Verifique e tente novamente.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('Sem conexão com a internet. Verifique sua rede.');
+      } else {
+        setError(`Erro inesperado: ${err.code || err.message}. Tente novamente ou entre em contato.`);
+      }
       setLoading(false);
     }
   }
