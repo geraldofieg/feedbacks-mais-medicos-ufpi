@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Importar Médicos — Plataforma do Professor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f4f5f7; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .card { background: #fff; border-radius: 16px; padding: 32px; max-width: 520px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,.1); }
+  h1 { font-size: 1.4rem; font-weight: 800; color: #0f5132; margin-bottom: 6px; }
+  .sub { color: #6b7280; font-size: .9rem; margin-bottom: 24px; }
+  .medico-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; max-height: 320px; overflow-y: auto; }
+  .medico-row { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+  .medico-row .dot { width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; flex-shrink: 0; }
+  .medico-row.ok .dot { background: #16a34a; }
+  .medico-row.erro .dot { background: #dc2626; }
+  .medico-row .nome { font-weight: 700; font-size: .9rem; flex: 1; }
+  .medico-row .status { font-size: .75rem; color: #6b7280; }
+  .medico-row.ok .status { color: #16a34a; }
+  .medico-row.erro .status { color: #dc2626; }
+  .btn {
+    width: 100%; padding: 14px; background: #0f5132; color: #fff;
+    border: none; border-radius: 10px; font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: background .2s;
+  }
+  .btn:hover:not(:disabled) { background: #0a3d25; }
+  .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+  .result { margin-top: 16px; padding: 12px 16px; border-radius: 10px; font-size: .9rem; font-weight: 600; display: none; }
+  .result.ok { background: #dcfce7; color: #166534; display: block; }
+  .result.erro { background: #fee2e2; color: #991b1b; display: block; }
+  .aviso { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 10px; padding: 12px 14px; font-size: .85rem; color: #92400e; margin-bottom: 20px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📋 Importar Médicos Supervisionados</h1>
+  <p class="sub">Importação única dos 10 médicos da Patrícia para o Firebase.</p>
+
+  <!-- Caixa de login (aparece se não estiver logada) -->
+  <div id="loginBox">
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:12px;">Para importar, entre com o e-mail e senha do Portal do Supervisor:</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+      <input id="loginEmail" type="email" placeholder="E-mail" autocomplete="username"
+        style="padding:10px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.95rem;outline:none;">
+      <input id="loginSenha" type="password" placeholder="Senha" autocomplete="current-password"
+        style="padding:10px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.95rem;outline:none;">
+      <div id="loginErro" style="display:none;background:#fee2e2;color:#991b1b;padding:8px 12px;border-radius:7px;font-size:.85rem;font-weight:600;"></div>
+      <button id="btnLogin" class="btn" onclick="fazerLogin()">Entrar</button>
+    </div>
+  </div>
+
+  <!-- Caixa de importação (aparece se estiver logada) -->
+  <div id="importBox" style="display:none;">
+    <div class="aviso" style="background:#dcfce7;border-color:#86efac;color:#166534;margin-bottom:14px;">
+      ✓ Logada como: <strong id="emailLogado"></strong>
+    </div>
+    <div class="medico-list" id="medicoList">
+      <!-- preenchido pelo JS -->
+    </div>
+    <button class="btn" id="importBtn" onclick="importar()">
+      🚀 Importar 10 médicos agora
+    </button>
+    <div class="result" id="result"></div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { getFirestore, collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDNBcuKR0yl9PmzJ4ryY1p8UooYN78gFvU",
+    authDomain: "feedbacks-mais-medicos-novo.firebaseapp.com",
+    projectId: "feedbacks-mais-medicos-novo",
+    storageBucket: "feedbacks-mais-medicos-novo.firebasestorage.app",
+    messagingSenderId: "390908095939",
+    appId: "1:390908095939:web:f8cd055c90c8d26e666176"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const MEDICOS = [
+    { nome: "Anna Katarina Borges Napp", cidade: "Chapada de Natividade", regiao: "Amor Perfeito", cnes: "2469235", telefoneUnidade: "991095550", email: "annakbnapp@icloud.com", populacao: "3800", responsavel: "Odilene Lacerda", telefoneResponsavel: "992086866", numEquipes: "2", zona: "URBANA", multipleUnits: false, obs: "" },
+    { nome: "Enida Lane Souza de Oliveira Nogueira", cidade: "Porto Nacional", regiao: "Amor Perfeito", cnes: "6875858", telefoneUnidade: "63992540235", email: "ubsceica@gmail.com", populacao: "3200", responsavel: "Andressa Pereira dos Santos", telefoneResponsavel: "63992373676", numEquipes: "2", zona: "URBANA", multipleUnits: false, obs: "Férias previstas para 12/25" },
+    { nome: "Jandevanio Santana Barbosa", cidade: "Lagoa do Tocantins", regiao: "Capim Dourado", cnes: "2468263", telefoneUnidade: "991035535", email: "semus.lagoadotocantins@gmail.com", populacao: "5230", responsavel: "Feliciano Pereira de Sousa", telefoneResponsavel: "992514419", numEquipes: "4", zona: "URBANA", multipleUnits: true, obs: "2 unidades: Esperidião (urbana, onde trabalha) e Sabino (rural)" },
+    { nome: "Libina Coelho Costa", cidade: "Bom Jesus do Tocantins", regiao: "Cerrado Tocantins Araguaia", cnes: "2469243", telefoneUnidade: "63999270843", email: "saudebjto@gmail.com", populacao: "1336", responsavel: "Helem Maria Vieira Lopes", telefoneResponsavel: "63984357907", numEquipes: "2", zona: "URBANA", multipleUnits: false, obs: "" },
+    { nome: "Luciane Michelle Batistela Douaki", cidade: "Porto Nacional", regiao: "Amor Perfeito", cnes: "2468434", telefoneUnidade: "63992458894", email: "ubseudoxiaplanalto@gmail.com", populacao: "3758", responsavel: "Francinelly Ribeiro", telefoneResponsavel: "63992062857", numEquipes: "2", zona: "URBANA", multipleUnits: false, obs: "" },
+    { nome: "Salvador Cirqueira dos Santos", cidade: "Rio da Conceição", regiao: "Sudeste", cnes: "2370654", telefoneUnidade: "", email: "documentosnescessarios@outlook.com", populacao: "2211", responsavel: "Sandra Oliveira dos Santos", telefoneResponsavel: "992053219", numEquipes: "1", zona: "RURAL", multipleUnits: false, obs: "Não possui telefone da unidade. Zona rural remoto." },
+    { nome: "Saulo Fernandes Costa", cidade: "Natividade", regiao: "Amor Perfeito", cnes: "2597470", telefoneUnidade: "63992262300", email: "admsaude.natividada@gmail.com", populacao: "1488", responsavel: "Flávia Franco Brito", telefoneResponsavel: "63992994524", numEquipes: "1", zona: "URBANA", multipleUnits: false, obs: "" },
+    { nome: "Supercílio Barbosa Neto", cidade: "Paraíso do Tocantins", regiao: "Cantão", cnes: "2469049", telefoneUnidade: "63991295292", email: "ubschapadaoparaiso@gmail.com", populacao: "1764", responsavel: "Isabel Cristina Albuquerque Leite", telefoneResponsavel: "63984231822", numEquipes: "1", zona: "URBANA", multipleUnits: false, obs: "UBS Beatriz Medeiros" },
+    { nome: "Vitor Ribeiro Mundim", cidade: "Sandolândia", regiao: "Ilha do Bananal", cnes: "2469162", telefoneUnidade: "63999726986", email: "sandolandia.saude@gmail.com", populacao: "3700", responsavel: "Elenir Antônia da Rocha", telefoneResponsavel: "63991002555", numEquipes: "2", zona: "URBANA", multipleUnits: false, obs: "" },
+    { nome: "Wesllen Moura Pires", cidade: "Porto Nacional", regiao: "Amor Perfeito", cnes: "7641551", telefoneUnidade: "63992551346", email: "ubs.isadorachaves@gmail.com", populacao: "5805", responsavel: "Francinelly Ribeiro dos Santos Aires", telefoneResponsavel: "", numEquipes: "2", zona: "URBANA", multipleUnits: false, obs: "Telefone do responsável não informado" },
+  ];
+
+  // Renderiza a lista
+  const list = document.getElementById('medicoList');
+  MEDICOS.forEach((m, i) => {
+    const row = document.createElement('div');
+    row.className = 'medico-row';
+    row.id = `row-${i}`;
+    row.innerHTML = `<div class="dot"></div><div class="nome">${m.nome}</div><div class="status">aguardando</div>`;
+    list.appendChild(row);
+  });
+
+  // Verifica estado do login
+  onAuthStateChanged(auth, (user) => {
+    const loginBox = document.getElementById('loginBox');
+    const importBox = document.getElementById('importBox');
+    if (!user) {
+      loginBox.style.display = 'block';
+      importBox.style.display = 'none';
+    } else {
+      loginBox.style.display = 'none';
+      importBox.style.display = 'block';
+      document.getElementById('emailLogado').textContent = user.email;
+    }
+  });
+
+  window.fazerLogin = async function() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const senha = document.getElementById('loginSenha').value;
+    const errEl = document.getElementById('loginErro');
+    const btnLogin = document.getElementById('btnLogin');
+    if (!email || !senha) { errEl.textContent = 'Preencha e-mail e senha.'; errEl.style.display='block'; return; }
+    btnLogin.disabled = true; btnLogin.textContent = 'Entrando...';
+    try {
+      await signInWithEmailAndPassword(auth, email, senha);
+      errEl.style.display = 'none';
+    } catch(e) {
+      errEl.textContent = 'E-mail ou senha incorretos. Tente novamente.';
+      errEl.style.display = 'block';
+      btnLogin.disabled = false; btnLogin.textContent = 'Entrar';
+    }
+  };
+
+  window.importar = async function() {
+    const user = auth.currentUser;
+    if (!user) {
+      alert('Você precisa estar logada no Portal do Supervisor primeiro.');
+      return;
+    }
+
+    const btn = document.getElementById('importBtn');
+    btn.disabled = true;
+    btn.textContent = 'Importando...';
+
+    const colRef = collection(db, 'medicosSupervisionados', user.uid, 'medicos');
+    let ok = 0, erros = 0;
+
+    for (let i = 0; i < MEDICOS.length; i++) {
+      const row = document.getElementById(`row-${i}`);
+      try {
+        await addDoc(colRef, { ...MEDICOS[i], createdAt: serverTimestamp() });
+        row.className = 'medico-row ok';
+        row.querySelector('.status').textContent = '✓ importado';
+        ok++;
+      } catch (e) {
+        row.className = 'medico-row erro';
+        row.querySelector('.status').textContent = '✗ erro';
+        erros++;
+        console.error('Erro ao importar', MEDICOS[i].nome, e);
+      }
+    }
+
+    const result = document.getElementById('result');
+    if (erros === 0) {
+      btn.textContent = '✓ Importação concluída!';
+      result.className = 'result ok';
+      result.textContent = `✅ ${ok} médicos importados com sucesso! Feche esta página e acesse o Portal do Supervisor — os médicos já aparecem lá.`;
+    } else {
+      btn.textContent = 'Importação com erros';
+      result.className = 'result erro';
+      result.textContent = `${ok} importados, ${erros} com erro. Veja o console do navegador para detalhes.`;
+    }
+  };
+</script>
+</body>
+</html>
