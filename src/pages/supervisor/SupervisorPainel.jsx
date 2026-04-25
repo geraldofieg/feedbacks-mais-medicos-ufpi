@@ -498,7 +498,7 @@ ${textoColado}`;
                   <textarea
                     rows="10"
                     value={textoColado}
-                    onChange={e => setTextoColado(e.target.value)}
+                    onChange={e => { setTextoColado(e.target.value); setErroIA(''); }}
                     placeholder={"Cole aqui qualquer texto com os dados dos seus médicos.\n\nExemplos do que funciona:\n• Tabela copiada do Excel\n• Texto de um e-mail\n• Lista do bloco de notas\n• Qualquer formato — a IA entende\n\nEx: Dr. João Silva, Porto Nacional, CNES 1234567, 2 equipes, responsável Maria..."}
                     className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl text-gray-700 outline-none focus:border-purple-400 font-medium text-sm resize-none leading-relaxed"
                   />
