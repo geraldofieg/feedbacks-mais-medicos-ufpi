@@ -335,7 +335,7 @@ ${textoColado}`;
                   { n:3, titulo:'Abra o Google Chrome e acesse as extensões', texto:'Clique nos três pontinhos (⋮) no canto superior direito do Chrome → Extensões → Gerenciar extensões. Ou copie e cole na barra de endereço: chrome://extensions' },
                   { n:4, titulo:'Ative o Modo desenvolvedor', texto:'No canto superior direito da tela de extensões, ative a chave chamada Modo do desenvolvedor. Três botões novos vão aparecer.' },
                   { n:5, titulo:'Clique em "Carregar sem compactação"', texto:'Clique nesse botão e selecione a PASTA que foi criada no passo 2 (não o arquivo .zip em si, mas a pasta que ficou dentro dele após a extração).' },
-                  { n:'✓', titulo:'Pronto! A extensão está instalada.', texto:'O ícone da extensão vai aparecer na barra do Chrome. Clique nele, faça login com o mesmo e-mail e senha deste portal — seus médicos já estarão lá.', ok: true },
+                  { n:'✓', titulo:'Pronto! A extensão está instalada.', texto:'O ícone vai aparecer na barra do Chrome. Mas atenção: os médicos ainda não aparecem lá — você precisa cadastrá-los primeiro. Desça a página, use o botão "Importar com IA" ou "Adicionar manualmente" para incluir os médicos. Só depois de salvar é que eles aparecem automaticamente na extensão.', ok: true },
                 ].map(({ n, titulo, texto, ok }) => (
                   <li key={n} className="flex items-start gap-3">
                     <span className={`w-7 h-7 min-w-[28px] rounded-full flex items-center justify-center text-xs font-black text-white ${ok ? 'bg-green-500' : 'bg-blue-600'}`}>{n}</span>
