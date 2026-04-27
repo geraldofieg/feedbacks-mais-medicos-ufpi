@@ -231,7 +231,7 @@ export default function MapaEntregas() {
                     {tarefasVisiveis.map(tarefa => (
                       <th key={tarefa.id} className="px-3 py-4 text-center border-b border-l border-gray-200 min-w-[120px] max-w-[180px]">
                         <div className="text-[9px] uppercase font-black text-orange-500 tracking-widest mb-1">Tarefa</div>
-                        <div className="font-bold text-gray-700 text-xs truncate" title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</div>
+                        <div className="font-bold text-gray-700 text-xs leading-snug whitespace-normal break-words">{tarefa.nomeTarefa || tarefa.titulo}</div>
                       </th>
                     ))}
                   </tr>
@@ -308,7 +308,7 @@ export default function MapaEntregas() {
                         <div key={tarefa.id} className="py-2.5 flex justify-between items-center gap-4">
                           <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Tarefa</p>
-                            <p className={`text-xs font-bold truncate ${isento ? 'text-gray-400 line-through' : 'text-gray-700'}`} title={tarefa.nomeTarefa || tarefa.titulo}>{tarefa.nomeTarefa || tarefa.titulo}</p>
+                            <p className={`text-xs font-bold leading-snug ${isento ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{tarefa.nomeTarefa || tarefa.titulo}</p>
                           </div>
                           <div className="shrink-0">
                             {isento ? (
