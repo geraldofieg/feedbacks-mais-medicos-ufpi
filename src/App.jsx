@@ -39,6 +39,9 @@ import Admin from './pages/Admin';
 // PÁGINA DE BLOQUEIO DO SAAS
 import AssinaturaVencida from './pages/AssinaturaVencida';
 
+// MATERIAIS DIDÁTICOS (exclusivo Patrícia)
+import Materiais from './pages/Materiais';
+
 // PORTAL DO SUPERVISOR
 import SupervisorLogin from './pages/supervisor/SupervisorLogin';
 import SupervisorCadastro from './pages/supervisor/SupervisorCadastro';
@@ -46,12 +49,11 @@ import SupervisorPainel from './pages/supervisor/SupervisorPainel';
 
 const VERSAO_LOCAL_APP = 1;
 
-// SEGURANÇA DA PORTA PARA SUPERVISORES
+// SEGURANÇA PARA SUPERVISORES
 function PrivateRouteSupervisor({ children }) {
   const { currentUser, loading, userProfile } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-500">Carregando...</div>;
   if (!currentUser) return <Navigate to="/supervisor/login" />;
-  // Aceita: supervisor puro OU professor com supervisorAccess concedido no login
   const ehSupervisor = userProfile?.role === 'supervisor';
   const ehProfessorComAcesso = userProfile?.role === 'professor' && userProfile?.supervisorAccess === true;
   if (userProfile && !ehSupervisor && !ehProfessorComAcesso) return <Navigate to="/supervisor/login" />;
@@ -137,12 +139,13 @@ function App() {
           {/* Rota do Painel SaaS */}
           <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
           
-          {/* ── ROTAS DO PORTAL DO SUPERVISOR (sem Navbar, sem PrivateRoute de professor) ── */}
+          {/* Materiais didáticos — exclusivo Patrícia */}
+          <Route path="/materiais" element={<PrivateRoute><Materiais /></PrivateRoute>} />
+
+          {/* Portal do Supervisor */}
           <Route path="/supervisor/login" element={<SupervisorLogin />} />
           <Route path="/supervisor/cadastro" element={<SupervisorCadastro />} />
-          <Route path="/supervisor/painel" element={
-            <PrivateRouteSupervisor><SupervisorPainel /></PrivateRouteSupervisor>
-          } />
+          <Route path="/supervisor/painel" element={<PrivateRouteSupervisor><SupervisorPainel /></PrivateRouteSupervisor>} />
           <Route path="/supervisor" element={<Navigate to="/supervisor/login" />} />
 
           {/* Rota de fallback */}
