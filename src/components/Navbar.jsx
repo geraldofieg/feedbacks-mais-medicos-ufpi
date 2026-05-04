@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebase'; 
 import { collection, query, where, onSnapshot } from 'firebase/firestore'; 
-import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown, UserCircle, Settings, BookOpen, LifeBuoy, ChevronDown, Trash2, Bell } from 'lucide-react';
+import { Home, CalendarRange, Megaphone, AlertTriangle, ClipboardList, LogOut, GraduationCap, Users, Crown, UserCircle, Settings, BookOpen, LifeBuoy, ChevronDown, Trash2, Bell, Library } from 'lucide-react';
 
 export default function Navbar() {
   const { currentUser, userProfile, logout, escolaSelecionada } = useAuth();
@@ -27,6 +27,7 @@ export default function Navbar() {
   }, []);
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
+  const isPatricia = currentUser?.email?.toLowerCase().trim() === 'pattpovoa@hotmail.com' || isAdmin;
 
   // 🔥 EFEITO PARA ESCUTAR NOVOS CADASTROS EM TEMPO REAL
   useEffect(() => {
@@ -59,6 +60,7 @@ export default function Navbar() {
     { path: '/comunicacao', icon: <Megaphone size={18} />, label: 'Comunicação' },
     { path: '/pendencias', icon: <AlertTriangle size={18} />, label: 'Pendências' },
     { path: '/mapa', icon: <ClipboardList size={18} />, label: 'Mapa' },
+    ...(isPatricia ? [{ path: '/materiais', icon: <Library size={18} />, label: 'Materiais' }] : []),
   ];
 
   const nomeCompleto = escolaSelecionada?.nome || 'SaaS';
