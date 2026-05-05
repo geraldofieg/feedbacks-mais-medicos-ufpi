@@ -140,7 +140,7 @@ function App() {
           <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
           
           {/* Materiais didáticos — exclusivo Patrícia */}
-          <Route path="/materiais" element={<PrivateRoute><Materiais /></PrivateRoute>} />
+          <Route path="/materiais" element={<PrivateRoute permiteVencido={true}><Materiais /></PrivateRoute>} />
 
           {/* Portal do Supervisor */}
           <Route path="/supervisor/login" element={<SupervisorLogin />} />
