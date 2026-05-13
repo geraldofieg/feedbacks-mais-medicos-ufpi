@@ -42,6 +42,12 @@ export default function Tarefas() {
   
   // ESTADOS DE EDIÇÃO
   const [editandoId, setEditandoId] = useState(null);
+  const [enunciadosExpandidos, setEnunciadosExpandidos] = useState(new Set());
+  const toggleEnunciado = (id) => setEnunciadosExpandidos(prev => {
+    const novo = new Set(prev);
+    if (novo.has(id)) novo.delete(id); else novo.add(id);
+    return novo;
+  });
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
   const [dataInicioEdicao, setDataInicioEdicao] = useState('');
