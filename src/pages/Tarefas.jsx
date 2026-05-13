@@ -42,12 +42,6 @@ export default function Tarefas() {
   
   // ESTADOS DE EDIÇÃO
   const [editandoId, setEditandoId] = useState(null);
-  const [enunciadosExpandidos, setEnunciadosExpandidos] = useState(new Set());
-  const toggleEnunciado = (id) => setEnunciadosExpandidos(prev => {
-    const novo = new Set(prev);
-    if (novo.has(id)) novo.delete(id); else novo.add(id);
-    return novo;
-  });
   const [tituloEdicao, setTituloEdicao] = useState('');
   const [enunciadoEdicao, setEnunciadoEdicao] = useState('');
   const [dataInicioEdicao, setDataInicioEdicao] = useState('');
@@ -370,45 +364,6 @@ export default function Tarefas() {
     } catch (error) { console.error("Erro remover:", error); }
   }
 
-
-  // ── BARRA DE ONBOARDING INLINE ────────────────────────────────────────────
-  const BarraOnboarding = ({ etapaAtual }) => {
-    const etapas = [
-      { num: 1, label: 'Instituição' },
-      { num: 2, label: 'Turma' },
-      { num: 3, label: 'Alunos' },
-      { num: 4, label: 'Tarefas' },
-    ];
-    const larguras = { 1: 'w-0', 2: 'w-1/3', 3: 'w-2/3', 4: 'w-full' };
-    return (
-      <div className="flex items-center justify-between mb-8 relative">
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full" />
-        <div className={`absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-blue-500 -z-10 rounded-full transition-all duration-500 ${larguras[etapaAtual - 1] || 'w-0'}`} />
-        {etapas.map(({ num, label }) => {
-          const concluida = num < etapaAtual;
-          const atual = num === etapaAtual;
-          const pendente = num > etapaAtual;
-          return (
-            <div key={num} className="flex flex-col items-center gap-2 bg-white px-2">
-              <div className={[
-                'w-9 h-9 rounded-full flex items-center justify-center font-black text-sm ring-4 ring-white transition-all duration-300',
-                concluida ? 'bg-green-500 text-white shadow-md' : '',
-                atual     ? 'bg-blue-600 text-white shadow-lg ring-blue-100 animate-pulse' : '',
-                pendente  ? 'bg-gray-100 text-gray-400' : '',
-              ].join(' ')}>{concluida ? '✓' : num}</div>
-              <span className={[
-                'text-[10px] font-black uppercase tracking-widest hidden sm:block',
-                concluida ? 'text-green-600' : '',
-                atual     ? 'text-blue-600'  : '',
-                pendente  ? 'text-gray-400'  : '',
-              ].join(' ')}>{label}</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
   const getIconeTipo = (tipo) => {
     const t = (tipo || 'entrega').toLowerCase();
     if (t === 'compromisso') return <Calendar size={20} className="text-purple-500" />;
@@ -447,7 +402,15 @@ export default function Tarefas() {
         {/* 🔥 MODO FANTASMA: BARRA DE PROGRESSO DO ONBOARDING (SÓ APARECE SE TIVER ZERO TAREFAS NO SISTEMA) */}
         {!loading && turmas.length > 0 && tarefas.length === 0 && (
           <div className="bg-white border border-gray-200 p-8 md:p-10 rounded-3xl max-w-4xl mx-auto shadow-sm mt-6 mb-10 animate-in fade-in zoom-in-95">
-            <BarraOnboarding etapaAtual={4} />
+            <div className="flex items-center justify-between mb-8 relative">
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 -z-10 rounded-full"></div>
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-blue-600 -z-10 rounded-full"></div>
+              
+              <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Instituição</span></div>
+              <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Turma</span></div>
+              <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white"><Check size={16}/></div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Alunos</span></div>
+              <div className="flex flex-col items-center gap-2 bg-white px-2"><div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-md ring-4 ring-white animate-pulse">4</div><span className="text-[10px] font-black uppercase text-blue-600 tracking-widest hidden sm:block">Tarefas</span></div>
+            </div>
             <div className="text-center">
               <h2 className="text-2xl font-black text-gray-800 mb-2">A sala está pronta. Hora de dar aula!</h2>
               <p className="text-gray-500 font-medium text-lg">O último passo é lançar a sua primeira tarefa ou compromisso no cronograma da turma.</p>
@@ -611,9 +574,9 @@ export default function Tarefas() {
                                <button onClick={() => handleLixeira(item.id, item.nomeTarefa || item.titulo)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir Tarefa"><Trash2 size={18}/></button>
                              </div>
                              
-                             {(item.tipo === 'entrega' || !item.tipo) && status !== 'futuro' && (
-                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto flex items-center justify-center gap-2 ${status === 'passado' ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
-                                 {status === 'passado' ? <><Pencil size={16}/> Avaliar Atrasados</> : 'Corrigir tarefas'}
+                             {(item.tipo === 'entrega' || !item.tipo) && (
+                               <Link to={`/revisar/${item.id}`} className={`w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-sm text-center shadow-md transition-all mt-auto flex items-center justify-center gap-2 ${status === 'passado' ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200' : status === 'futuro' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200' : 'bg-blue-600 text-white hover:bg-blue-700 hover:-translate-y-0.5'}`}>
+                                 {status === 'passado' ? <><Pencil size={16}/> Avaliar Atrasados</> : status === 'futuro' ? <><Pencil size={16}/> Corrigir Antecipado</> : 'Corrigir tarefas'}
                                </Link>
                              )}
                            </div>
