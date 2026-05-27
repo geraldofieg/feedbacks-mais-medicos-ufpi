@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, deleteField, increment } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc, deleteField } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, CheckCircle, User, Copy, 
   Send, Sparkles, GraduationCap, Search, RefreshCw, CheckCheck, Eraser,
-  Lock, Settings, CalendarDays, RotateCcw, Trash2, MousePointer2, Paperclip, FileUp, FileCheck, ExternalLink, Brain
+  Lock, Settings, CalendarDays, RotateCcw, Trash2, MousePointer2, Paperclip, FileUp, FileCheck, ExternalLink
 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenAI } from '@google/genai';
 import * as pdfjsLib from 'pdfjs-dist';
-import * as mammoth from 'mammoth';
 
 // Configurar o worker do PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -42,20 +41,6 @@ export default function RevisarAtividade() {
   const [uploading, setUploading] = useState(false);
   const [arquivoUrl, setArquivoUrl] = useState('');
   const [nomeArquivo, setNomeArquivo] = useState('');
-
-  // 🔒 REGRAS PERMANENTES — nunca modificadas pelo aprendizado automático
-  const [regrasPermanentes, setRegrasPermanentes] = useState('');
-
-  // 📄 EXTRAÇÃO DE TEXTO DE WORD
-  const [textoExtraidoDoc, setTextoExtraidoDoc] = useState('');
-  const [erroLeituraDoc, setErroLeituraDoc] = useState(false); // true para .doc legado que não conseguimos ler
-
-  // 🧠 APRENDIZADO DE ESTILO
-  const [estiloAprendido, setEstiloAprendido] = useState('');
-  const [promptAtivo, setPromptAtivo] = useState(''); // prompt unificado: base + estilo aprendido
-  const [edicoesPendentes, setEdicoesPendentes] = useState(0);
-  const [totalEdicoesIncorporadas, setTotalEdicoesIncorporadas] = useState(0);
-  const [analisandoEstilo, setAnalisandoEstilo] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'geraldofieg@gmail.com';
   const isPremium = userProfile?.plano === 'premium' || isAdmin;
@@ -100,18 +85,6 @@ where('tarefaId', '==', id));
         snapAtividades.docs.forEach(d => { mapa[d.data().alunoId] = { id: d.id, ...d.data() }; });
         
         setAtividadesMap(mapa);
-
-        // 🧠 Carregar dados de estilo aprendido do usuário
-        const docRefUser = doc(db, 'usuarios', currentUser.uid);
-        const docSnapUser = await getDoc(docRefUser);
-        if (docSnapUser.exists()) {
-          const dadosUser = docSnapUser.data();
-          setEstiloAprendido(dadosUser?.estiloAprendido || '');
-          setPromptAtivo(dadosUser?.promptAtivo || '');
-          setRegrasPermanentes(dadosUser?.regrasPermanentes || '');
-          setEdicoesPendentes(dadosUser?.edicoesPendentesAnalise || 0);
-          setTotalEdicoesIncorporadas(dadosUser?.totalEdicoesIncorporadas || 0);
-        }
       } catch (error) { 
         console.error(error);
       } 
@@ -129,9 +102,6 @@ where('tarefaId', '==', id));
     const sincronizarPrompt = (e) => {
       if (e.key === '@SaaS_PromptVivo' && e.newValue) {
         setPromptVivo(e.newValue);
-        // Quando a professora edita o prompt base manualmente, o promptAtivo é resetado
-        // para que seja gerado novamente na próxima destilação de estilo
-        setPromptAtivo('');
       }
     };
 
@@ -148,26 +118,6 @@ where('tarefaId', '==', id));
     setNotaAluno(atividadeAtual?.nota || '');
     setArquivoUrl(atividadeAtual?.arquivoUrl || '');
     setNomeArquivo(atividadeAtual?.nomeArquivo || '');
-    // 🔄 Quando troca de aluno, limpa o texto extraído anterior
-    // Se o arquivo salvo é um .docx, re-extrai via fetch para que a IA consiga ler
-    setTextoExtraidoDoc('');
-    setErroLeituraDoc(false);
-    const url = atividadeAtual?.arquivoUrl || '';
-    if (url) {
-      const urlLower = url.toLowerCase();
-      const isDocx = urlLower.includes('.docx') || (urlLower.includes('firebase') && atividadeAtual?.nomeArquivo?.toLowerCase().endsWith('.docx'));
-      const isDocLegado = urlLower.includes('.doc') && !urlLower.includes('.docx');
-      if (isDocLegado) {
-        setErroLeituraDoc(true);
-      } else if (isDocx) {
-        // Re-extrai o texto do .docx via fetch para manter na memória
-        fetch(url)
-          .then(r => r.arrayBuffer())
-          .then(buf => mammoth.extractRawText({ arrayBuffer: buf }))
-          .then(res => setTextoExtraidoDoc(res.value || ''))
-          .catch(e => console.error('Erro ao re-extrair docx:', e));
-      }
-    }
   }, [alunoSelecionadoId, atividadeAtual]);
 
   const renderizarComLinks = (texto) => {
@@ -198,25 +148,6 @@ where('tarefaId', '==', id));
     const file = e.target.files[0];
     if (!file || !alunoAtual) return;
     setUploading(true);
-    setTextoExtraidoDoc('');
-    setErroLeituraDoc(false);
-
-    // 📄 Extração de texto de .docx diretamente no browser (mammoth)
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (ext === 'docx') {
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const resultado = await mammoth.extractRawText({ arrayBuffer });
-        setTextoExtraidoDoc(resultado.value || '');
-      } catch (err) {
-        console.error('Erro ao extrair texto do DOCX:', err);
-        setTextoExtraidoDoc('');
-      }
-    } else if (ext === 'doc' || ext === 'rtf') {
-      // .doc legado (binário) e .rtf não são legíveis no browser
-      setErroLeituraDoc(true);
-    }
-
     const storageRef = ref(storage, `atividades/${currentUser.uid}/${alunoAtual.id}_${Date.now()}_${file.name}`);
     const uploadTask = uploadBytesResumable(storageRef, file);
     uploadTask.on('state_changed', null, (error) => { console.error(error); setUploading(false); }, 
@@ -269,33 +200,16 @@ where('tarefaId', '==', id));
       }
 
       let textoResposta = novaResposta || "";
-      if (arquivoUrl) {
-        const urlLower = arquivoUrl.toLowerCase();
-        if (urlLower.includes('.pdf')) {
-          const pdfText = await extractTextFromPdf(arquivoUrl);
-          textoResposta += `\n\n[Conteúdo do PDF da Resposta]:\n${pdfText}`;
-        } else if (textoExtraidoDoc) {
-          // .docx extraído pelo mammoth durante o upload
-          textoResposta += `\n\n[Conteúdo do documento Word da Resposta]:\n${textoExtraidoDoc}`;
-        }
+      if (arquivoUrl && arquivoUrl.toLowerCase().includes('.pdf')) {
+        const pdfText = await extractTextFromPdf(arquivoUrl);
+        textoResposta += `\n\n[Conteúdo do PDF da Resposta]:\n${pdfText}`;
       }
 
-      // 🎯 Usa o prompt unificado se existir, senão usa o prompt base — nunca os dois juntos
-      const instrucoes = promptAtivo || promptVivo;
-      // 🔒 Regras permanentes sempre vêm primeiro — imunes ao aprendizado automático
-      const blocoRegras = regrasPermanentes.trim()
-        ? `REGRAS PERMANENTES (prioridade máxima, nunca ignore):\n${regrasPermanentes.trim()}\n\n`
-        : '';
       const promptCompleto = `Aja como um preceptor médico.
-${blocoRegras}${instrucoes}
-
-QUESTÃO: ${textoEnunciado}
-RESPOSTA DO ALUNO: "${textoResposta}"
-
-Gere um feedback pedagógico direto.`;
+Estilo: ${promptVivo}. QUESTÃO: ${textoEnunciado}. RESPOSTA: "${textoResposta}". Gere um feedback pedagógico direto.`;
       
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite-preview",
+        model: "gemini-3.1-flash-lite",
         contents: promptCompleto,
       });
       setFeedbackEditado(response.text);
@@ -304,184 +218,6 @@ Gere um feedback pedagógico direto.`;
       alert("Erro ao ligar com a IA da Google. Verifique se os PDFs são muito grandes ou tente novamente.");
     }
     finally { setGerandoIA(false);
-    }
-  }
-
-  // 📊 CÁLCULO DE SIMILARIDADE JACCARD — local, zero custo de token
-  function calcularSimilaridadeJaccard(textoA, textoB) {
-    if (!textoA || !textoB) return null;
-    const tokenizar = (t) => new Set(
-      t.toLowerCase()
-       .replace(/[.,!?;:()\[\]"']/g, ' ')
-       .split(/\s+/)
-       .filter(w => w.length > 1)
-    );
-    const setA = tokenizar(textoA);
-    const setB = tokenizar(textoB);
-    if (setA.size === 0 || setB.size === 0) return null;
-    const intersecao = new Set([...setA].filter(w => setB.has(w)));
-    const uniao = new Set([...setA, ...setB]);
-    return Math.round((intersecao.size / uniao.size) * 100);
-  }
-
-  // 🧠 ANÁLISE DE ESTILO EM BACKGROUND — roda a cada 3 edições reais da professora
-  async function dispararAnaliseEstilo(feedbackOriginalIA, feedbackAprovado) {
-    try {
-      const docRefUser = doc(db, 'usuarios', currentUser.uid);
-      const docSnap = await getDoc(docRefUser);
-      const dadosUser = docSnap.data() || {};
-
-      const edicoesRecentes = dadosUser.edicoesRecentes || [];
-      const novoPar = {
-        sugerido: feedbackOriginalIA || '',
-        aprovado: feedbackAprovado,
-      };
-      const edicoesAtualizadas = [...edicoesRecentes, novoPar].slice(-3);
-      const novoContador = (dadosUser.edicoesPendentesAnalise || 0) + 1;
-
-      if (novoContador < 3) {
-        // Acumula silenciosamente, sem chamar a IA ainda
-        await updateDoc(docRefUser, {
-          edicoesRecentes: edicoesAtualizadas,
-          edicoesPendentesAnalise: novoContador,
-        });
-        setEdicoesPendentes(novoContador);
-        return;
-      }
-
-      // Chegou a 3 edições: hora de destilar o estilo
-      setAnalisandoEstilo(true);
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const ai = new GoogleGenAI({ apiKey });
-      const estiloAtual = dadosUser.estiloAprendido || '';
-
-      const promptAnalise = `Você é um analisador de estilo pedagógico.
-Sua tarefa é atualizar um documento de "Estilo Aprendido" com base nos padrões de edição de uma professora de medicina.
-
-ESTILO ATUAL REGISTRADO:
-${estiloAtual || '(Nenhum estilo registrado ainda — crie do zero.)'}
-
-PARES DE EDIÇÃO — feedback gerado pela IA versus versão final aprovada pela professora:
-${edicoesAtualizadas.map((par, i) => `
---- Par ${i + 1} ---
-IA sugeriu: "${par.sugerido}"
-Professora aprovou: "${par.aprovado}"
-`).join('')}
-
-TAREFA: Analise o que a professora adicionou, removeu ou reformulou em cada par. Atualize o documento de estilo para capturar esses padrões.
-
-REGRAS RÍGIDAS DE RESPOSTA:
-• Máximo absoluto de 300 palavras
-• Use bullet points curtos (•)
-• Organize em tópicos: Tom, Estrutura, Expressões Preferidas, Expressões Evitadas, Comprimento
-• Preserve o que estava correto no estilo anterior
-• Adicione ou corrija apenas o que as novas edições ensinaram
-• Responda SOMENTE o documento de estilo atualizado, sem explicações, sem preâmbulo`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
-        contents: promptAnalise,
-      });
-
-      const novoEstilo = response.text.trim();
-      const totalAnterior = dadosUser.totalEdicoesIncorporadas || 0;
-
-      // 🔀 SEGUNDA CHAMADA: gerar o prompt unificado (base + estilo aprendido fundidos)
-      // O prompt original da professora fica como âncora. O promptAtivo é o que a IA realmente usa.
-      const promptOriginal = dadosUser.promptPersonalizado || promptVivo || '';
-      let novoPromptAtivo = promptOriginal; // fallback seguro
-
-      if (promptOriginal.trim()) {
-        const promptFusao = `Você é um especialista em instrução pedagógica médica.
-
-Você receberá dois inputs:
-1. INSTRUÇÕES BASE: as diretrizes que a professora escreveu manualmente
-2. ESTILO APRENDIDO: padrões detectados a partir das edições reais que ela fez nos feedbacks
-
-Sua tarefa é criar um ÚNICO conjunto de instruções coerente, sem contradições, que incorpore os dois.
-
-INSTRUÇÕES BASE DA PROFESSORA:
-${promptOriginal}
-
-ESTILO APRENDIDO DAS EDIÇÕES:
-${novoEstilo}
-
-REGRAS DE RESPOSTA:
-• Escreva na segunda pessoa dirigida à IA que vai gerar os feedbacks ("Você deve...", "Sempre...", "Evite...")
-• Máximo de 400 palavras
-• Se houver contradição entre os dois inputs, o ESTILO APRENDIDO tem prioridade (ele reflete o comportamento real da professora)
-• Preserve todas as instruções de conteúdo das INSTRUÇÕES BASE que não conflitem
-• Responda SOMENTE as instruções unificadas, sem explicações, sem preâmbulo`;
-
-        const responseFusao = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-lite-preview',
-          contents: promptFusao,
-        });
-        novoPromptAtivo = responseFusao.text.trim();
-      }
-
-      // ─── 3ª CHAMADA: gerar resumo do ciclo em linguagem simples ───────────
-      const promptResumoCiclo = `Você é um assistente de análise pedagógica.
-Analise o que foi aprendido neste ciclo de treinamento de IA e explique em 3-4 frases simples, na terceira pessoa, como se estivesse explicando para o professor o que a IA entendeu.
-
-PARES DE EDIÇÃO ANALISADOS:
-${edicoesAtualizadas.map((par, i) => `
-Par ${i + 1}:
-IA sugeriu: "${par.sugerido}"
-Professor aprovou: "${par.aprovado}"
-`).join('')}
-
-NOVO ESTILO APRENDIDO:
-${novoEstilo}
-
-Escreva um resumo curto (máx 4 frases) explicando:
-- O que a IA percebeu nas edições
-- O que foi ajustado no estilo
-- Em que direção o prompt evoluiu
-
-Responda SOMENTE o resumo, sem título, sem preâmbulo.`;
-
-      let resumoCiclo = 'Ciclo de aprendizado concluído.';
-      try {
-        const responseResumo = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-lite-preview',
-          contents: promptResumoCiclo,
-        });
-        resumoCiclo = responseResumo.text.trim();
-      } catch (e) {
-        console.error('Erro ao gerar resumo do ciclo:', e);
-      }
-
-      // ─── Salvar no histórico (máx 10 entradas) ─────────────────────────────
-      const novaEntradaHistorico = {
-        data: new Date().toISOString(),
-        promptAtivo: novoPromptAtivo,
-        estiloAprendido: novoEstilo,
-        resumoCiclo,
-        totalEdicoesNoCiclo: edicoesAtualizadas.length,
-        avaliacaoUsuario: null, // null | 'aprovado' | 'rejeitado'
-      };
-      const historicoAtual = dadosUser.historicoPrompts || [];
-      const novoHistorico = [novaEntradaHistorico, ...historicoAtual].slice(0, 10);
-
-      await updateDoc(docRefUser, {
-        estiloAprendido: novoEstilo,
-        promptAtivo: novoPromptAtivo,
-        historicoPrompts: novoHistorico,
-        edicoesRecentes: [],
-        edicoesPendentesAnalise: 0,
-        totalEdicoesIncorporadas: totalAnterior + edicoesAtualizadas.length,
-        ultimaAtualizacaoEstilo: serverTimestamp(),
-      });
-
-      setEstiloAprendido(novoEstilo);
-      setPromptAtivo(novoPromptAtivo);
-      setEdicoesPendentes(0);
-      setTotalEdicoesIncorporadas(totalAnterior + edicoesAtualizadas.length);
-    } catch (error) {
-      console.error('Erro na análise de estilo:', error);
-    } finally {
-      setAnalisandoEstilo(false);
     }
   }
 
@@ -546,13 +282,6 @@ currentUser?.email || 'Professor'
         revisadoPor: userProfile?.nome ||
 currentUser?.email || 'Professor'
       };
-
-      // 📊 Calcular e salvar similaridade Jaccard
-      const feedbackSugeridoParaSimilaridade = atividadeAtual?.feedbackSugerido || '';
-      if (feedbackSugeridoParaSimilaridade.trim() !== '') {
-        const score = calcularSimilaridadeJaccard(feedbackSugeridoParaSimilaridade, feedbackEditado.trim());
-        if (score !== null) payload.similaridadeIA = score;
-      }
       
       if (atividadeAtual) {
         await updateDoc(doc(db, 'atividades', atividadeAtual.id), payload);
@@ -576,13 +305,6 @@ currentUser?.email || 'Professor'
         navigator.clipboard.writeText(feedbackEditado.trim()); 
         setCopiado(true);
         setTimeout(() => setCopiado(false), 2000);
-      }
-
-      // 🧠 Disparar análise de estilo em background se a professora editou o feedback da IA
-      const feedbackSugerido = atividadeAtual?.feedbackSugerido || '';
-      const foiEditadoPelaProf = feedbackSugerido.trim() !== '' && feedbackEditado.trim() !== feedbackSugerido.trim();
-      if (foiEditadoPelaProf && (isPremium || isTier2)) {
-        dispararAnaliseEstilo(feedbackSugerido, feedbackEditado.trim());
       }
     } catch (error) { console.error(error); } finally { setSalvando(false);
     }
@@ -777,12 +499,12 @@ gap-8 items-start">
                         ) : (
                           <label className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
                             {uploading ? <RefreshCw size={14} className="animate-spin"/> : <FileUp size={14}/>}
-                            <span className="text-[10px] font-black uppercase">{uploading ? 'Subindo...' : 'Anexar PDF/DOC'}</span>
+                            <span className="text-[10px] font-black uppercase">{uploading ? 'Subindo...' : 'Anexar PDF'}</span>
                             <input type="file" className="hidden" accept=".pdf,.doc,.docx,.rtf,.txt" onChange={handleUploadArquivo} disabled={uploading}/>
                           </label>
                         )}
               
-                        <button onClick={() => { setNovaResposta(''); setArquivoUrl(''); setNomeArquivo(''); setTextoExtraidoDoc(''); setErroLeituraDoc(false); }} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center gap-1">
+                        <button onClick={() => { setNovaResposta(''); setArquivoUrl(''); setNomeArquivo(''); }} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center gap-1">
                           <Eraser size={14}/> Limpar
                         </button>
                       </div>
@@ -790,44 +512,6 @@ gap-8 items-start">
                     
                     <textarea rows="14" placeholder="Cole a resposta aqui..." className="w-full p-6 md:p-8 rounded-[24px] border-2 border-slate-100 bg-white text-slate-800 font-medium focus:border-blue-500 outline-none text-lg" value={novaResposta} onChange={(e) => setNovaResposta(e.target.value)}/>
                     
-                    {/* ⚠️ Aviso para .doc/.rtf legado que não conseguimos ler */}
-                    {erroLeituraDoc && (
-                      <div className="mt-4 p-5 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col gap-3">
-                        <div className="flex items-start gap-3">
-                          <span className="text-amber-500 text-lg shrink-0">⚠️</span>
-                          <div>
-                            <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-1">Formato não suportado para leitura automática</p>
-                            <p className="text-xs font-medium text-amber-700 leading-relaxed">
-                              Arquivos <strong>.doc</strong> e <strong>.rtf</strong> (Word antigo) não podem ser lidos automaticamente pela IA neste formato.
-                              Para que a IA consiga analisar a resposta do aluno, converta o arquivo para <strong>PDF ou .docx</strong> antes de anexar.
-                            </p>
-                            <div className="mt-3 flex flex-col gap-2">
-                              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Como converter:</p>
-                              <div className="flex flex-wrap gap-2">
-                                <a href="https://www.ilovepdf.com/pt/word_para_pdf" target="_blank" rel="noopener noreferrer"
-                                   className="inline-flex items-center gap-1.5 bg-white text-amber-700 border border-amber-300 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-amber-100 transition-colors">
-                                  <ExternalLink size={10}/> 1. Abrir iLovePDF — Word para PDF
-                                </a>
-                              </div>
-                              <p className="text-[10px] text-amber-600 font-medium leading-relaxed">
-                                Acesse o link → arraste o arquivo .doc → clique em "Converter para PDF" → baixe o PDF → anexe aqui no lugar do arquivo atual.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ✅ Confirmação de leitura bem-sucedida de .docx */}
-                    {textoExtraidoDoc && !erroLeituraDoc && (
-                      <div className="mt-3 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2">
-                        <span className="text-emerald-600 text-sm">✅</span>
-                        <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
-                          Texto do Word extraído com sucesso — a IA conseguirá ler a resposta
-                        </p>
-                      </div>
-                    )}
-
                     {linksNaResposta.length > 0 && (
                       <div className="mt-4 p-5 bg-indigo-50 border border-indigo-100 rounded-2xl flex flex-col gap-3 shadow-inner">
                         <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-2">
@@ -857,37 +541,6 @@ respostaEstaVazia} className="w-full py-4 rounded-2xl font-black text-sm bg-grad
                     {gerandoIA ?
 <RefreshCw className="animate-spin" size={18}/> : <Sparkles size={18}/>} Gerar Feedback IA
                   </button>
-
-                  {/* 🧠 Badge de Aprendizado de Estilo */}
-                  {(isPremium || isTier2) && (
-                    <div className={`mb-4 px-4 py-3 rounded-2xl border flex items-center gap-3 text-xs font-bold transition-all ${
-                      analisandoEstilo
-                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 animate-pulse'
-                        : estiloAprendido
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                        : 'bg-slate-800 border-slate-700 text-slate-500'
-                    }`}>
-                      <Brain size={14} className="shrink-0" />
-                      <span className="leading-tight flex-1">
-                        {analisandoEstilo
-                          ? 'Atualizando instruções da IA...'
-                          : promptAtivo
-                          ? `Instruções otimizadas ativas · ${totalEdicoesIncorporadas} edições incorporadas${edicoesPendentes > 0 ? ` · ${3 - edicoesPendentes} p/ próx. atualização` : ''}`
-                          : estiloAprendido
-                          ? `Estilo aprendido · gerando instruções unificadas...`
-                          : `IA usando instruções base · ${edicoesPendentes > 0 ? `${3 - edicoesPendentes} edições p/ otimizar` : 'edite e aprove 3 feedbacks p/ otimizar'}`
-                        }
-                      </span>
-                      <Link
-                        to="/configuracoes"
-                        state={{ abaInicial: 'aprendizado' }}
-                        className="shrink-0 text-[10px] font-black opacity-60 hover:opacity-100 underline underline-offset-2 transition-opacity whitespace-nowrap"
-                        title="Ver histórico e configurar aprendizado"
-                      >
-                        Ver IA →
-                      </Link>
-                    </div>
-                  )}
                 </div>
                 <div className="space-y-6">
                   <textarea rows="10" placeholder="Feedback aparecerá aqui..." className="w-full bg-slate-800 rounded-2xl p-5 text-sm text-slate-100 outline-none resize-none focus:ring-2 focus:ring-indigo-500 transition-all" value={feedbackEditado} onChange={e => setFeedbackEditado(e.target.value)}/>
