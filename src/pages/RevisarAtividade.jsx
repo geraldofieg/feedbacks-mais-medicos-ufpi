@@ -12,6 +12,7 @@ import {
 import Breadcrumb from '../components/Breadcrumb';
 import { GoogleGenAI } from '@google/genai';
 import * as pdfjsLib from 'pdfjs-dist';
+import mammoth from 'mammoth';
 
 // Configurar o worker do PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -46,6 +47,9 @@ export default function RevisarAtividade() {
   const isPremium = userProfile?.plano === 'premium' || isAdmin;
   const isTier2 = userProfile?.plano === 'intermediario';
   const isTier1 = !isPremium && !isTier2;
+  const [textoExtraidoDoc, setTextoExtraidoDoc] = useState('');
+  const [erroLeituraDoc, setErroLeituraDoc] = useState(false);
+
   const respostaEstaVazia = novaResposta.trim().length === 0 && !arquivoUrl;
 
   const [promptVivo, setPromptVivo] = useState(userProfile?.promptPersonalizado || localStorage.getItem('@SaaS_PromptVivo') || '');
@@ -118,6 +122,24 @@ where('tarefaId', '==', id));
     setNotaAluno(atividadeAtual?.nota || '');
     setArquivoUrl(atividadeAtual?.arquivoUrl || '');
     setNomeArquivo(atividadeAtual?.nomeArquivo || '');
+    // Reseta e re-extrai texto do Word ao trocar de aluno
+    setTextoExtraidoDoc('');
+    setErroLeituraDoc(false);
+    const url = atividadeAtual?.arquivoUrl || '';
+    const nome = atividadeAtual?.nomeArquivo || '';
+    if (url) {
+      const isDocx = nome.toLowerCase().endsWith('.docx') || url.toLowerCase().includes('.docx');
+      const isDocLegado = (nome.toLowerCase().endsWith('.doc') && !nome.toLowerCase().endsWith('.docx')) || (url.toLowerCase().includes('.doc') && !url.toLowerCase().includes('.docx'));
+      if (isDocLegado) {
+        setErroLeituraDoc(true);
+      } else if (isDocx) {
+        fetch(url)
+          .then(r => r.arrayBuffer())
+          .then(buf => mammoth.extractRawText({ arrayBuffer: buf }))
+          .then(res => setTextoExtraidoDoc(res.value || ''))
+          .catch(e => console.error('Erro ao re-extrair docx:', e));
+      }
+    }
   }, [alunoSelecionadoId, atividadeAtual]);
 
   const renderizarComLinks = (texto) => {
@@ -155,6 +177,20 @@ where('tarefaId', '==', id));
         const url = await getDownloadURL(uploadTask.snapshot.ref);
         setArquivoUrl(url);
         setNomeArquivo(file.name);
+        setTextoExtraidoDoc('');
+        setErroLeituraDoc(false);
+        const nomeLower = file.name.toLowerCase();
+        if (nomeLower.endsWith('.docx')) {
+          try {
+            const buf = await file.arrayBuffer();
+            const res = await mammoth.extractRawText({ arrayBuffer: buf });
+            setTextoExtraidoDoc(res.value || '');
+          } catch (e) {
+            console.error('Erro ao extrair texto do .docx:', e);
+          }
+        } else if (nomeLower.endsWith('.doc') || nomeLower.endsWith('.rtf')) {
+          setErroLeituraDoc(true);
+        }
         setUploading(false);
       }
     );
@@ -200,9 +236,18 @@ where('tarefaId', '==', id));
       }
 
       let textoResposta = novaResposta || "";
-      if (arquivoUrl && arquivoUrl.toLowerCase().includes('.pdf')) {
-        const pdfText = await extractTextFromPdf(arquivoUrl);
-        textoResposta += `\n\n[Conteúdo do PDF da Resposta]:\n${pdfText}`;
+      if (arquivoUrl) {
+        const urlLower = arquivoUrl.toLowerCase();
+        const nomeLower = (nomeArquivo || '').toLowerCase();
+        if (urlLower.includes('.pdf') || nomeLower.endsWith('.pdf')) {
+          const pdfText = await extractTextFromPdf(arquivoUrl);
+          textoResposta += `\n\n[Conteúdo do PDF da Resposta]:\n${pdfText}`;
+        } else if (textoExtraidoDoc) {
+          // .docx lido pelo mammoth no momento do upload ou da troca de aluno
+          textoResposta += `\n\n[Conteúdo do documento Word da Resposta]:\n${textoExtraidoDoc}`;
+        } else if (erroLeituraDoc) {
+          textoResposta += '\n\n[Arquivo .doc/.rtf anexado — formato legado não suportado. Solicite ao aluno que converta para PDF ou .docx.]';
+        }
       }
 
       const promptCompleto = `Aja como um preceptor médico.
@@ -490,6 +535,16 @@ gap-8 items-start">
                       <div className="flex items-center gap-4">
                         {arquivoUrl ? (
                           <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full border border-green-200 shadow-sm">
+                            {textoExtraidoDoc && (
+                              <div className="text-[10px] font-black text-green-400 mb-1 flex items-center gap-1">
+                                <CheckCheck size={10}/> Texto extraído — IA vai ler o conteúdo do Word
+                              </div>
+                            )}
+                            {erroLeituraDoc && (
+                              <div className="text-[10px] font-black text-amber-400 mb-1">
+                                ⚠️ Formato .doc não suportado — converta para .docx ou PDF
+                              </div>
+                            )}
                             <a href={arquivoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 hover:underline cursor-pointer" title="Clique para visualizar/baixar o arquivo">
                               <FileCheck size={14}/>
                               <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{nomeArquivo || "Arquivo Anexado"}</span>
