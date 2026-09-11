@@ -254,7 +254,7 @@ where('tarefaId', '==', id));
 Estilo: ${promptVivo}. QUESTÃO: ${textoEnunciado}. RESPOSTA: "${textoResposta}". Gere um feedback pedagógico direto.`;
       
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-3.7-flash",
         contents: promptCompleto,
       });
       setFeedbackEditado(response.text);
