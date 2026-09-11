@@ -128,7 +128,7 @@ export default function Configuracoes() {
         return `Ciclo ${historicoPrompts.length - i} (${data}): ${h.resumoCiclo} [${aval}]`;
       }).join('\n\n');
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: 'gemini-3.7-flash',
         contents: `Você é especialista em treinamento de IA pedagógica. Analise o histórico de aprendizado e responda em 4 parágrafos:\n1. Quais padrões de estilo o professor claramente prefere?\n2. Em que direção o prompt evoluiu?\n3. Há algum ciclo que foi na direção errada?\n4. O que ainda pode melhorar?\n\nHISTÓRICO:\n${resumos}\n\nPROMPT ATIVO:\n${promptAtivo || 'Usando prompt original.'}`
       });
       setAnaliseConsolidada(response.text.trim());
